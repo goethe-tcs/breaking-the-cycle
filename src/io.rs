@@ -132,14 +132,14 @@ mod tests {
 
         assert_eq!(graph.order(), 7);
 
-        assert!(graph.has_edge( (0),  (1)));
-        assert!(graph.has_edge( (0),  (3)));
-        assert!(graph.has_edge( (0),  (4)));
-        assert!(graph.has_edge( (0),  (5)));
-        assert!(graph.has_edge( (1),  (2)));
-        assert!(graph.has_edge( (1),  (6)));
-        assert!(graph.has_edge( (2),  (6)));
-        assert!(graph.has_edge( (3),  (4)));
-        assert!(graph.has_edge( (3),  (5)));
+        assert!(graph.has_edge(0, 1));
+        assert!(graph.has_edge(0, 3));
+        assert!(graph.has_edge(0, 4));
+        assert!(graph.has_edge(0, 5));
+        assert!(graph.has_edge(1, 2));
+        assert!(graph.has_edge(1, 6));
+        assert!(graph.has_edge(2, 6));
+        assert!(graph.has_edge(3, 4));
+        assert!(graph.has_edge(3, 5));
     }
 }
