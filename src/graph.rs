@@ -1,6 +1,7 @@
 use crate::bitset::BitSet;
 use std::ops::Range;
 use std::cmp::min;
+use std::collections::HashSet;
 
 #[derive(Clone)]
 pub struct Graph {
@@ -98,9 +99,31 @@ impl Graph {
     }
 
     /// Returns the strongly connected components of the graph as BitSets
-    pub fn strongly_connected(&self) -> Vec<BitSet> {
+    pub fn strongly_connected_components(&self) -> Vec<BitSet> {
         let sc = StronglyConnected::new(&self);
         sc.find()
+    }
+
+    /// Returns the connected components of the graph as BitSets
+    pub fn connected_components(&self) -> Vec<BitSet> {
+        let mut unvisited: HashSet<_> = self.vertices().collect();
+        let mut components : Vec<BitSet> = vec![];
+        while let Some(v) = unvisited.iter().copied().next() {
+            let mut stack = vec![v];
+            unvisited.remove(&v);
+            let mut component = BitSet::new(self.order() as usize);
+            while let Some(u) = stack.pop() {
+                for w in self.in_neighbors[u as usize].iter().chain(self.out_neighbors[u as usize].iter()) {
+                    if unvisited.contains(w) {
+                        unvisited.remove(w);
+                        stack.push(*w);
+                        component.set_bit(*w as usize);
+                    }
+                }
+            }
+            components.push(component);
+        }
+        components
     }
 }
 
