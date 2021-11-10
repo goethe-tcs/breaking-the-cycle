@@ -1,5 +1,6 @@
 use crate::bitset::BitSet;
 use std::ops::Range;
+use std::cmp::min;
 
 #[derive(Clone)]
 pub struct Graph {
@@ -94,5 +95,75 @@ impl Graph {
     /// Returns the total number of edges incident to *u*
     pub fn total_degree(&self, u: u32) -> u32 {
         self.in_degree(u) + self.out_degree(u)
+    }
+
+    /// Returns the strongly connected components of the graph as BitSets
+    pub fn strongly_connected(&self) -> Vec<BitSet> {
+        let sc = StronglyConnected::new(&self);
+        sc.find()
+    }
+}
+
+struct StronglyConnected<'a> {
+    graph: &'a Graph,
+    idx: u32,
+    stack: Vec<u32>,
+    indices: Vec<Option<u32>>,
+    low_links: Vec<u32>,
+    on_stack: BitSet,
+    components: Vec<BitSet>,
+}
+
+impl<'a> StronglyConnected<'a> {
+    pub fn new(graph: &'a Graph) -> Self {
+        Self {
+            graph,
+            idx : 0,
+            stack : vec![],
+            indices : vec![Some(0); graph.n],
+            low_links : vec![0; graph.n],
+            on_stack : BitSet::new(graph.n),
+            components: vec![]
+        }
+    }
+
+    pub fn find(mut self) -> Vec<BitSet> {
+        for v in self.graph.vertices() {
+            if self.indices[v as usize].is_none() {
+                self.sc(v);
+            }
+        }
+        self.components
+    }
+    
+    fn sc(&mut self, v: u32) {
+        self.indices[v as usize] = Some(self.idx);
+        self.low_links[v as usize] = self.idx;
+        self.idx+=1;
+        self.stack.push(v);
+        self.on_stack.set_bit(v as usize);
+
+        for w in self.graph.out_neighbors(v) {
+            if self.indices[*w as usize].is_none() {
+                self.sc(*w);
+                self.low_links[v as usize] = min(self.low_links[v as usize], self.low_links[*w as usize]);
+            } else if self.on_stack[*w as usize] {
+                self.low_links[v as usize] = min(self.low_links[v as usize], self.indices[*w as usize].unwrap());
+            }
+        }
+
+        if self.low_links[v as usize] == self.indices[v as usize].unwrap() {
+            // found SC
+            let mut component = BitSet::new(self.graph.order() as usize);
+            loop {
+                let w = self.stack.pop().unwrap();
+                self.on_stack.unset_bit(w as usize);
+                component.set_bit(w as usize);
+                if w == v {
+                    break;
+                }
+            }
+            self.components.push(component);
+        }
     }
 }
