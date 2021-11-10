@@ -5,7 +5,9 @@ authors = ["Johannes Meintrup <johannes.meintrup@mni.thm.de>"]
 edition = "2018"
 
 [dependencies]
-petgraph = "0.6.0"
+bitvec = "0.22.3"
+num = "0.4.0"
+bimap = "0.6.1"
 
 [[bin]]
 name = "dfvs-cli"
