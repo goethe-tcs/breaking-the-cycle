@@ -256,4 +256,26 @@ pub mod tests {
         assert_eq!(sccs[1], [2, 3, 7]);
         assert_eq!(sccs[2], [5, 6]);
     }
+
+    #[test]
+    pub fn scc_tree() {
+        let mut graph = Graph::new(7);
+        graph.add_edges(&[
+            (0, 1),
+            (1, 2),
+            (1, 3),
+            (1, 4),
+            (3, 5),
+            (3, 6),
+        ]);
+
+        let mut sccs = graph.strongly_connected_components();
+        // in a directed tree each vertex is a strongly connected component
+        assert_eq!(sccs.len(), 7);
+
+        sccs.sort_by(|a, b| a[0].cmp(&b[0]));
+        for (i, scc) in sccs.iter().enumerate() {
+            assert_eq!(i as u32, scc[0]);
+        }
+    }
 }
