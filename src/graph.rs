@@ -248,7 +248,7 @@ pub mod tests {
         assert!(!sccs[1].is_empty());
         assert!(!sccs[2].is_empty());
 
-        for mut scc in &mut sccs {
+        for scc in &mut sccs {
             scc.sort();
         }
         sccs.sort_by(|a, b| a[0].cmp(&b[0]));
