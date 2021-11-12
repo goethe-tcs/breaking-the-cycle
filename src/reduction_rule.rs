@@ -22,7 +22,6 @@ pub struct SelfLoopsResult {
     removed_edges: Vec<(u32, u32)>,
 }
 
-
 impl AppliedRule for SelfLoopsResult {
     fn graph(&self) -> &Graph {
         &self.graph
@@ -47,9 +46,7 @@ impl AppliedRule for SelfLoopsResult {
 
 impl From<Graph> for SelfLoops {
     fn from(graph: Graph) -> Self {
-        Self {
-            graph,
-        }
+        Self { graph }
     }
 }
 
@@ -57,13 +54,17 @@ impl ReductionRule for SelfLoops {
     fn reduce(self) -> Box<dyn AppliedRule> {
         let old_graph = self.graph;
         let mut new_graph = old_graph.clone();
-        let removed_edges: Vec<_> = old_graph.vertices().filter(|v| old_graph.has_edge(*v, *v)).map(|v| (v, v)).collect();
+        let removed_edges: Vec<_> = old_graph
+            .vertices()
+            .filter(|v| old_graph.has_edge(*v, *v))
+            .map(|v| (v, v))
+            .collect();
         for (u, v) in &removed_edges {
             new_graph.remove_edge(*u, *v);
         }
         Box::new(SelfLoopsResult {
             graph: new_graph,
-            removed_edges
+            removed_edges,
         })
     }
 }

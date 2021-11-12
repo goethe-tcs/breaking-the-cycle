@@ -119,7 +119,8 @@ impl BitSet {
 
     #[inline]
     pub fn is_disjoint_with(&self, other: &BitSet) -> bool {
-        !self.bit_vec
+        !self
+            .bit_vec
             .as_raw_slice()
             .iter()
             .zip(other.as_slice().iter())

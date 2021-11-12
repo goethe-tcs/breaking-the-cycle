@@ -11,23 +11,19 @@ pub struct PaceWriter<'a, T: Write> {
 
 impl<'a, T: Write> PaceWriter<'a, T> {
     pub fn new(graph: &'a Graph, writer: T) -> Self {
-        Self {
-            graph,
-            writer
-        }
+        Self { graph, writer }
     }
 }
 
-impl<'a, T:Write> PaceWriter<'a, T> {
+impl<'a, T: Write> PaceWriter<'a, T> {
     pub fn output(mut self) -> Result<(), std::io::Error> {
         let n = self.graph.order();
-        let m: u32 = self.graph.vertices().map(|u| self.graph.out_degree(u)).sum();
-        writeln!(
-            self.writer,
-            "p dfvs {} {}",
-            n,
-            m,
-        )?;
+        let m: u32 = self
+            .graph
+            .vertices()
+            .map(|u| self.graph.out_degree(u))
+            .sum();
+        writeln!(self.writer, "p dfvs {} {}", n, m,)?;
         for u in self.graph.vertices() {
             for v in self.graph.out_neighbors(u) {
                 writeln!(self.writer, "{} {}", u, *v)?;
@@ -117,9 +113,9 @@ fn parse_order(elements: &[&str]) -> Result<usize, std::io::Error> {
 
 #[cfg(test)]
 mod tests {
+    use crate::graph::Graph;
     use crate::io::PaceReader;
     use std::convert::TryFrom;
-    use crate::graph::Graph;
 
     #[test]
     fn read_graph() {
