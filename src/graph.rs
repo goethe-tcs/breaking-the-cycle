@@ -60,7 +60,7 @@ impl Graph {
         Self::remove_edge_helper(&mut self.out_neighbors[u as usize], v);
         Self::remove_edge_helper(&mut self.out_neighbors[v as usize], u);
         self.out_matrix[u as usize].unset_bit(v as usize);
-        self.out_matrix[v as usize].unset_bit(u as usize);
+        self.in_matrix[v as usize].unset_bit(u as usize);
     }
 
     fn remove_edge_helper(nb: &mut Vec<u32>, v: u32) {
