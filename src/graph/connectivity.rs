@@ -1,6 +1,6 @@
 use crate::bitset::BitSet;
 use std::cmp::min;
-use std::collections::HashSet;
+use super::traversal::TraversalState;
 use super::*;
 
 pub trait Connectivity : AdjecencyList + Sized {
@@ -12,26 +12,16 @@ pub trait Connectivity : AdjecencyList + Sized {
 
     /// Returns the connected components of the graph as BitSets
     fn connected_components(&self) -> Vec<BitSet> {
-        let mut unvisited: HashSet<_> = self.vertices().collect();
+        let mut dfs = TraversalState::new(self);
         let mut components: Vec<BitSet> = vec![];
-        while let Some(v) = unvisited.iter().copied().next() {
-            let mut stack = vec![v];
-            unvisited.remove(&v);
+
+        for u in self.vertices() {
+            if dfs.did_visit(u) {continue;}
             let mut component = BitSet::new(self.len());
-            while let Some(u) = stack.pop() {
-                for w in self.in_neighbors(u)
-                    .iter()
-                    .chain(self.out_neighbors(u).iter())
-                {
-                    if unvisited.contains(w) {
-                        unvisited.remove(w);
-                        stack.push(*w);
-                        component.set_bit(*w as usize);
-                    }
-                }
-            }
+            dfs.dfs_undirected(u, |v| {component.set_bit(v as usize);});
             components.push(component);
         }
+
         components
     }
 }
@@ -109,6 +99,38 @@ impl<'a, T : AdjecencyList> StronglyConnected<'a, T> {
 #[cfg(test)]
 pub mod tests {
     use super::*;
+
+    #[test]
+    pub fn cc() {
+        let mut graph = AdjListMatrix::new(9);
+        graph.add_edges(&[
+            (0, 3), (6, 3), (6, 7),
+            (4, 1), (1, 8),
+        ]);
+        let mut ccs = graph.connected_components();
+
+        assert_eq!(ccs.len(), 4);
+
+        assert!(!ccs[0].is_empty());
+        assert!(!ccs[1].is_empty());
+        assert!(!ccs[2].is_empty());
+        assert!(!ccs[3].is_empty());
+
+        ccs.sort_by(|a,b| {a.get_first_set().unwrap().cmp(&b.get_first_set().unwrap())});
+
+        assert_eq!(ccs[0].to_vec(), [0,3,6,7]);
+        assert_eq!(ccs[1].to_vec(), [1,4,8]);
+        assert_eq!(ccs[2].to_vec(), [2]);
+        assert_eq!(ccs[3].to_vec(), [5]);
+    }
+
+    #[test]
+    pub fn cc_empty() {
+        let graph = AdjListMatrix::new(0);
+        let ccs = graph.connected_components();
+
+        assert_eq!(ccs.len(), 0);
+    }
 
     #[test]
     pub fn scc() {
