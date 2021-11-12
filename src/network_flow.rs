@@ -2,8 +2,6 @@ use crate::bitset::BitSet;
 use crate::graph::Graph;
 use std::collections::VecDeque;
 
-pub trait MaxFlow {}
-
 pub struct EdmondsKarp {
     residual_network: ResidualNetwork,
     predecessor: Vec<u32>,
