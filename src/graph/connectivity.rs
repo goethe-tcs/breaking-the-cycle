@@ -134,8 +134,7 @@ pub mod tests {
 
     #[test]
     pub fn scc() {
-        let mut graph = AdjListMatrix::new(8);
-        graph.add_edges(&[
+        let graph = AdjListMatrix::from(&[
             (0, 1),
             (1, 2),
             (1, 4),
@@ -169,8 +168,7 @@ pub mod tests {
 
     #[test]
     pub fn scc_tree() {
-        let mut graph = AdjListMatrix::new(7);
-        graph.add_edges(&[(0, 1), (1, 2), (1, 3), (1, 4), (3, 5), (3, 6)]);
+        let graph = AdjListMatrix::from(&[(0, 1), (1, 2), (1, 3), (1, 4), (3, 5), (3, 6)]);
 
         let mut sccs = graph.strongly_connected_components();
         // in a directed tree each vertex is a strongly connected component

@@ -61,7 +61,12 @@ pub trait AdjecencyTest {
     fn has_edge(&self, u: Node, v: Node) -> bool;
 }
 
-pub trait GraphManipulation {
+pub trait GraphNew {
+    /// Creates an empty graph with n singleton nodes
+    fn new(n: usize) -> Self;
+}
+
+pub trait GraphManipulation : GraphNew {
     /// Adds the directed edge *(u,v)* to the graph. I.e., the edge FROM u TO v.
     /// ** Panics if the edge is already contained or u, v >= n **
     fn add_edge(&mut self, u: Node, v: Node);
@@ -76,10 +81,5 @@ pub trait GraphManipulation {
     /// Removes the directed edge *(u,v)* from the graph. I.e., the edge FROM u TO v.
     /// ** Panics if the edge is not present or u, v >= n **
     fn remove_edge(&mut self, u: Node, v: Node);
-}
-
-pub trait GraphNew {
-    /// Creates an empty graph with n singleton nodes
-    fn new(n: usize) -> Self;
 }
 

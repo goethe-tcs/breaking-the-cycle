@@ -85,6 +85,18 @@ impl GraphNew for AdjListMatrix {
     }
 }
 
+impl<'a, T: IntoIterator<Item = &'a Edge> + Clone> From<T> for AdjListMatrix {
+    fn from(edges: T) -> Self {
+        let n = edges.clone().into_iter().map(|e| {
+            e.0.max(e.1) + 1 }).max().unwrap_or(0);
+        let mut graph= AdjListMatrix::new(n as usize);
+        for e in edges {
+            graph.add_edge(e.0, e.1);
+        }
+        graph
+    }
+}
+
 #[cfg(test)]
 pub mod tests {
     use super::*;
@@ -92,8 +104,8 @@ pub mod tests {
     #[test]
     fn graph_edges() {
         let mut edges = vec![(1,2), (1,0), (4,3), (0,5), (2,4), (5, 4)];
-        let mut graph = AdjListMatrix::new(6);
-        graph.add_edges(&edges);
+        let graph = AdjListMatrix::from(&edges);
+        assert_eq!(graph.order(), 6);
         let mut ret_edges = graph.edges();
 
         edges.sort();
