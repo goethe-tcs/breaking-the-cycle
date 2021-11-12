@@ -1,20 +1,20 @@
-use crate::graph::Graph;
+use crate::graph::*;
 
-pub struct PreProcessor {
-    graph: Graph,
+pub struct PreProcessor<G: AdjecencyList + AdjecencyTest + GraphManipulation + GraphNew> {
+    graph: G,
 }
 
-pub struct PreProcessedInstance {
-    og_graph: Graph,
-    induced_graphs: Vec<Graph>,
+pub struct PreProcessedInstance<G: AdjecencyList + AdjecencyTest + GraphManipulation + GraphNew> {
+    og_graph: G,
+    induced_graphs: Vec<G>,
     graph_labels: Vec<Vec<u32>>,
 }
 
-impl PreProcessedInstance {
-    pub fn og_graph(&self) -> &Graph {
+impl<G: AdjecencyList + AdjecencyTest + GraphManipulation + GraphNew> PreProcessedInstance<G> {
+    pub fn og_graph(&self) -> &G {
         &self.og_graph
     }
-    pub fn induced_graphs(&self) -> &[Graph] {
+    pub fn induced_graphs(&self) -> &[G] {
         &self.induced_graphs
     }
     pub fn graph_labels(&self) -> &[Vec<u32>] {
@@ -22,20 +22,20 @@ impl PreProcessedInstance {
     }
 }
 
-impl PreProcessor {
+impl<G: AdjecencyList + AdjecencyTest + GraphManipulation + GraphNew> PreProcessor<G> {
     // Assumes the graph contains no self-loops
-    pub fn new(graph: Graph) -> Self {
+    pub fn new(graph: G) -> Self {
         Self { graph }
     }
 
-    pub fn reduce(self) -> PreProcessedInstance {
+    pub fn reduce(self) -> PreProcessedInstance<G> {
         let mut induced_graphs = vec![];
         let mut graph_labels = vec![];
         let sccs = self.graph.strongly_connected_components();
 
         // scc with cardinality 1 is irrelevant, as they are isolated vertices without self-loops
         for scc in sccs.into_iter().filter(|scc| scc.len() > 1) {
-            let mut scc_g = Graph::new(scc.len());
+            let mut scc_g = G::new(scc.len());
             for (i, u) in scc.iter().enumerate() {
                 for (j, v) in scc.iter().enumerate() {
                     if self.graph.has_edge(*u, *v) {
@@ -57,12 +57,12 @@ impl PreProcessor {
 
 #[cfg(test)]
 pub mod test {
-    use crate::graph::Graph;
-    use crate::pre_processor::PreProcessor;
+    use super::*;
+    use crate::graph::AdjListMatrix;
 
     #[test]
     fn pre_processor() {
-        let mut graph = Graph::new(8);
+        let mut graph = AdjListMatrix::new(8);
         let edges = [
             (0, 1),
             (1, 2),
@@ -93,7 +93,7 @@ pub mod test {
             })
             .copied()
             .collect();
-        let mut sccs_graph = Graph::new(8);
+        let mut sccs_graph = AdjListMatrix::new(8);
         sccs_graph.add_edges(&edges_of_sccs);
 
         let ppi = PreProcessor::new(graph).reduce();
@@ -101,7 +101,7 @@ pub mod test {
         let order: u32 = ppi.induced_graphs.iter().map(|g| g.order()).sum();
         assert_eq!(ppi.og_graph.order(), order);
 
-        let mut union_graph = Graph::new(ppi.og_graph.order() as usize);
+        let mut union_graph = AdjListMatrix::new(ppi.og_graph.order() as usize);
         for (g, l) in ppi.induced_graphs.iter().zip(ppi.graph_labels.iter()) {
             for v in g.vertices() {
                 for u in g.out_neighbors(v) {

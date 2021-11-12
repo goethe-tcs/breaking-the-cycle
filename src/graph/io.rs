@@ -1,44 +1,34 @@
-use crate::graph::Graph;
-use std::convert::TryFrom;
 use std::io::{BufRead, ErrorKind, Write};
+use super::*;
 
-pub struct PaceReader<T: BufRead>(pub T);
-
-pub struct PaceWriter<'a, T: Write> {
-    graph: &'a Graph,
-    writer: T,
+pub trait PaceRead : Sized {
+    fn try_read_pace<T : BufRead>(buf : T) -> Result<Self, std::io::Error>;
 }
 
-impl<'a, T: Write> PaceWriter<'a, T> {
-    pub fn new(graph: &'a Graph, writer: T) -> Self {
-        Self { graph, writer }
-    }
+pub trait PaceWrite {
+    fn try_write_pace<T : Write>(&self, writer : T) -> Result<(), std::io::Error>;
 }
 
-impl<'a, T: Write> PaceWriter<'a, T> {
-    pub fn output(mut self) -> Result<(), std::io::Error> {
-        let n = self.graph.order();
+impl<G : AdjecencyList> PaceWrite for G {
+    fn try_write_pace<T : Write>(&self, mut writer : T) -> Result<(), std::io::Error> {
+        let n = self.order();
         let m: u32 = self
-            .graph
             .vertices()
-            .map(|u| self.graph.out_degree(u))
+            .map(|u| self.out_degree(u))
             .sum();
-        writeln!(self.writer, "p dfvs {} {}", n, m,)?;
-        for u in self.graph.vertices() {
-            for v in self.graph.out_neighbors(u) {
-                writeln!(self.writer, "{} {}", u, *v)?;
+        writeln!(writer, "p dfvs {} {}", n, m,)?;
+        for u in self.vertices() {
+            for v in self.out_neighbors(u) {
+                writeln!(writer, "{} {}", u, *v)?;
             }
         }
         Ok(())
     }
 }
 
-impl<T: BufRead> TryFrom<PaceReader<T>> for Graph {
-    type Error = std::io::Error;
-
-    fn try_from(reader: PaceReader<T>) -> Result<Self, Self::Error> {
-        let reader = reader.0;
-        let mut graph: Option<Graph> = None;
+impl<G : GraphNew+GraphManipulation+Sized> PaceRead for G {
+    fn try_read_pace<T: BufRead>(reader: T) -> Result<Self, std::io::Error>  {
+        let mut graph: Option<Self> = None;
         let mut order: Option<usize> = None;
         for line in reader.lines() {
             let line = line?;
@@ -49,7 +39,7 @@ impl<T: BufRead> TryFrom<PaceReader<T>> for Graph {
                 }
                 "p" => {
                     order = Some(parse_order(&elements)?);
-                    graph = Some(Graph::new(order.unwrap()))
+                    graph = Some(G::new(order.unwrap()))
                 }
                 _ => match graph.as_mut() {
                     Some(graph) => {
@@ -113,15 +103,13 @@ fn parse_order(elements: &[&str]) -> Result<usize, std::io::Error> {
 
 #[cfg(test)]
 mod tests {
-    use crate::graph::Graph;
-    use crate::io::PaceReader;
-    use std::convert::TryFrom;
+    use super::*;
+    use super::super::AdjListMatrix;
 
     #[test]
     fn read_graph() {
         let data = "p dfvs 7 9\n1 2\n1 4\n1 5\n1 6\n2 3\n2 7\n3 7\n4 5\n4 6".as_bytes();
-        let pc = PaceReader(data);
-        let graph: Result<Graph, std::io::Error> = Graph::try_from(pc);
+        let graph: Result<AdjListMatrix, std::io::Error> = AdjListMatrix::try_read_pace(data);
 
         assert!(graph.is_ok());
         let graph = graph.unwrap();
