@@ -227,9 +227,9 @@ pub mod tests {
         let mut graph = Graph::new(8);
         graph.add_edges(&[
             (0, 1),
-            (1, 5),
+            (1, 2),
             (1, 4),
-            (1, 3),
+            (1, 5),
             (2, 6),
             (2, 3),
             (3, 2),
@@ -260,14 +260,7 @@ pub mod tests {
     #[test]
     pub fn scc_tree() {
         let mut graph = Graph::new(7);
-        graph.add_edges(&[
-            (0, 1),
-            (1, 2),
-            (1, 3),
-            (1, 4),
-            (3, 5),
-            (3, 6),
-        ]);
+        graph.add_edges(&[(0, 1), (1, 2), (1, 3), (1, 4), (3, 5), (3, 6)]);
 
         let mut sccs = graph.strongly_connected_components();
         // in a directed tree each vertex is a strongly connected component

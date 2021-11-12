@@ -54,3 +54,72 @@ impl PreProcessor {
         }
     }
 }
+
+#[cfg(test)]
+pub mod test {
+    use crate::graph::Graph;
+    use crate::pre_processor::PreProcessor;
+
+    #[test]
+    fn pre_processor() {
+        let mut graph = Graph::new(8);
+        let edges = [
+            (0, 1),
+            (1, 2),
+            (1, 4),
+            (1, 5),
+            (2, 6),
+            (2, 3),
+            (3, 7),
+            (3, 2),
+            (4, 0),
+            (4, 5),
+            (5, 6),
+            (6, 5),
+            (7, 6),
+            (7, 3),
+        ];
+        graph.add_edges(&edges);
+
+        // edges between sccs are not contained in the union graph of each scc induced graph
+        let edges_of_sccs: Vec<_> = edges
+            .iter()
+            .filter(|(u, v)| {
+                (*u, *v) != (1, 2)
+                    && (*u, *v) != (1, 5)
+                    && (*u, *v) != (2, 6)
+                    && (*u, *v) != (4, 5)
+                    && (*u, *v) != (7, 6)
+            })
+            .copied()
+            .collect();
+        let mut sccs_graph = Graph::new(8);
+        sccs_graph.add_edges(&edges_of_sccs);
+
+        let ppi = PreProcessor::new(graph).reduce();
+        assert_eq!(ppi.induced_graphs.len(), 3);
+        let order: u32 = ppi.induced_graphs.iter().map(|g| g.order()).sum();
+        assert_eq!(ppi.og_graph.order(), order);
+
+        let mut union_graph = Graph::new(ppi.og_graph.order() as usize);
+        for (g, l) in ppi.induced_graphs.iter().zip(ppi.graph_labels.iter()) {
+            for v in g.vertices() {
+                for u in g.out_neighbors(v) {
+                    union_graph.add_edge(l[v as usize], l[*u as usize]);
+                }
+            }
+        }
+
+        for u in union_graph.vertices() {
+            for v in union_graph.out_neighbors(u) {
+                assert!(sccs_graph.has_edge(u, *v));
+            }
+        }
+
+        for u in sccs_graph.vertices() {
+            for v in sccs_graph.out_neighbors(u) {
+                assert!(union_graph.has_edge(u, *v));
+            }
+        }
+    }
+}
