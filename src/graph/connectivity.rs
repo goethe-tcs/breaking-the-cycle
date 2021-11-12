@@ -4,8 +4,8 @@ use std::collections::HashSet;
 use super::*;
 
 pub trait Connectivity : AdjecencyList + Sized {
-    /// Returns the strongly connected components of the graph as a Vec<Vec<u32>>
-    fn strongly_connected_components(&self) -> Vec<Vec<u32>> {
+    /// Returns the strongly connected components of the graph as a Vec<Vec<Node>>
+    fn strongly_connected_components(&self) -> Vec<Vec<Node>> {
         let sc = StronglyConnected::new(self);
         sc.find()
     }
@@ -40,12 +40,12 @@ impl<T : AdjecencyList> Connectivity for T {}
 
 pub struct StronglyConnected<'a, T : AdjecencyList> {
     graph: &'a T,
-    idx: u32,
-    stack: Vec<u32>,
-    indices: Vec<Option<u32>>,
-    low_links: Vec<u32>,
+    idx: Node,
+    stack: Vec<Node>,
+    indices: Vec<Option<Node>>,
+    low_links: Vec<Node>,
     on_stack: BitSet,
-    components: Vec<Vec<u32>>,
+    components: Vec<Vec<Node>>,
 }
 
 impl<'a, T : AdjecencyList> StronglyConnected<'a, T> {
@@ -61,7 +61,7 @@ impl<'a, T : AdjecencyList> StronglyConnected<'a, T> {
         }
     }
 
-    pub fn find(mut self) -> Vec<Vec<u32>> {
+    pub fn find(mut self) -> Vec<Vec<Node>> {
         for v in self.graph.vertices() {
             if self.indices[v as usize].is_none() {
                 self.sc(v);
@@ -70,7 +70,7 @@ impl<'a, T : AdjecencyList> StronglyConnected<'a, T> {
         self.components
     }
 
-    fn sc(&mut self, v: u32) {
+    fn sc(&mut self, v: Node) {
         self.indices[v as usize] = Some(self.idx);
         self.low_links[v as usize] = self.idx;
         self.idx += 1;
@@ -156,7 +156,7 @@ pub mod tests {
 
         sccs.sort_by(|a, b| a[0].cmp(&b[0]));
         for (i, scc) in sccs.iter().enumerate() {
-            assert_eq!(i as u32, scc[0]);
+            assert_eq!(i as Node, scc[0]);
         }
     }
 }

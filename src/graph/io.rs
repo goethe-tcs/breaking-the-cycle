@@ -66,10 +66,10 @@ impl<G : GraphNew+GraphManipulation+Sized> PaceRead for G {
     }
 }
 
-fn parse_vertex(v: &str, order: usize) -> Result<u32, std::io::Error> {
-    match v.parse::<u32>() {
+fn parse_vertex(v: &str, order: usize) -> Result<Node, std::io::Error> {
+    match v.parse::<Node>() {
         Ok(u) => {
-            if u == 0 || u > order as u32 {
+            if u == 0 || u > order as Node {
                 Err(std::io::Error::new(
                     std::io::ErrorKind::InvalidInput,
                     "Invalid vertex label",

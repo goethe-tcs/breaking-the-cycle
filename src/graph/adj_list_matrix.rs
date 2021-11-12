@@ -5,30 +5,30 @@ use super::*;
 #[derive(Clone)]
 pub struct AdjListMatrix {
     n: usize,
-    out_neighbors: Vec<Vec<u32>>,
+    out_neighbors: Vec<Vec<Node>>,
     out_matrix: Vec<BitSet>,
-    in_neighbors: Vec<Vec<u32>>,
+    in_neighbors: Vec<Vec<Node>>,
     in_matrix: Vec<BitSet>,
 }
 
 impl GraphOrder for AdjListMatrix {
-    fn order(&self) -> u32 { self.n as u32 }
+    fn order(&self) -> Node { self.n as Node }
 }
 
 impl AdjecencyList for AdjListMatrix {
-    fn out_neighbors(&self, u: u32) -> &[u32] {
+    fn out_neighbors(&self, u: Node) -> &[Node] {
         &self.out_neighbors[u as usize]
     }
 
-    fn in_neighbors(&self, u: u32) -> &[u32] {
+    fn in_neighbors(&self, u: Node) -> &[Node] {
         &self.in_neighbors[u as usize]
     }
 }
 
 impl GraphManipulation for AdjListMatrix {
-    fn add_edge(&mut self, u: u32, v: u32) {
-        assert!(u < self.n as u32);
-        assert!(v < self.n as u32);
+    fn add_edge(&mut self, u: Node, v: Node) {
+        assert!(u < self.n as Node);
+        assert!(v < self.n as Node);
         assert!(!self.out_matrix[u as usize][v as usize]);
         assert!(!self.in_matrix[v as usize][u as usize]);
         self.out_neighbors[u as usize].push(v);
@@ -37,13 +37,13 @@ impl GraphManipulation for AdjListMatrix {
         self.in_matrix[v as usize].set_bit(u as usize);
     }
 
-    fn remove_edge(&mut self, u: u32, v: u32) {
-        assert!(u < self.n as u32);
-        assert!(v < self.n as u32);
+    fn remove_edge(&mut self, u: Node, v: Node) {
+        assert!(u < self.n as Node);
+        assert!(v < self.n as Node);
         assert!(self.out_matrix[u as usize][v as usize]);
         assert!(self.in_matrix[v as usize][u as usize]);
 
-        let remove = |nb : &mut Vec<u32>, v| {
+        let remove = |nb : &mut Vec<Node>, v| {
             nb.swap_remove(nb.iter().enumerate().find(|(_, x)| **x == v).unwrap().0);
         };
 
@@ -55,7 +55,7 @@ impl GraphManipulation for AdjListMatrix {
 }
 
 impl AdjecencyTest for AdjListMatrix {
-    fn has_edge(&self, u: u32, v: u32) -> bool {
+    fn has_edge(&self, u: Node, v: Node) -> bool {
         self.out_matrix[u as usize][v as usize]
     }
 }

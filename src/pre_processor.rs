@@ -39,7 +39,7 @@ impl<G: AdjecencyList + AdjecencyTest + GraphManipulation + GraphNew> PreProcess
             for (i, u) in scc.iter().enumerate() {
                 for (j, v) in scc.iter().enumerate() {
                     if self.graph.has_edge(*u, *v) {
-                        scc_g.add_edge(i as u32, j as u32);
+                        scc_g.add_edge(i as Node, j as Node);
                     }
                 }
             }
@@ -98,7 +98,7 @@ pub mod test {
 
         let ppi = PreProcessor::new(graph).reduce();
         assert_eq!(ppi.induced_graphs.len(), 3);
-        let order: u32 = ppi.induced_graphs.iter().map(|g| g.order()).sum();
+        let order: Node = ppi.induced_graphs.iter().map(|g| g.order()).sum();
         assert_eq!(ppi.og_graph.order(), order);
 
         let mut union_graph = AdjListMatrix::new(ppi.og_graph.order() as usize);
