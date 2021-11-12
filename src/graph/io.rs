@@ -11,11 +11,8 @@ pub trait PaceWrite {
 
 impl<G : AdjecencyList> PaceWrite for G {
     fn try_write_pace<T : Write>(&self, mut writer : T) -> Result<(), std::io::Error> {
-        let n = self.order();
-        let m: u32 = self
-            .vertices()
-            .map(|u| self.out_degree(u))
-            .sum();
+        let n = self.number_of_nodes();
+        let m = self.number_of_edges() as u32;
         writeln!(writer, "p dfvs {} {}", n, m,)?;
         for u in self.vertices() {
             for v in self.out_neighbors(u) {
@@ -114,7 +111,7 @@ mod tests {
         assert!(graph.is_ok());
         let graph = graph.unwrap();
 
-        assert_eq!(graph.order(), 7);
+        assert_eq!(graph.number_of_nodes(), 7);
 
         assert!(graph.has_edge(0, 1));
         assert!(graph.has_edge(0, 3));

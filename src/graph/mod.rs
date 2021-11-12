@@ -13,15 +13,18 @@ pub use connectivity::Connectivity;
 pub use traversal::Traversal;
 
 pub trait GraphOrder {
-    /// Returns the order (number of nodes) of the graph
-    fn order(&self) -> Node;
+    /// Returns the number of nodes of the graph
+    fn number_of_nodes(&self) -> Node;
+
+    // Returns the number of edges of the graph
+    fn number_of_edges(&self) -> usize;
 
     /// Return the number of nodes as usize
-    fn len(&self) -> usize {self.order() as usize}
+    fn len(&self) -> usize {self.number_of_nodes() as usize}
 
     /// Returns an iterator over V.
     fn vertices(&self) -> Range<Node> {
-        0..self.order()
+        0..self.number_of_nodes()
     }
 }
 

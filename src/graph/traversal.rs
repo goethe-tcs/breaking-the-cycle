@@ -144,7 +144,7 @@ pub trait Traversal : AdjecencyList + Sized {
             rank += 1;
         });
 
-        if rank == self.order() {Some(ranks)} else {None}
+        if rank == self.number_of_nodes() {Some(ranks)} else {None}
     }
 }
 
@@ -217,7 +217,7 @@ pub mod tests {
         {
             let ranks = graph.traversal_rank(TravAlgo::TopoSearch).unwrap();
             assert_eq!(*ranks.iter().min().unwrap(), 0);
-            assert_eq!(*ranks.iter().max().unwrap(), graph.order() - 1);
+            assert_eq!(*ranks.iter().max().unwrap(), graph.number_of_nodes() - 1);
             for (u, v) in graph.edges() {
                 assert!(ranks[u as usize] < ranks[v as usize]);
             }

@@ -98,10 +98,10 @@ pub mod test {
 
         let ppi = PreProcessor::new(graph).reduce();
         assert_eq!(ppi.induced_graphs.len(), 3);
-        let order: Node = ppi.induced_graphs.iter().map(|g| g.order()).sum();
-        assert_eq!(ppi.og_graph.order(), order);
+        let order: Node = ppi.induced_graphs.iter().map(|g| g.number_of_nodes()).sum();
+        assert_eq!(ppi.og_graph.number_of_nodes(), order);
 
-        let mut union_graph = AdjListMatrix::new(ppi.og_graph.order() as usize);
+        let mut union_graph = AdjListMatrix::new(ppi.og_graph.number_of_nodes() as usize);
         for (g, l) in ppi.induced_graphs.iter().zip(ppi.graph_labels.iter()) {
             for v in g.vertices() {
                 for u in g.out_neighbors(v) {

@@ -5,6 +5,7 @@ use super::*;
 #[derive(Clone)]
 pub struct AdjListMatrix {
     n: usize,
+    m: usize,
     out_neighbors: Vec<Vec<Node>>,
     out_matrix: Vec<BitSet>,
     in_neighbors: Vec<Vec<Node>>,
@@ -12,7 +13,8 @@ pub struct AdjListMatrix {
 }
 
 impl GraphOrder for AdjListMatrix {
-    fn order(&self) -> Node { self.n as Node }
+    fn number_of_nodes(&self) -> Node {self.n as Node}
+    fn number_of_edges(&self) -> usize {self.m}
 }
 
 impl AdjecencyList for AdjListMatrix {
@@ -35,6 +37,7 @@ impl GraphManipulation for AdjListMatrix {
         self.in_neighbors[v as usize].push(u);
         self.out_matrix[u as usize].set_bit(v as usize);
         self.in_matrix[v as usize].set_bit(u as usize);
+        self.m += 1;
     }
 
     fn remove_edge(&mut self, u: Node, v: Node) {
@@ -42,6 +45,7 @@ impl GraphManipulation for AdjListMatrix {
         assert!(v < self.n as Node);
         assert!(self.out_matrix[u as usize][v as usize]);
         assert!(self.in_matrix[v as usize][u as usize]);
+        assert!(self.m > 0);
 
         let remove = |nb : &mut Vec<Node>, v| {
             nb.swap_remove(nb.iter().enumerate().find(|(_, x)| **x == v).unwrap().0);
@@ -51,6 +55,7 @@ impl GraphManipulation for AdjListMatrix {
         remove(&mut self.out_neighbors[v as usize], u);
         self.out_matrix[u as usize].unset_bit(v as usize);
         self.in_matrix[v as usize].unset_bit(u as usize);
+        self.m -= 1;
     }
 }
 
@@ -62,7 +67,7 @@ impl AdjecencyTest for AdjListMatrix {
 
 impl Debug for AdjListMatrix {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        writeln!(f, "AdjListMatrix with {} vertices", self.order())?;
+        writeln!(f, "AdjListMatrix with {} vertices and {} edges", self.number_of_nodes(), self.number_of_edges())?;
         for v in self.vertices() {
             for u in self.out_neighbors(v) {
                 writeln!(f, "{} -> {}", v, u,)?;
@@ -77,6 +82,7 @@ impl GraphNew for AdjListMatrix {
     fn new(n: usize) -> Self {
         Self {
             n,
+            m: 0,
             out_neighbors: vec![vec![]; n],
             out_matrix: vec![BitSet::new(n); n],
             in_neighbors: vec![vec![]; n],
@@ -105,7 +111,8 @@ pub mod tests {
     fn graph_edges() {
         let mut edges = vec![(1,2), (1,0), (4,3), (0,5), (2,4), (5, 4)];
         let graph = AdjListMatrix::from(&edges);
-        assert_eq!(graph.order(), 6);
+        assert_eq!(graph.number_of_nodes(), 6);
+        assert_eq!(graph.number_of_edges(), edges.len());
         let mut ret_edges = graph.edges();
 
         edges.sort();
