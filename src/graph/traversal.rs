@@ -132,7 +132,7 @@ pub trait Traversal : AdjecencyList + Sized {
     }
 
     /// Runs the requested algorithm and returns ranks of nodes, i.e.
-    /// if the i-th visited node was u, then rank[i] = u. Returns
+    /// if the i-th visited node was u, then rank\[i\] = u. Returns
     /// a ranking if all nodes were visited exactly one, otherwise None
     fn traversal_rank(&self, algo: TravAlgo) -> Option<Vec<Node>> {
         let mut ranks = vec![0; self.len()];

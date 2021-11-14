@@ -23,7 +23,7 @@ impl<G : AdjecencyList> PaceWrite for G {
     }
 }
 
-impl<G : GraphNew+GraphManipulation+Sized> PaceRead for G {
+impl<G : GraphNew+GraphEdgeEditing+Sized> PaceRead for G {
     fn try_read_pace<T: BufRead>(reader: T) -> Result<Self, std::io::Error>  {
         let mut graph: Option<Self> = None;
         let mut order: Option<usize> = None;

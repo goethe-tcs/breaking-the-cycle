@@ -2,6 +2,8 @@ use crate::bitset::BitSet;
 use std::fmt::{Debug, Formatter};
 use super::*;
 
+/// A data structure for a directed graph supporting self-loops,
+/// but no multi-edges. Supports constant time edge-existence queries
 #[derive(Clone)]
 pub struct AdjListMatrix {
     n: usize,
@@ -27,7 +29,7 @@ impl AdjecencyList for AdjListMatrix {
     }
 }
 
-impl GraphManipulation for AdjListMatrix {
+impl GraphEdgeEditing for AdjListMatrix {
     fn add_edge(&mut self, u: Node, v: Node) {
         assert!(u < self.n as Node);
         assert!(v < self.n as Node);

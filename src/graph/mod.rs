@@ -12,6 +12,7 @@ pub use adj_list_matrix::AdjListMatrix;
 pub use connectivity::Connectivity;
 pub use traversal::Traversal;
 
+/// Provides getters pertaining to the size of a graph
 pub trait GraphOrder {
     /// Returns the number of nodes of the graph
     fn number_of_nodes(&self) -> Node;
@@ -28,7 +29,7 @@ pub trait GraphOrder {
     }
 }
 
-///! Provides basic read-only functionality associated with an adjecency list
+/// Provides basic read-only functionality associated with an adjacency list
 pub trait AdjecencyList : GraphOrder {
     /// Returns a slice over the outgoing neighbors of a given vertex.
     /// ** Panics if the v >= n **
@@ -59,17 +60,20 @@ pub trait AdjecencyList : GraphOrder {
     }
 }
 
+/// Provides efficient tests whether an edge exists
 pub trait AdjecencyTest {
     /// Returns *true* exactly if the graph contains the directed edge (u, v)
     fn has_edge(&self, u: Node, v: Node) -> bool;
 }
 
+/// Provides constructor for a forest of isolated nodes
 pub trait GraphNew {
     /// Creates an empty graph with n singleton nodes
     fn new(n: usize) -> Self;
 }
 
-pub trait GraphManipulation : GraphNew {
+/// Provides functions to insert/delete edges
+pub trait GraphEdgeEditing : GraphNew {
     /// Adds the directed edge *(u,v)* to the graph. I.e., the edge FROM u TO v.
     /// ** Panics if the edge is already contained or u, v >= n **
     fn add_edge(&mut self, u: Node, v: Node);
@@ -85,4 +89,3 @@ pub trait GraphManipulation : GraphNew {
     /// ** Panics if the edge is not present or u, v >= n **
     fn remove_edge(&mut self, u: Node, v: Node);
 }
-

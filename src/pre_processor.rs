@@ -1,16 +1,16 @@
 use crate::graph::*;
 
-pub struct PreProcessor<G: AdjecencyList + AdjecencyTest + GraphManipulation + GraphNew> {
+pub struct PreProcessor<G: AdjecencyList + AdjecencyTest + GraphEdgeEditing + GraphNew> {
     graph: G,
 }
 
-pub struct PreProcessedInstance<G: AdjecencyList + AdjecencyTest + GraphManipulation + GraphNew> {
+pub struct PreProcessedInstance<G: AdjecencyList + AdjecencyTest + GraphEdgeEditing + GraphNew> {
     og_graph: G,
     induced_graphs: Vec<G>,
     graph_labels: Vec<Vec<u32>>,
 }
 
-impl<G: AdjecencyList + AdjecencyTest + GraphManipulation + GraphNew> PreProcessedInstance<G> {
+impl<G: AdjecencyList + AdjecencyTest + GraphEdgeEditing + GraphNew> PreProcessedInstance<G> {
     pub fn og_graph(&self) -> &G {
         &self.og_graph
     }
@@ -22,7 +22,7 @@ impl<G: AdjecencyList + AdjecencyTest + GraphManipulation + GraphNew> PreProcess
     }
 }
 
-impl<G: AdjecencyList + AdjecencyTest + GraphManipulation + GraphNew> PreProcessor<G> {
+impl<G: AdjecencyList + AdjecencyTest + GraphEdgeEditing + GraphNew> PreProcessor<G> {
     // Assumes the graph contains no self-loops
     pub fn new(graph: G) -> Self {
         Self { graph }

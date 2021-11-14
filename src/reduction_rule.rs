@@ -50,7 +50,7 @@ impl<G> From<G> for SelfLoops<G> {
     }
 }
 
-impl<G: 'static +  AdjecencyList + AdjecencyTest + GraphManipulation + GraphNew + Clone> ReductionRule<G> for SelfLoops<G> {
+impl<G: 'static +  AdjecencyList + AdjecencyTest + GraphEdgeEditing + GraphNew + Clone> ReductionRule<G> for SelfLoops<G> {
     fn reduce(self) -> Box<dyn AppliedRule<G>> {
         let old_graph = self.graph;
         let mut new_graph = old_graph.clone();
