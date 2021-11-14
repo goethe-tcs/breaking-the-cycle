@@ -1,5 +1,6 @@
 stages:
   - test
+  - clippy
 
 before_script:
   - git submodule update --init --recursive
@@ -9,3 +10,9 @@ cargo-test:
   stage: test
   script:
     - cargo test
+
+cargo-clippy:
+  image: gitlab.ae.cs.uni-frankfurt.de:5001/ae-ci/aeffm-rust
+  stage: test
+  script:
+    - cargo clippy --all-features -- -D clippy::all
