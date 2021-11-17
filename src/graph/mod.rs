@@ -17,7 +17,7 @@ pub trait GraphOrder {
     /// Returns the number of nodes of the graph
     fn number_of_nodes(&self) -> Node;
 
-    // Returns the number of edges of the graph
+    /// Returns the number of edges of the graph
     fn number_of_edges(&self) -> usize;
 
     /// Return the number of nodes as usize
@@ -27,6 +27,9 @@ pub trait GraphOrder {
     fn vertices(&self) -> Range<Node> {
         0..self.number_of_nodes()
     }
+
+    /// Returns true if the graph has no nodes (and thus no edges)
+    fn is_empty(&self) -> bool {self.len() == 0}
 }
 
 /// Provides basic read-only functionality associated with an adjacency list
