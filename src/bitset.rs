@@ -314,6 +314,39 @@ impl BitSet {
     }
 
     #[inline]
+    pub fn get_first_unset(&self) -> Option<usize> {
+        if self.cardinality != self.len() {
+            return self.get_next_unset(0);
+        }
+        None
+    }
+
+    #[inline]
+    pub fn get_next_unset(&self, idx: usize) -> Option<usize> {
+        if idx >= self.bit_vec.len() {
+            return None;
+        }
+        let mut block_idx = idx / block_size();
+        let word_idx = idx % block_size();
+        let mut block = self.bit_vec.as_raw_slice()[block_idx];
+        let max = self.bit_vec.as_raw_slice().len();
+        block |= (1 << word_idx) - 1;
+        while block == usize::MAX {
+            block_idx += 1;
+            if block_idx >= max {
+                return None;
+            }
+            block = self.bit_vec.as_raw_slice()[block_idx];
+        }
+        let v = block_idx * block_size() + block.trailing_ones() as usize;
+        if v >= self.bit_vec.len() {
+            None
+        } else {
+            Some(v)
+        }
+    }
+
+    #[inline]
     pub fn to_vec(&self) -> Vec<u32> {
         let mut tmp = Vec::with_capacity(self.cardinality);
         for (i, _) in self
@@ -404,13 +437,26 @@ mod tests {
 
         let b: Vec<usize> = bs.iter().collect();
         assert_eq!(a, b);
-        let mut c = Vec::new();
-        let mut v = bs.get_next_set(0);
-        while v.is_some() {
-            c.push(v.unwrap());
-            v = bs.get_next_set(v.unwrap() + 1);
+        {
+            let mut c = Vec::new();
+            let mut v = bs.get_next_set(0);
+            while v.is_some() {
+                c.push(v.unwrap());
+                v = bs.get_next_set(v.unwrap() + 1);
+            }
+            assert_eq!(a, c);
         }
-        assert_eq!(a, c);
+
+        {
+            let odds : Vec<usize> = (0..256).filter(|i| i % 2 == 1).collect();
+            let mut d = Vec::new();
+            let mut v = bs.get_next_unset(0);
+            while v.is_some() {
+                d.push(v.unwrap());
+                v = bs.get_next_unset(v.unwrap() + 1);
+            }
+            assert_eq!(odds, d);
+        }
     }
 
     #[test]
