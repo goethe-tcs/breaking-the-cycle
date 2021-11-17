@@ -10,7 +10,7 @@ pub type Edge = (Node, Node);
 
 pub use adj_list_matrix::AdjListMatrix;
 pub use connectivity::Connectivity;
-pub use traversal::Traversal;
+pub use traversal::*;
 
 /// Provides getters pertaining to the size of a graph
 pub trait GraphOrder {

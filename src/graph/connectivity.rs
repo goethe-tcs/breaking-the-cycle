@@ -1,9 +1,9 @@
 use crate::bitset::BitSet;
 use std::cmp::min;
-use super::traversal::TraversalState;
 use super::*;
+use super::traversal::*;
 
-pub trait Connectivity : AdjecencyList + Sized {
+pub trait Connectivity : AdjecencyList + Traversal + Sized {
     /// Returns the strongly connected components of the graph as a Vec<Vec<Node>>
     fn strongly_connected_components(&self) -> Vec<Vec<Node>> {
         let sc = StronglyConnected::new(self);
@@ -12,21 +12,31 @@ pub trait Connectivity : AdjecencyList + Sized {
 
     /// Returns the connected components of the graph as BitSets
     fn connected_components(&self) -> Vec<BitSet> {
-        let mut dfs = TraversalState::new(self);
-        let mut components: Vec<BitSet> = vec![];
+        if self.len() == 0 {
+            // questionable corner case: what is a CC on an empty graph?
+            return Vec::new();
+        }
 
-        for u in self.vertices() {
-            if dfs.did_visit(u) {continue;}
+        let mut components: Vec<BitSet> = vec![];
+        let mut traversal = self.dfs_undirected(0);
+
+        loop {
             let mut component = BitSet::new(self.len());
-            dfs.dfs_undirected(u, |v| {component.set_bit(v as usize);});
+            for x in traversal.by_ref() {
+                component.set_bit(x as usize);
+            }
             components.push(component);
+
+            if !traversal.try_restart_at_unvisited() {
+                break;
+            }
         }
 
         components
     }
 }
 
-impl<T : AdjecencyList> Connectivity for T {}
+impl<T : AdjecencyList + Traversal + Sized> Connectivity for T {}
 
 pub struct StronglyConnected<'a, T : AdjecencyList> {
     graph: &'a T,
