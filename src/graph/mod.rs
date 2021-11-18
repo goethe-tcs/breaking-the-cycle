@@ -91,4 +91,17 @@ pub trait GraphEdgeEditing : GraphNew {
     /// Removes the directed edge *(u,v)* from the graph. I.e., the edge FROM u TO v.
     /// ** Panics if the edge is not present or u, v >= n **
     fn remove_edge(&mut self, u: Node, v: Node);
+
+    /// Removes all edges into and out of node u
+    fn remove_edges_at_node(&mut self, u: Node) {
+        self.remove_edges_out_of_node(u);
+        self.remove_edges_into_node(u);
+    }
+
+    /// Removes all edges into node u, i.e. post-condition the in-degree is 0
+    fn remove_edges_into_node(&mut self, u: Node);
+
+    /// Removes all edges out of node u, i.e. post-condition the out-degree is 0
+    fn remove_edges_out_of_node(&mut self, u: Node);
+
 }

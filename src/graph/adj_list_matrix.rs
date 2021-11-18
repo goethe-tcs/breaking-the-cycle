@@ -39,6 +39,10 @@ impl AdjacencyList for AdjListMatrix {
     }
 }
 
+fn remove_helper(nb: &mut Vec<Node>, v: Node) {
+    nb.swap_remove(nb.iter().enumerate().find(|(_, x)| **x == v).unwrap().0);
+}
+
 impl GraphEdgeEditing for AdjListMatrix {
     fn add_edge(&mut self, u: Node, v: Node) {
         assert!(u < self.n as Node);
@@ -59,15 +63,29 @@ impl GraphEdgeEditing for AdjListMatrix {
         assert!(self.in_matrix[v as usize][u as usize]);
         assert!(self.m > 0);
 
-        let remove = |nb: &mut Vec<Node>, v| {
-            nb.swap_remove(nb.iter().enumerate().find(|(_, x)| **x == v).unwrap().0);
-        };
-
-        remove(&mut self.out_neighbors[u as usize], v);
-        remove(&mut self.out_neighbors[v as usize], u);
+        remove_helper(&mut self.out_neighbors[u as usize], v);
+        remove_helper(&mut self.out_neighbors[v as usize], u);
         self.out_matrix[u as usize].unset_bit(v as usize);
         self.in_matrix[v as usize].unset_bit(u as usize);
         self.m -= 1;
+    }
+
+    /// Removes all edges into node u, i.e. post-condition the in-degree is 0
+    fn remove_edges_into_node(&mut self, u: Node) {
+        for &v in &self.in_neighbors[u as usize] {
+            remove_helper(&mut self.out_neighbors[v as usize], u);
+        }
+        self.m -= self.in_neighbors[u as usize].len();
+        self.in_neighbors[u as usize].clear();
+    }
+
+    /// Removes all edges out of node u, i.e. post-condition the out-degree is 0
+    fn remove_edges_out_of_node(&mut self, u: Node) {
+        for &v in &self.out_neighbors[u as usize] {
+            remove_helper(&mut self.in_neighbors[v as usize], u);
+        }
+        self.m -= self.out_neighbors[u as usize].len();
+        self.out_neighbors[u as usize].clear();
     }
 }
 
@@ -132,5 +150,45 @@ pub mod tests {
         ret_edges.sort();
 
         assert_eq!(edges, ret_edges);
+    }
+
+    #[test]
+    fn test_remove_edges() {
+        let org_graph = AdjListMatrix::from(&[(0, 3), (1, 3), (2, 3), (3, 4), (3, 5)]);
+
+        // no changes
+        {
+            let mut graph = org_graph.clone();
+
+            graph.remove_edges_into_node(0);
+            assert_eq!(graph.edges(), org_graph.edges());
+
+            graph.remove_edges_out_of_node(4);
+            assert_eq!(graph.edges(), org_graph.edges());
+        }
+
+        // remove out
+        {
+            let mut graph = org_graph.clone();
+
+            graph.remove_edges_out_of_node(3);
+            assert_eq!(graph.number_of_edges(),
+                       org_graph.number_of_edges() - org_graph.out_degree(3) as usize);
+            for (u, _v) in graph.edges() {
+                assert_ne!(u, 3);
+            }
+        }
+
+        // remove in
+        {
+            let mut graph = org_graph.clone();
+
+            graph.remove_edges_into_node(3);
+            assert_eq!(graph.number_of_edges(),
+                       org_graph.number_of_edges() - org_graph.in_degree(3) as usize);
+            for (_u, v) in graph.edges() {
+                assert_ne!(v, 3);
+            }
+        }
     }
 }
