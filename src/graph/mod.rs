@@ -34,21 +34,21 @@ pub trait GraphOrder {
 
 /// Provides basic read-only functionality associated with an adjacency list
 pub trait AdjecencyList : GraphOrder {
+    type Iter<'a>: Iterator<Item = Node> where Self: 'a;
+
     /// Returns a slice over the outgoing neighbors of a given vertex.
     /// ** Panics if the v >= n **
-    fn out_neighbors(&self, u: Node) -> &[Node];
+    fn out_neighbors(&self, u: Node) -> Self::Iter<'_>;
 
     /// Returns a slice over the incoming neighbors of a given vertex.
     /// ** Panics if the v >= n **
-    fn in_neighbors(&self, u: Node) -> &[Node];
+    fn in_neighbors(&self, u: Node) -> Self::Iter<'_>;
 
     /// Returns the number of ingoing edges to *u*
-    fn in_degree(&self, u: Node) -> Node {
-        self.in_neighbors(u).len() as Node
-    }
+    fn in_degree(&self, u: Node) -> Node;
 
     /// Returns the number of outgoing edges from *u*
-    fn out_degree(&self, u: Node) -> Node { self.out_neighbors(u).len() as Node }
+    fn out_degree(&self, u: Node) -> Node;
 
     /// Returns the total number of edges incident to *u*
     fn total_degree(&self, u: Node) -> Node {
@@ -58,7 +58,7 @@ pub trait AdjecencyList : GraphOrder {
     /// Returns a vector over all edges in the graph
     fn edges(&self) -> Vec<Edge> {
         self.vertices().map(|u| {
-            self.out_neighbors(u).iter().map(move |&v| {(u, v)})
+            self.out_neighbors(u).map(move |v| {(u, v)})
         }).flatten().collect()
     }
 }

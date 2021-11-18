@@ -105,20 +105,20 @@ pub mod test {
         for (g, l) in ppi.induced_graphs.iter().zip(ppi.graph_labels.iter()) {
             for v in g.vertices() {
                 for u in g.out_neighbors(v) {
-                    union_graph.add_edge(l[v as usize], l[*u as usize]);
+                    union_graph.add_edge(l[v as usize], l[u as usize]);
                 }
             }
         }
 
         for u in union_graph.vertices() {
             for v in union_graph.out_neighbors(u) {
-                assert!(sccs_graph.has_edge(u, *v));
+                assert!(sccs_graph.has_edge(u, v));
             }
         }
 
         for u in sccs_graph.vertices() {
             for v in sccs_graph.out_neighbors(u) {
-                assert!(union_graph.has_edge(u, *v));
+                assert!(union_graph.has_edge(u, v));
             }
         }
     }

@@ -16,7 +16,7 @@ impl<G : AdjecencyList> PaceWrite for G {
         writeln!(writer, "p dfvs {} {}", n, m,)?;
         for u in self.vertices() {
             for v in self.out_neighbors(u) {
-                writeln!(writer, "{} {}", u, *v)?;
+                writeln!(writer, "{} {}", u, v)?;
             }
         }
         Ok(())

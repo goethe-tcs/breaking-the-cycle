@@ -65,7 +65,7 @@ impl<'a, G: AdjecencyList, S: NodeSequencer> Iterator for TraversalSearch<'a, G,
         let u = self.sequencer.pop()?;
 
         let visit_neighbors = |s: &mut Self, neighbors| {
-            for &v in neighbors {
+            for v in neighbors {
                 if !s.visited[v as usize] {
                     s.sequencer.push(v);
                     s.visited.set_bit(v as usize);
@@ -127,7 +127,7 @@ impl<'a, G: AdjecencyList> Iterator for TopoSearch<'a, G> {
     fn next(&mut self) -> Option<Self::Item> {
         let u = self.stack.pop()?;
 
-        for &v in self.graph.out_neighbors(u) {
+        for v in self.graph.out_neighbors(u) {
             self.in_degs[v as usize] -= 1;
             if self.in_degs[v as usize] == 0 {
                 self.stack.push(v);

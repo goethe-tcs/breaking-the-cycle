@@ -15,17 +15,27 @@ pub struct AdjListMatrix {
 }
 
 impl GraphOrder for AdjListMatrix {
-    fn number_of_nodes(&self) -> Node {self.n as Node}
-    fn number_of_edges(&self) -> usize {self.m}
+    fn number_of_nodes(&self) -> Node { self.n as Node }
+    fn number_of_edges(&self) -> usize { self.m }
 }
 
 impl AdjecencyList for AdjListMatrix {
-    fn out_neighbors(&self, u: Node) -> &[Node] {
-        &self.out_neighbors[u as usize]
+    type Iter<'a> = impl Iterator<Item=Node> + 'a;
+
+    fn out_neighbors(&self, u: Node) -> Self::Iter<'_> {
+        self.out_neighbors[u as usize].iter().copied()
     }
 
-    fn in_neighbors(&self, u: Node) -> &[Node] {
-        &self.in_neighbors[u as usize]
+    fn in_neighbors(&self, u: Node) -> Self::Iter<'_> {
+        self.in_neighbors[u as usize].iter().copied()
+    }
+
+    fn out_degree(&self, u: Node) -> Node {
+        self.out_neighbors[u as usize].len() as Node
+    }
+
+    fn in_degree(&self, u: Node) -> Node {
+        self.in_neighbors[u as usize].len() as Node
     }
 }
 
@@ -49,7 +59,7 @@ impl GraphEdgeEditing for AdjListMatrix {
         assert!(self.in_matrix[v as usize][u as usize]);
         assert!(self.m > 0);
 
-        let remove = |nb : &mut Vec<Node>, v| {
+        let remove = |nb: &mut Vec<Node>, v| {
             nb.swap_remove(nb.iter().enumerate().find(|(_, x)| **x == v).unwrap().0);
         };
 
@@ -72,7 +82,7 @@ impl Debug for AdjListMatrix {
         writeln!(f, "AdjListMatrix with {} vertices and {} edges", self.number_of_nodes(), self.number_of_edges())?;
         for v in self.vertices() {
             for u in self.out_neighbors(v) {
-                writeln!(f, "{} -> {}", v, u,)?;
+                writeln!(f, "{} -> {}", v, u, )?;
             }
         }
         Ok(())
@@ -93,11 +103,12 @@ impl GraphNew for AdjListMatrix {
     }
 }
 
-impl<'a, T: IntoIterator<Item = &'a Edge> + Clone> From<T> for AdjListMatrix {
+impl<'a, T: IntoIterator<Item=&'a Edge> + Clone> From<T> for AdjListMatrix {
     fn from(edges: T) -> Self {
         let n = edges.clone().into_iter().map(|e| {
-            e.0.max(e.1) + 1 }).max().unwrap_or(0);
-        let mut graph= AdjListMatrix::new(n as usize);
+            e.0.max(e.1) + 1
+        }).max().unwrap_or(0);
+        let mut graph = AdjListMatrix::new(n as usize);
         for e in edges {
             graph.add_edge(e.0, e.1);
         }
@@ -111,7 +122,7 @@ pub mod tests {
 
     #[test]
     fn graph_edges() {
-        let mut edges = vec![(1,2), (1,0), (4,3), (0,5), (2,4), (5, 4)];
+        let mut edges = vec![(1, 2), (1, 0), (4, 3), (0, 5), (2, 4), (5, 4)];
         let graph = AdjListMatrix::from(&edges);
         assert_eq!(graph.number_of_nodes(), 6);
         assert_eq!(graph.number_of_edges(), edges.len());

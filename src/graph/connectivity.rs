@@ -78,14 +78,14 @@ impl<'a, T : AdjecencyList> StronglyConnected<'a, T> {
         self.on_stack.set_bit(v as usize);
 
         for w in self.graph.out_neighbors(v) {
-            if self.indices[*w as usize].is_none() {
-                self.sc(*w);
+            if self.indices[w as usize].is_none() {
+                self.sc(w);
                 self.low_links[v as usize] =
-                    min(self.low_links[v as usize], self.low_links[*w as usize]);
-            } else if self.on_stack[*w as usize] {
+                    min(self.low_links[v as usize], self.low_links[w as usize]);
+            } else if self.on_stack[w as usize] {
                 self.low_links[v as usize] = min(
                     self.low_links[v as usize],
-                    self.indices[*w as usize].unwrap(),
+                    self.indices[w as usize].unwrap(),
                 );
             }
         }
