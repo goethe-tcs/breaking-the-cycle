@@ -1,16 +1,16 @@
-use std::io::{BufRead, ErrorKind, Write};
 use super::*;
+use std::io::{BufRead, ErrorKind, Write};
 
-pub trait PaceRead : Sized {
-    fn try_read_pace<T : BufRead>(buf : T) -> Result<Self, std::io::Error>;
+pub trait PaceRead: Sized {
+    fn try_read_pace<T: BufRead>(buf: T) -> Result<Self, std::io::Error>;
 }
 
 pub trait PaceWrite {
-    fn try_write_pace<T : Write>(&self, writer : T) -> Result<(), std::io::Error>;
+    fn try_write_pace<T: Write>(&self, writer: T) -> Result<(), std::io::Error>;
 }
 
-impl<G : AdjacencyList> PaceWrite for G {
-    fn try_write_pace<T : Write>(&self, mut writer : T) -> Result<(), std::io::Error> {
+impl<G: AdjacencyList> PaceWrite for G {
+    fn try_write_pace<T: Write>(&self, mut writer: T) -> Result<(), std::io::Error> {
         let n = self.number_of_nodes();
         let m = self.number_of_edges() as u32;
         writeln!(writer, "p dfvs {} {}", n, m,)?;
@@ -23,8 +23,8 @@ impl<G : AdjacencyList> PaceWrite for G {
     }
 }
 
-impl<G : GraphNew+GraphEdgeEditing+Sized> PaceRead for G {
-    fn try_read_pace<T: BufRead>(reader: T) -> Result<Self, std::io::Error>  {
+impl<G: GraphNew + GraphEdgeEditing + Sized> PaceRead for G {
+    fn try_read_pace<T: BufRead>(reader: T) -> Result<Self, std::io::Error> {
         let mut graph: Option<Self> = None;
         let mut order: Option<usize> = None;
         for line in reader.lines() {
@@ -100,8 +100,8 @@ fn parse_order(elements: &[&str]) -> Result<usize, std::io::Error> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::AdjListMatrix;
+    use super::*;
 
     #[test]
     fn read_graph() {

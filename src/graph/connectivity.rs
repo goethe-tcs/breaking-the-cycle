@@ -1,9 +1,9 @@
+use super::traversal::*;
+use super::*;
 use crate::bitset::BitSet;
 use std::cmp::min;
-use super::*;
-use super::traversal::*;
 
-pub trait Connectivity : AdjacencyList + Traversal + Sized {
+pub trait Connectivity: AdjacencyList + Traversal + Sized {
     /// Returns the strongly connected components of the graph as a Vec<Vec<Node>>
     fn strongly_connected_components(&self) -> Vec<Vec<Node>> {
         let sc = StronglyConnected::new(self);
@@ -36,9 +36,9 @@ pub trait Connectivity : AdjacencyList + Traversal + Sized {
     }
 }
 
-impl<T : AdjacencyList + Traversal + Sized> Connectivity for T {}
+impl<T: AdjacencyList + Traversal + Sized> Connectivity for T {}
 
-pub struct StronglyConnected<'a, T : AdjacencyList> {
+pub struct StronglyConnected<'a, T: AdjacencyList> {
     graph: &'a T,
     idx: Node,
     stack: Vec<Node>,
@@ -48,7 +48,7 @@ pub struct StronglyConnected<'a, T : AdjacencyList> {
     components: Vec<Vec<Node>>,
 }
 
-impl<'a, T : AdjacencyList> StronglyConnected<'a, T> {
+impl<'a, T: AdjacencyList> StronglyConnected<'a, T> {
     pub fn new(graph: &'a T) -> Self {
         Self {
             graph,
@@ -113,10 +113,7 @@ pub mod tests {
     #[test]
     pub fn cc() {
         let mut graph = AdjListMatrix::new(9);
-        graph.add_edges(&[
-            (0, 3), (6, 3), (6, 7),
-            (4, 1), (1, 8),
-        ]);
+        graph.add_edges(&[(0, 3), (6, 3), (6, 7), (4, 1), (1, 8)]);
         let mut ccs = graph.connected_components();
 
         assert_eq!(ccs.len(), 4);
@@ -126,10 +123,10 @@ pub mod tests {
         assert!(!ccs[2].is_empty());
         assert!(!ccs[3].is_empty());
 
-        ccs.sort_by(|a,b| {a.get_first_set().unwrap().cmp(&b.get_first_set().unwrap())});
+        ccs.sort_by(|a, b| a.get_first_set().unwrap().cmp(&b.get_first_set().unwrap()));
 
-        assert_eq!(ccs[0].to_vec(), [0,3,6,7]);
-        assert_eq!(ccs[1].to_vec(), [1,4,8]);
+        assert_eq!(ccs[0].to_vec(), [0, 3, 6, 7]);
+        assert_eq!(ccs[1].to_vec(), [1, 4, 8]);
         assert_eq!(ccs[2].to_vec(), [2]);
         assert_eq!(ccs[3].to_vec(), [5]);
     }

@@ -1,7 +1,7 @@
 #![deny(warnings)]
 
-use dfvs::graph::AdjListMatrix;
 use dfvs::graph::io::{PaceRead, PaceWrite};
+use dfvs::graph::AdjListMatrix;
 use std::io::{stdin, stdout};
 
 fn main() -> std::io::Result<()> {
