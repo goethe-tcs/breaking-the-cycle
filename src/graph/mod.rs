@@ -33,7 +33,7 @@ pub trait GraphOrder {
 }
 
 /// Provides basic read-only functionality associated with an adjacency list
-pub trait AdjecencyList : GraphOrder {
+pub trait AdjacencyList: GraphOrder {
     type Iter<'a>: Iterator<Item = Node> where Self: 'a;
 
     /// Returns a slice over the outgoing neighbors of a given vertex.
@@ -64,7 +64,7 @@ pub trait AdjecencyList : GraphOrder {
 }
 
 /// Provides efficient tests whether an edge exists
-pub trait AdjecencyTest {
+pub trait AdjacencyTest {
     /// Returns *true* exactly if the graph contains the directed edge (u, v)
     fn has_edge(&self, u: Node, v: Node) -> bool;
 }

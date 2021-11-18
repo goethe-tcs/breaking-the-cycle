@@ -3,7 +3,7 @@ use std::cmp::min;
 use super::*;
 use super::traversal::*;
 
-pub trait Connectivity : AdjecencyList + Traversal + Sized {
+pub trait Connectivity : AdjacencyList + Traversal + Sized {
     /// Returns the strongly connected components of the graph as a Vec<Vec<Node>>
     fn strongly_connected_components(&self) -> Vec<Vec<Node>> {
         let sc = StronglyConnected::new(self);
@@ -36,9 +36,9 @@ pub trait Connectivity : AdjecencyList + Traversal + Sized {
     }
 }
 
-impl<T : AdjecencyList + Traversal + Sized> Connectivity for T {}
+impl<T : AdjacencyList + Traversal + Sized> Connectivity for T {}
 
-pub struct StronglyConnected<'a, T : AdjecencyList> {
+pub struct StronglyConnected<'a, T : AdjacencyList> {
     graph: &'a T,
     idx: Node,
     stack: Vec<Node>,
@@ -48,7 +48,7 @@ pub struct StronglyConnected<'a, T : AdjecencyList> {
     components: Vec<Vec<Node>>,
 }
 
-impl<'a, T : AdjecencyList> StronglyConnected<'a, T> {
+impl<'a, T : AdjacencyList> StronglyConnected<'a, T> {
     pub fn new(graph: &'a T) -> Self {
         Self {
             graph,

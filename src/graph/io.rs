@@ -9,7 +9,7 @@ pub trait PaceWrite {
     fn try_write_pace<T : Write>(&self, writer : T) -> Result<(), std::io::Error>;
 }
 
-impl<G : AdjecencyList> PaceWrite for G {
+impl<G : AdjacencyList> PaceWrite for G {
     fn try_write_pace<T : Write>(&self, mut writer : T) -> Result<(), std::io::Error> {
         let n = self.number_of_nodes();
         let m = self.number_of_edges() as u32;

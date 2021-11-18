@@ -37,7 +37,7 @@ impl NodeSequencer for Vec<Node> {
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////// BFS & DFS
-pub struct TraversalSearch<'a, G: AdjecencyList, S: NodeSequencer> {
+pub struct TraversalSearch<'a, G: AdjacencyList, S: NodeSequencer> {
     // would prefer this to be private
     graph: &'a G,
     visited: BitSet,
@@ -48,17 +48,17 @@ pub struct TraversalSearch<'a, G: AdjecencyList, S: NodeSequencer> {
 pub type BFS<'a, G> = TraversalSearch<'a, G, VecDeque<Node>>;
 pub type DFS<'a, G> = TraversalSearch<'a, G, Vec<Node>>;
 
-impl<'a, G: AdjecencyList, S: NodeSequencer> WithGraphRef<G> for TraversalSearch<'a, G, S> {
+impl<'a, G: AdjacencyList, S: NodeSequencer> WithGraphRef<G> for TraversalSearch<'a, G, S> {
     fn graph(&self) -> &G { self.graph }
 }
 
-impl<'a, G: AdjecencyList, S: NodeSequencer> TraversalState for TraversalSearch<'a, G, S> {
+impl<'a, G: AdjacencyList, S: NodeSequencer> TraversalState for TraversalSearch<'a, G, S> {
     fn visited(&self) -> &BitSet {
         &self.visited
     }
 }
 
-impl<'a, G: AdjecencyList, S: NodeSequencer> Iterator for TraversalSearch<'a, G, S> {
+impl<'a, G: AdjacencyList, S: NodeSequencer> Iterator for TraversalSearch<'a, G, S> {
     type Item = Node;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -87,7 +87,7 @@ impl<'a, G: AdjecencyList, S: NodeSequencer> Iterator for TraversalSearch<'a, G,
 }
 
 
-impl<'a, G: AdjecencyList, S: NodeSequencer> TraversalSearch<'a, G, S> {
+impl<'a, G: AdjacencyList, S: NodeSequencer> TraversalSearch<'a, G, S> {
     pub fn new(graph: &'a G, start: Node, directed: bool) -> Self {
         let mut visited = BitSet::new(graph.len());
         visited.set_bit(start as usize);
@@ -117,11 +117,11 @@ pub struct TopoSearch<'a, G> {
     stack: Vec<Node>,
 }
 
-impl<'a, G: AdjecencyList> WithGraphRef<G> for TopoSearch<'a, G> {
+impl<'a, G: AdjacencyList> WithGraphRef<G> for TopoSearch<'a, G> {
     fn graph(&self) -> &G { self.graph }
 }
 
-impl<'a, G: AdjecencyList> Iterator for TopoSearch<'a, G> {
+impl<'a, G: AdjacencyList> Iterator for TopoSearch<'a, G> {
     type Item = Node;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -142,7 +142,7 @@ impl<'a, G: AdjecencyList> Iterator for TopoSearch<'a, G> {
     }
 }
 
-impl<'a, G: AdjecencyList> TopoSearch<'a, G> {
+impl<'a, G: AdjacencyList> TopoSearch<'a, G> {
     fn new(graph: &'a G) -> Self {
         let in_degs: Vec<Node> = graph.vertices().map(|u| { graph.in_degree(u) }).collect();
         let stack: Vec<Node> = in_degs
@@ -156,7 +156,7 @@ impl<'a, G: AdjecencyList> TopoSearch<'a, G> {
 }
 
 //////////////////////////////////////////////////////////////////////////////////////// Convenience
-trait RankFromOrder<'a, G: 'a + AdjecencyList>: WithGraphRef<G> + Iterator<Item=Node> + Sized {
+trait RankFromOrder<'a, G: 'a + AdjacencyList>: WithGraphRef<G> + Iterator<Item=Node> + Sized {
     /// Consumes a graph traversal iterator and returns a mapping, where the i-th
     /// item contains the rank (starting from 0) as which it was iterated over.
     /// Returns None iff not all nodes were iterated
@@ -178,12 +178,12 @@ trait RankFromOrder<'a, G: 'a + AdjecencyList>: WithGraphRef<G> + Iterator<Item=
     }
 }
 
-impl<'a, G: AdjecencyList, S: NodeSequencer> RankFromOrder<'a, G> for TraversalSearch<'a, G, S> {}
+impl<'a, G: AdjacencyList, S: NodeSequencer> RankFromOrder<'a, G> for TraversalSearch<'a, G, S> {}
 
-impl<'a, G: AdjecencyList> RankFromOrder<'a, G> for TopoSearch<'a, G> {}
+impl<'a, G: AdjacencyList> RankFromOrder<'a, G> for TopoSearch<'a, G> {}
 
 /// Offers graph traversal algorithms as methods of the graph representation
-pub trait Traversal: AdjecencyList + Sized {
+pub trait Traversal: AdjacencyList + Sized {
     /// Returns an iterator traversing nodes reachable from `start` in breadth-first-search order
     fn bfs_directed(&self, start: Node) -> BFS<Self> {
         BFS::new(self, start, true)
@@ -219,7 +219,7 @@ pub trait Traversal: AdjecencyList + Sized {
     }
 }
 
-impl<T: AdjecencyList + Sized> Traversal for T {}
+impl<T: AdjacencyList + Sized> Traversal for T {}
 
 
 #[cfg(test)]

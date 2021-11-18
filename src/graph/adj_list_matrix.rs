@@ -19,7 +19,7 @@ impl GraphOrder for AdjListMatrix {
     fn number_of_edges(&self) -> usize { self.m }
 }
 
-impl AdjecencyList for AdjListMatrix {
+impl AdjacencyList for AdjListMatrix {
     type Iter<'a> = impl Iterator<Item=Node> + 'a;
 
     fn out_neighbors(&self, u: Node) -> Self::Iter<'_> {
@@ -71,7 +71,7 @@ impl GraphEdgeEditing for AdjListMatrix {
     }
 }
 
-impl AdjecencyTest for AdjListMatrix {
+impl AdjacencyTest for AdjListMatrix {
     fn has_edge(&self, u: Node, v: Node) -> bool {
         self.out_matrix[u as usize][v as usize]
     }
