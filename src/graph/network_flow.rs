@@ -1,6 +1,5 @@
 use crate::bitset::BitSet;
-use crate::graph::{AdjacencyList, GraphOrder, Node};
-use std::collections::VecDeque;
+use crate::graph::{AdjacencyList, GraphOrder, Node, Traversal, TraversalState};
 
 pub struct EdmondsKarp {
     residual_network: ResidualBitMatrix,
@@ -8,7 +7,6 @@ pub struct EdmondsKarp {
 }
 
 trait ResidualNetwork: SourceTarget + AdjacencyList + Label<Node> {
-
     // Reverses the edge (u, v) to (v, u).
     fn reverse(&mut self, u: Node, v: Node);
 
@@ -142,7 +140,7 @@ impl ResidualNetwork for ResidualBitMatrix {
             labels: graph.vertices().collect(),
         }
     }
-    
+
     fn for_vertex_disjoint<G: GraphOrder + AdjacencyList>(graph: &G, s: Node, t: Node) -> Self {
         let n = graph.number_of_nodes() as usize * 2; // duplicate
         let labels: Vec<_> = graph.vertices().chain(graph.vertices()).collect();
@@ -224,24 +222,26 @@ impl EdmondsKarp {
     }
 
     fn bfs(&mut self) -> bool {
-        let n = self.residual_network.n;
-        let s = self.residual_network.s;
-        let t = self.residual_network.t;
-        let mut visited = BitSet::new(n);
-        let mut q: VecDeque<_> = Default::default();
-        self.predecessor[s as usize] = u32::MAX;
-        q.push_back(s);
-        visited.set_bit(s as usize);
-        while let Some(u) = q.pop_front() {
-            for v in 0..n {
-                if !visited[v] && self.residual_network.capacity[u as usize][v as usize] {
-                    q.push_back(v as u32);
-                    self.predecessor[v] = u;
-                    visited.set_bit(v);
+        let s = *self.residual_network.source();
+        let t = *self.residual_network.target() as usize;
+        let predecessor = &mut self.predecessor;
+        let f = Box::new(|u, v| {
+            predecessor[v as usize] = u;
+        });
+        let mut bfs = self
+            .residual_network
+            .bfs_directed(s)
+            .register_pre_push(f);
+        loop {
+            match bfs.next() {
+                None => {
+                    return bfs.visited()[t];
+                }
+                Some(_) => {
+                    continue;
                 }
             }
         }
-        visited[t as usize]
     }
 
     // Finds the number of edge disjoint paths from s to t
