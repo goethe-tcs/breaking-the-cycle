@@ -1,29 +1,26 @@
 stages:
-  - test
+  - primary
   - extras
 
 before_script:
   - git submodule update --init --recursive
 
 cargo-test:
-  image: gitlab.ae.cs.uni-frankfurt.de:5001/ae-ci/aeffm-rust
-  stage: test
+  image: gitlab.ae.cs.uni-frankfurt.de:5001/ae-ci/aeffm-rust-nightly
+  stage: primary
   script:
-    - rustup default nightly
     - cargo test
 
 cargo-test-release:
-  image: gitlab.ae.cs.uni-frankfurt.de:5001/ae-ci/aeffm-rust
-  stage: test
+  image: gitlab.ae.cs.uni-frankfurt.de:5001/ae-ci/aeffm-rust-nightly
+  stage: extras
   script:
-    - rustup default nightly
     - cargo test --release
 
 cargo-clippy:
-  image: gitlab.ae.cs.uni-frankfurt.de:5001/ae-ci/aeffm-rust
-  stage: test
+  image: gitlab.ae.cs.uni-frankfurt.de:5001/ae-ci/aeffm-rust-nightly
+  stage: primary
   script:
-    - rustup default nightly
     - cargo clippy --all-features -- -D clippy::all
 
 coverage:
