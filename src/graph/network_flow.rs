@@ -228,10 +228,7 @@ impl EdmondsKarp {
         let f = Box::new(|u, v| {
             predecessor[v as usize] = u;
         });
-        let mut bfs = self
-            .residual_network
-            .bfs_directed(s)
-            .register_pre_push(f);
+        let mut bfs = self.residual_network.bfs_directed(s).register_pre_push(f);
         loop {
             match bfs.next() {
                 None => {

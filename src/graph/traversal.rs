@@ -59,7 +59,7 @@ pub struct TraversalSearch<'a, G: AdjacencyList, S: NodeSequencer> {
     visited: BitSet,
     sequencer: S,
     directed: bool,
-    pre_push: Option<Box<dyn FnMut(Node, Node) -> () + 'a>>,
+    pre_push: Option<Box<dyn FnMut(Node, Node) + 'a>>,
 }
 
 pub type BFS<'a, G> = TraversalSearch<'a, G, VecDeque<Node>>;
@@ -87,7 +87,7 @@ impl<'a, G: AdjacencyList, S: NodeSequencer> Iterator for TraversalSearch<'a, G,
             |visited: &mut BitSet,
              sequencer: &mut S,
              neighbors,
-             pre_push: &mut Option<Box<dyn FnMut(Node, Node) -> ()>>| {
+             pre_push: &mut Option<Box<dyn FnMut(Node, Node)>>| {
                 for v in neighbors {
                     if !visited[v as usize] {
                         if let Some(f) = pre_push {
@@ -156,7 +156,7 @@ impl<'a, G: AdjacencyList, S: NodeSequencer> TraversalSearch<'a, G, S> {
     // Registers a boxed dynamic Trait Object implementing Fn(Node, Node)->().
     // It is called every time a new vertex is pushed on the sequencer.
     // The first argument is the vertex popped from the sequencer, and the second the vertex being pushed.
-    pub fn register_pre_push(mut self, f: Box<dyn FnMut(Node, Node) -> () + 'a>) -> Self {
+    pub fn register_pre_push(mut self, f: Box<dyn FnMut(Node, Node) + 'a>) -> Self {
         self.pre_push = Some(f);
         self
     }
