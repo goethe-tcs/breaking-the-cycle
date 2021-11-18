@@ -1,48 +1,19 @@
 use crate::bitset::BitSet;
-use crate::graph::Graph;
+use crate::graph::{AdjacencyList, GraphOrder, Node};
 use std::collections::VecDeque;
 
 pub struct EdmondsKarp {
-    residual_network: ResidualNetwork,
+    residual_network: ResidualBitMatrix,
     predecessor: Vec<u32>,
 }
 
-pub struct ResidualNetwork {
-    s: u32,
-    t: u32,
-    n: usize,
-    capacity: Vec<BitSet>,
-    labels: Vec<u32>,
-}
+trait ResidualNetwork: SourceTarget + AdjacencyList + Label<Node> {
 
-impl ResidualNetwork {
-    pub fn reverse(&mut self, u: usize, v: usize) {
-        assert!(self.capacity[u][v]);
-        self.capacity[u].unset_bit(v);
-        self.capacity[v].set_bit(u);
-    }
+    // Reverses the edge (u, v) to (v, u).
+    fn reverse(&mut self, u: Node, v: Node);
 
-    pub fn for_edge_disjoint(graph: &Graph, s: u32, t: u32) -> Self {
-        let n = graph.order() as usize;
-        Self {
-            s,
-            t,
-            n,
-            capacity: graph
-                .vertices()
-                .map(|u| {
-                    let mut bs = BitSet::new(n);
-                    for v in graph.vertices() {
-                        if graph.has_edge(u, v) {
-                            bs.set_bit(v as usize);
-                        }
-                    }
-                    bs
-                })
-                .collect(),
-            labels: graph.vertices().collect(),
-        }
-    }
+    // Constructs a network to find edge-disjoint paths from s to t
+    fn for_edge_disjoint<G: GraphOrder + AdjacencyList>(graph: &G, s: Node, t: Node) -> Self;
 
     // To find vertex disjoint paths the graph must be transformed:
     // for each vertex v create two vertices v_in and v_out.
@@ -52,8 +23,128 @@ impl ResidualNetwork {
     // Ignore this procedure for the vertices s and t. For those simply
     // add the edges (s, v_in) for each edge (s, v) in the original graph
     // and the edge (v_out, s) for each edge (v, s) in the original graph.
-    pub fn for_vertex_disjoint(graph: &Graph, s: u32, t: u32) -> Self {
-        let n = graph.order() as usize * 2; // duplicate
+    fn for_vertex_disjoint<G: GraphOrder + AdjacencyList>(graph: &G, s: Node, t: Node) -> Self;
+
+    // creates network for finding vertex disjoint cycles that all share the vertex s. the
+    // same as vertex disjoint, but s is handled the same as all other vertices, except that
+    // s_in and s_out are not connected. Then, s_out is the source and s_in is the target.
+    fn for_petals<G: GraphOrder + AdjacencyList>(graph: &G, s: Node) -> Self;
+}
+
+pub struct ResidualBitMatrix {
+    s: u32,
+    t: u32,
+    n: usize,
+    m: usize,
+    capacity: Vec<BitSet>,
+    labels: Vec<Node>,
+}
+
+trait Label<T> {
+    fn label(&self, u: Node) -> &T;
+}
+
+impl Label<Node> for ResidualBitMatrix {
+    fn label(&self, u: Node) -> &Node {
+        &self.labels[u as usize]
+    }
+}
+
+trait SourceTarget {
+    fn source(&self) -> &Node;
+    fn target(&self) -> &Node;
+    fn source_mut(&mut self) -> &mut Node;
+    fn target_mut(&mut self) -> &mut Node;
+}
+
+impl SourceTarget for ResidualBitMatrix {
+    fn source(&self) -> &Node {
+        &self.s
+    }
+
+    fn target(&self) -> &Node {
+        &self.t
+    }
+
+    fn source_mut(&mut self) -> &mut Node {
+        &mut self.t
+    }
+
+    fn target_mut(&mut self) -> &mut Node {
+        &mut self.t
+    }
+}
+
+impl GraphOrder for ResidualBitMatrix {
+    fn number_of_nodes(&self) -> Node {
+        self.n as Node
+    }
+
+    fn number_of_edges(&self) -> usize {
+        self.m
+    }
+}
+
+const fn to_node(i: usize) -> Node {
+    i as Node
+}
+
+impl AdjacencyList for ResidualBitMatrix {
+    type Iter<'a> = impl Iterator<Item = Node> + 'a;
+
+    fn out_neighbors(&self, u: Node) -> Self::Iter<'_> {
+        self.capacity[u as usize].iter().map(to_node)
+    }
+
+    // TODO: SPLIT IN_NEIGHBORS AND OUT_NEIGHBORS TO TWO TRAITS
+    // CURRENT FUNCTION IS A WRONG IMPLEMENTATION TO PLEASE THE COMPILER
+    fn in_neighbors(&self, u: Node) -> Self::Iter<'_> {
+        self.capacity[u as usize].iter().map(to_node)
+    }
+
+    // TODO: SPLIT IN_NEIGHBORS AND OUT_NEIGHBORS TO TWO TRAITS
+    // CURRENT FUNCTION IS A WRONG IMPLEMENTATION TO PLEASE THE COMPILER
+    fn in_degree(&self, u: Node) -> Node {
+        self.capacity[u as usize].cardinality() as Node
+    }
+
+    fn out_degree(&self, u: Node) -> Node {
+        self.capacity[u as usize].cardinality() as Node
+    }
+}
+
+impl ResidualNetwork for ResidualBitMatrix {
+    fn reverse(&mut self, u: Node, v: Node) {
+        let u = u as usize;
+        let v = v as usize;
+        assert!(self.capacity[u][v]);
+        self.capacity[u].unset_bit(v);
+        self.capacity[v].set_bit(u);
+    }
+
+    fn for_edge_disjoint<G: GraphOrder + AdjacencyList>(graph: &G, s: Node, t: Node) -> Self {
+        let n = graph.number_of_nodes() as usize;
+        Self {
+            s,
+            t,
+            n,
+            m: 0,
+            capacity: graph
+                .vertices()
+                .map(|u| {
+                    let mut bs = BitSet::new(n);
+                    for v in graph.out_neighbors(u) {
+                        bs.set_bit(v as usize);
+                    }
+                    bs
+                })
+                .collect(),
+            labels: graph.vertices().collect(),
+        }
+    }
+    
+    fn for_vertex_disjoint<G: GraphOrder + AdjacencyList>(graph: &G, s: Node, t: Node) -> Self {
+        let n = graph.number_of_nodes() as usize * 2; // duplicate
         let labels: Vec<_> = graph.vertices().chain(graph.vertices()).collect();
 
         let mut capacity = vec![BitSet::new(n); n];
@@ -61,7 +152,7 @@ impl ResidualNetwork {
             // handle s and t
             if v == s || v == t {
                 for u in graph.out_neighbors(v) {
-                    let u_in = *u as usize;
+                    let u_in = u as usize;
                     // add edge from v to u_in
                     capacity[v as usize].set_bit(u_in);
                 }
@@ -69,13 +160,13 @@ impl ResidualNetwork {
             }
 
             let v_in = v as usize;
-            let v_out = graph.order() as usize + v as usize;
+            let v_out = graph.number_of_nodes() as usize + v as usize;
             // from v_in to v_out
             capacity[v_in].set_bit(v_out);
 
             for u in graph.out_neighbors(v) {
                 // this also handles s and t
-                let u_in = *u as usize;
+                let u_in = u as usize;
                 // add edge from v_out to u_in
                 capacity[v_out].set_bit(u_in);
             }
@@ -85,39 +176,38 @@ impl ResidualNetwork {
             s,
             t,
             n,
+            m: 0,
             capacity,
             labels,
         }
     }
 
-    // creates network for finding vertex disjoint cycles that all share the vertex s. the
-    // same as vertex disjoint, but s is handled the same as all other vertices, except that
-    // s_in and s_out are not connected. Then, s_out is the source and s_in is the target.
-    fn for_petals(graph: &Graph, s: u32) -> Self {
-        let n = graph.order() as usize * 2; // duplicate
+    fn for_petals<G: GraphOrder + AdjacencyList>(graph: &G, s: Node) -> Self {
+        let n = graph.number_of_nodes() as usize * 2; // duplicate
         let labels: Vec<_> = graph.vertices().chain(graph.vertices()).collect();
 
         let mut capacity = vec![BitSet::new(n); n];
         for v in graph.vertices() {
             // handle s and t
             let v_in = v as usize;
-            let v_out = graph.order() as usize + v as usize;
+            let v_out = graph.number_of_nodes() as usize + v as usize;
             // from v_in to v_out. Unless the vertex is s.
             if v != s {
                 capacity[v_in].set_bit(v_out);
             }
 
             for u in graph.out_neighbors(v) {
-                let u_in = *u as usize;
+                let u_in = u as usize;
                 // add edge from v_out to u_in
                 capacity[v_out].set_bit(u_in);
             }
         }
 
         Self {
-            s: graph.order() + s,
+            s: graph.number_of_nodes() + s,
             t: s,
             n,
+            m: capacity.iter().map(|v| v.cardinality()).sum(),
             capacity,
             labels,
         }
@@ -125,7 +215,7 @@ impl ResidualNetwork {
 }
 
 impl EdmondsKarp {
-    pub fn new(residual_network: ResidualNetwork) -> Self {
+    pub fn new(residual_network: ResidualBitMatrix) -> Self {
         let n = residual_network.n;
         Self {
             residual_network,
@@ -186,7 +276,7 @@ impl Iterator for EdmondsKarp {
             {
                 path.push(u);
             }
-            self.residual_network.reverse(u as usize, v as usize);
+            self.residual_network.reverse(u, v);
             v = u;
         }
         Some(
@@ -200,8 +290,8 @@ impl Iterator for EdmondsKarp {
 
 #[cfg(test)]
 mod tests {
-    use crate::graph::Graph;
-    use crate::network_flow::{EdmondsKarp, ResidualNetwork};
+    use crate::graph::network_flow::{EdmondsKarp, ResidualBitMatrix, ResidualNetwork};
+    use crate::graph::{AdjListMatrix, GraphEdgeEditing, GraphNew};
 
     const EDGES: [(u32, u32); 13] = [
         (0, 1),
@@ -221,40 +311,40 @@ mod tests {
 
     #[test]
     fn edmonds_carp() {
-        let mut g = Graph::new(8);
+        let mut g = AdjListMatrix::new(8);
         g.add_edges(&EDGES);
         let edges_reverse: Vec<_> = EDGES.iter().map(|(u, v)| (*v, *u)).collect();
         g.add_edges(&edges_reverse);
-        let mut ec = EdmondsKarp::new(ResidualNetwork::for_edge_disjoint(&g, 0, 7));
+        let mut ec = EdmondsKarp::new(ResidualBitMatrix::for_edge_disjoint(&g, 0, 7));
         let mf = ec.num_disjoint();
         assert_eq!(mf, 3);
     }
 
     #[test]
     fn edmonds_carp_vertex_disjoint() {
-        let mut g = Graph::new(8);
+        let mut g = AdjListMatrix::new(8);
         g.add_edges(&EDGES);
-        let mut ec = EdmondsKarp::new(ResidualNetwork::for_vertex_disjoint(&g, 0, 7));
+        let mut ec = EdmondsKarp::new(ResidualBitMatrix::for_vertex_disjoint(&g, 0, 7));
         let mf = ec.disjoint_paths();
         assert_eq!(mf.len(), 1);
     }
 
     #[test]
     fn edmonds_carp_petals() {
-        let mut g = Graph::new(8);
+        let mut g = AdjListMatrix::new(8);
         g.add_edges(&EDGES);
         g.add_edge(3, 7);
         g.add_edge(7, 0);
-        let mut ec = EdmondsKarp::new(ResidualNetwork::for_petals(&g, 3));
+        let mut ec = EdmondsKarp::new(ResidualBitMatrix::for_petals(&g, 3));
         let mf = ec.disjoint_paths();
         assert_eq!(mf.len(), 2);
     }
 
     #[test]
     fn edmonds_carp_no_co_arcs() {
-        let mut g = Graph::new(8);
+        let mut g = AdjListMatrix::new(8);
         g.add_edges(&EDGES);
-        let mut ec = EdmondsKarp::new(ResidualNetwork::for_edge_disjoint(&g, 0, 7));
+        let mut ec = EdmondsKarp::new(ResidualBitMatrix::for_edge_disjoint(&g, 0, 7));
         let mf = ec.num_disjoint();
         assert_eq!(mf, 2);
     }
