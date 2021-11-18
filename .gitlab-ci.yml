@@ -9,10 +9,19 @@ cargo-test:
   image: gitlab.ae.cs.uni-frankfurt.de:5001/ae-ci/aeffm-rust
   stage: test
   script:
+    - rustup default nightly
     - cargo test
+
+cargo-test-release:
+  image: gitlab.ae.cs.uni-frankfurt.de:5001/ae-ci/aeffm-rust
+  stage: test
+  script:
+    - rustup default nightly
+    - cargo test --release
 
 cargo-clippy:
   image: gitlab.ae.cs.uni-frankfurt.de:5001/ae-ci/aeffm-rust
   stage: test
   script:
+    - rustup default nightly
     - cargo clippy --all-features -- -D clippy::all

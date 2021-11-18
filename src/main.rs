@@ -1,6 +1,7 @@
-use dfvs::graph::Graph;
-use dfvs::io::{PaceReader, PaceWriter};
-use std::convert::TryFrom;
+#![deny(warnings)]
+
+use dfvs::graph::AdjListMatrix;
+use dfvs::graph::io::{PaceRead, PaceWrite};
 use std::io::{stdin, stdout};
 
 fn main() -> std::io::Result<()> {
@@ -8,10 +9,9 @@ fn main() -> std::io::Result<()> {
     dfvs::log::build_pace_logger();
 
     let stdin = stdin();
-    let reader = PaceReader(stdin.lock());
-    let graph = Graph::try_from(reader)?;
+    let graph = AdjListMatrix::try_read_pace(stdin.lock())?;
     let stdout = stdout();
-    let writer = PaceWriter::new(&graph, stdout.lock());
-    writer.output()?;
+    graph.try_write_pace(stdout.lock())?;
+
     Ok(())
 }
