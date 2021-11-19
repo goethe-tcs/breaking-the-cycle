@@ -1,6 +1,7 @@
 pub mod adj_list_matrix;
 pub mod connectivity;
 pub mod io;
+pub mod network_flow;
 pub mod traversal;
 
 use std::ops::Range;
@@ -21,7 +22,9 @@ pub trait GraphOrder {
     fn number_of_edges(&self) -> usize;
 
     /// Return the number of nodes as usize
-    fn len(&self) -> usize {self.number_of_nodes() as usize}
+    fn len(&self) -> usize {
+        self.number_of_nodes() as usize
+    }
 
     /// Returns an iterator over V.
     fn vertices(&self) -> Range<Node> {
@@ -29,12 +32,16 @@ pub trait GraphOrder {
     }
 
     /// Returns true if the graph has no nodes (and thus no edges)
-    fn is_empty(&self) -> bool {self.len() == 0}
+    fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
 }
 
 /// Provides basic read-only functionality associated with an adjacency list
 pub trait AdjacencyList: GraphOrder {
-    type Iter<'a>: Iterator<Item = Node> where Self: 'a;
+    type Iter<'a>: Iterator<Item = Node>
+    where
+        Self: 'a;
 
     /// Returns a slice over the outgoing neighbors of a given vertex.
     /// ** Panics if the v >= n **
@@ -57,9 +64,10 @@ pub trait AdjacencyList: GraphOrder {
 
     /// Returns a vector over all edges in the graph
     fn edges(&self) -> Vec<Edge> {
-        self.vertices().map(|u| {
-            self.out_neighbors(u).map(move |v| {(u, v)})
-        }).flatten().collect()
+        self.vertices()
+            .map(|u| self.out_neighbors(u).map(move |v| (u, v)))
+            .flatten()
+            .collect()
     }
 }
 
@@ -76,7 +84,7 @@ pub trait GraphNew {
 }
 
 /// Provides functions to insert/delete edges
-pub trait GraphEdgeEditing : GraphNew {
+pub trait GraphEdgeEditing: GraphNew {
     /// Adds the directed edge *(u,v)* to the graph. I.e., the edge FROM u TO v.
     /// ** Panics if the edge is already contained or u, v >= n **
     fn add_edge(&mut self, u: Node, v: Node);
@@ -103,5 +111,4 @@ pub trait GraphEdgeEditing : GraphNew {
 
     /// Removes all edges out of node u, i.e. post-condition the out-degree is 0
     fn remove_edges_out_of_node(&mut self, u: Node);
-
 }

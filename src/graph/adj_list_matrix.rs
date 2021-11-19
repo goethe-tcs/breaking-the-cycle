@@ -1,6 +1,6 @@
+use super::*;
 use crate::bitset::BitSet;
 use std::fmt::{Debug, Formatter};
-use super::*;
 
 /// A data structure for a directed graph supporting self-loops,
 /// but no multi-edges. Supports constant time edge-existence queries
@@ -15,12 +15,16 @@ pub struct AdjListMatrix {
 }
 
 impl GraphOrder for AdjListMatrix {
-    fn number_of_nodes(&self) -> Node { self.n as Node }
-    fn number_of_edges(&self) -> usize { self.m }
+    fn number_of_nodes(&self) -> Node {
+        self.n as Node
+    }
+    fn number_of_edges(&self) -> usize {
+        self.m
+    }
 }
 
 impl AdjacencyList for AdjListMatrix {
-    type Iter<'a> = impl Iterator<Item=Node> + 'a;
+    type Iter<'a> = impl Iterator<Item = Node> + 'a;
 
     fn out_neighbors(&self, u: Node) -> Self::Iter<'_> {
         self.out_neighbors[u as usize].iter().copied()
@@ -97,10 +101,15 @@ impl AdjacencyTest for AdjListMatrix {
 
 impl Debug for AdjListMatrix {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        writeln!(f, "AdjListMatrix with {} vertices and {} edges", self.number_of_nodes(), self.number_of_edges())?;
+        writeln!(
+            f,
+            "AdjListMatrix with {} vertices and {} edges",
+            self.number_of_nodes(),
+            self.number_of_edges()
+        )?;
         for v in self.vertices() {
             for u in self.out_neighbors(v) {
-                writeln!(f, "{} -> {}", v, u, )?;
+                writeln!(f, "{} -> {}", v, u,)?;
             }
         }
         Ok(())
@@ -121,11 +130,14 @@ impl GraphNew for AdjListMatrix {
     }
 }
 
-impl<'a, T: IntoIterator<Item=&'a Edge> + Clone> From<T> for AdjListMatrix {
+impl<'a, T: IntoIterator<Item = &'a Edge> + Clone> From<T> for AdjListMatrix {
     fn from(edges: T) -> Self {
-        let n = edges.clone().into_iter().map(|e| {
-            e.0.max(e.1) + 1
-        }).max().unwrap_or(0);
+        let n = edges
+            .clone()
+            .into_iter()
+            .map(|e| e.0.max(e.1) + 1)
+            .max()
+            .unwrap_or(0);
         let mut graph = AdjListMatrix::new(n as usize);
         for e in edges {
             graph.add_edge(e.0, e.1);
@@ -172,8 +184,10 @@ pub mod tests {
             let mut graph = org_graph.clone();
 
             graph.remove_edges_out_of_node(3);
-            assert_eq!(graph.number_of_edges(),
-                       org_graph.number_of_edges() - org_graph.out_degree(3) as usize);
+            assert_eq!(
+                graph.number_of_edges(),
+                org_graph.number_of_edges() - org_graph.out_degree(3) as usize
+            );
             for (u, _v) in graph.edges() {
                 assert_ne!(u, 3);
             }
@@ -184,8 +198,10 @@ pub mod tests {
             let mut graph = org_graph.clone();
 
             graph.remove_edges_into_node(3);
-            assert_eq!(graph.number_of_edges(),
-                       org_graph.number_of_edges() - org_graph.in_degree(3) as usize);
+            assert_eq!(
+                graph.number_of_edges(),
+                org_graph.number_of_edges() - org_graph.in_degree(3) as usize
+            );
             for (_u, v) in graph.edges() {
                 assert_ne!(v, 3);
             }

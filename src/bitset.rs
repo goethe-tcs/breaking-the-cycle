@@ -448,7 +448,7 @@ mod tests {
         }
 
         {
-            let odds : Vec<usize> = (0..256).filter(|i| i % 2 == 1).collect();
+            let odds: Vec<usize> = (0..256).filter(|i| i % 2 == 1).collect();
             let mut d = Vec::new();
             let mut v = bs.get_next_unset(0);
             while v.is_some() {

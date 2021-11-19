@@ -1,6 +1,6 @@
+use super::*;
 use crate::bitset::BitSet;
 use std::collections::VecDeque;
-use super::*;
 
 pub trait WithGraphRef<G> {
     fn graph(&self) -> &G;
@@ -23,17 +23,33 @@ pub trait NodeSequencer {
 }
 
 impl NodeSequencer for VecDeque<Node> {
-    fn init(u: Node) -> Self { Self::from(vec![u]) }
-    fn push(&mut self, u: Node) { self.push_back(u) }
-    fn pop(&mut self) -> Option<Node> { self.pop_front() }
-    fn cardinality(&self) -> usize { self.len() }
+    fn init(u: Node) -> Self {
+        Self::from(vec![u])
+    }
+    fn push(&mut self, u: Node) {
+        self.push_back(u)
+    }
+    fn pop(&mut self) -> Option<Node> {
+        self.pop_front()
+    }
+    fn cardinality(&self) -> usize {
+        self.len()
+    }
 }
 
 impl NodeSequencer for Vec<Node> {
-    fn init(u: Node) -> Self { vec![u] }
-    fn push(&mut self, u: Node) { self.push(u) }
-    fn pop(&mut self) -> Option<Node> { self.pop() }
-    fn cardinality(&self) -> usize { self.len() }
+    fn init(u: Node) -> Self {
+        vec![u]
+    }
+    fn push(&mut self, u: Node) {
+        self.push(u)
+    }
+    fn pop(&mut self) -> Option<Node> {
+        self.pop()
+    }
+    fn cardinality(&self) -> usize {
+        self.len()
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////// BFS & DFS
@@ -43,13 +59,16 @@ pub struct TraversalSearch<'a, G: AdjacencyList, S: NodeSequencer> {
     visited: BitSet,
     sequencer: S,
     directed: bool,
+    pre_push: Option<Box<dyn FnMut(Node, Node) + 'a>>,
 }
 
 pub type BFS<'a, G> = TraversalSearch<'a, G, VecDeque<Node>>;
 pub type DFS<'a, G> = TraversalSearch<'a, G, Vec<Node>>;
 
 impl<'a, G: AdjacencyList, S: NodeSequencer> WithGraphRef<G> for TraversalSearch<'a, G, S> {
-    fn graph(&self) -> &G { self.graph }
+    fn graph(&self) -> &G {
+        self.graph
+    }
 }
 
 impl<'a, G: AdjacencyList, S: NodeSequencer> TraversalState for TraversalSearch<'a, G, S> {
@@ -64,34 +83,59 @@ impl<'a, G: AdjacencyList, S: NodeSequencer> Iterator for TraversalSearch<'a, G,
     fn next(&mut self) -> Option<Self::Item> {
         let u = self.sequencer.pop()?;
 
-        let visit_neighbors = |s: &mut Self, neighbors| {
-            for v in neighbors {
-                if !s.visited[v as usize] {
-                    s.sequencer.push(v);
-                    s.visited.set_bit(v as usize);
+        let visit_neighbors =
+            |visited: &mut BitSet,
+             sequencer: &mut S,
+             neighbors,
+             pre_push: &mut Option<Box<dyn FnMut(Node, Node)>>| {
+                for v in neighbors {
+                    if !visited[v as usize] {
+                        if let Some(f) = pre_push {
+                            f(u, v);
+                        }
+                        sequencer.push(v);
+                        visited.set_bit(v as usize);
+                    }
                 }
-            }
-        };
+            };
 
-        visit_neighbors(self, self.graph.out_neighbors(u));
+        visit_neighbors(
+            &mut self.visited,
+            &mut self.sequencer,
+            self.graph.out_neighbors(u),
+            &mut self.pre_push,
+        );
         if !self.directed {
-            visit_neighbors(self, self.graph.in_neighbors(u));
+            visit_neighbors(
+                &mut self.visited,
+                &mut self.sequencer,
+                self.graph.in_neighbors(u),
+                &mut self.pre_push,
+            );
         }
 
         Some(u)
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
-        (self.sequencer.cardinality(), Some(self.graph.len() - self.visited.cardinality()))
+        (
+            self.sequencer.cardinality(),
+            Some(self.graph.len() - self.visited.cardinality()),
+        )
     }
 }
-
 
 impl<'a, G: AdjacencyList, S: NodeSequencer> TraversalSearch<'a, G, S> {
     pub fn new(graph: &'a G, start: Node, directed: bool) -> Self {
         let mut visited = BitSet::new(graph.len());
         visited.set_bit(start as usize);
-        Self { graph, visited, directed, sequencer: S::init(start) }
+        Self {
+            graph,
+            visited,
+            directed,
+            sequencer: S::init(start),
+            pre_push: None,
+        }
     }
 
     /// Tries to restart the search at an yet unvisited node and returns
@@ -108,6 +152,14 @@ impl<'a, G: AdjacencyList, S: NodeSequencer> TraversalSearch<'a, G, S> {
             }
         }
     }
+
+    // Registers a boxed dynamic Trait Object implementing Fn(Node, Node)->().
+    // It is called every time a new vertex is pushed on the sequencer.
+    // The first argument is the vertex popped from the sequencer, and the second the vertex being pushed.
+    pub fn register_pre_push(mut self, f: Box<dyn FnMut(Node, Node) + 'a>) -> Self {
+        self.pre_push = Some(f);
+        self
+    }
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////// TopoSearch
@@ -118,7 +170,9 @@ pub struct TopoSearch<'a, G> {
 }
 
 impl<'a, G: AdjacencyList> WithGraphRef<G> for TopoSearch<'a, G> {
-    fn graph(&self) -> &G { self.graph }
+    fn graph(&self) -> &G {
+        self.graph
+    }
 }
 
 impl<'a, G: AdjacencyList> Iterator for TopoSearch<'a, G> {
@@ -144,19 +198,25 @@ impl<'a, G: AdjacencyList> Iterator for TopoSearch<'a, G> {
 
 impl<'a, G: AdjacencyList> TopoSearch<'a, G> {
     fn new(graph: &'a G) -> Self {
-        let in_degs: Vec<Node> = graph.vertices().map(|u| { graph.in_degree(u) }).collect();
+        let in_degs: Vec<Node> = graph.vertices().map(|u| graph.in_degree(u)).collect();
         let stack: Vec<Node> = in_degs
             .iter()
             .enumerate()
-            .filter_map(|(i, d)| { if *d == 0 { Some(i as Node) } else { None } })
+            .filter_map(|(i, d)| if *d == 0 { Some(i as Node) } else { None })
             .collect();
 
-        Self { graph, in_degs, stack }
+        Self {
+            graph,
+            in_degs,
+            stack,
+        }
     }
 }
 
 //////////////////////////////////////////////////////////////////////////////////////// Convenience
-trait RankFromOrder<'a, G: 'a + AdjacencyList>: WithGraphRef<G> + Iterator<Item=Node> + Sized {
+trait RankFromOrder<'a, G: 'a + AdjacencyList>:
+    WithGraphRef<G> + Iterator<Item = Node> + Sized
+{
     /// Consumes a graph traversal iterator and returns a mapping, where the i-th
     /// item contains the rank (starting from 0) as which it was iterated over.
     /// Returns None iff not all nodes were iterated
@@ -220,7 +280,6 @@ pub trait Traversal: AdjacencyList + Sized {
 }
 
 impl<T: AdjacencyList + Sized> Traversal for T {}
-
 
 #[cfg(test)]
 pub mod tests {
