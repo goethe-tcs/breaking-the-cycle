@@ -21,11 +21,7 @@ pub trait Connectivity: AdjacencyList + Traversal + Sized {
         let mut traversal = self.dfs_undirected(0);
 
         loop {
-            let mut component = BitSet::new(self.len());
-            for x in traversal.by_ref() {
-                component.set_bit(x as usize);
-            }
-            components.push(component);
+            components.push(BitSet::new_all_unset_but(self.len(), traversal.by_ref()));
 
             if !traversal.try_restart_at_unvisited() {
                 break;
