@@ -23,6 +23,12 @@ cargo-clippy:
   script:
     - cargo clippy --all-features -- -D clippy::all
 
+cargo-format:
+  image: gitlab.ae.cs.uni-frankfurt.de:5001/ae-ci/aeffm-rust-nightly
+  stage: extras
+  script:
+    - cargo fmt --check
+
 coverage:
   image: gitlab.ae.cs.uni-frankfurt.de:5001/ae-ci/aeffm-rust-nightly
   stage: extras

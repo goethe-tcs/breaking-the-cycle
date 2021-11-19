@@ -269,8 +269,7 @@ impl Iterator for EdmondsKarp {
         while v != s {
             let u = self.predecessor[v as usize];
             // when trying to find vertex disjoint this skips edges inside 'gadgets'
-            if self.residual_network.label(u) != self.residual_network.label(v)
-            {
+            if self.residual_network.label(u) != self.residual_network.label(v) {
                 path.push(u);
             }
             self.residual_network.reverse(u, v);
