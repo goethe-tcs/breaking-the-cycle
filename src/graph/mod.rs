@@ -2,6 +2,7 @@ pub mod adj_list_matrix;
 pub mod connectivity;
 pub mod io;
 pub mod network_flow;
+pub mod subgraph;
 pub mod traversal;
 
 use std::ops::Range;
@@ -11,6 +12,7 @@ pub type Edge = (Node, Node);
 
 pub use adj_list_matrix::AdjListMatrix;
 pub use connectivity::Connectivity;
+pub use subgraph::*;
 pub use traversal::*;
 
 /// Provides getters pertaining to the size of a graph
