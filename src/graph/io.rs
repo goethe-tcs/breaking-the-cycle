@@ -1,6 +1,32 @@
 use super::*;
 use std::io::{BufRead, ErrorKind, Write};
 
+pub trait DotWrite {
+    /// produces a minimalistic DOT representation of the graph
+    fn try_write_dot<T: Write>(&self, writer: T) -> Result<(), std::io::Error>;
+}
+
+impl<G: AdjacencyList> DotWrite for G {
+    fn try_write_dot<T: Write>(&self, mut writer: T) -> Result<(), std::io::Error> {
+        let n = self.number_of_nodes();
+        let m = self.number_of_edges();
+        write!(writer, "digraph {{ /* n={} m={} */", n, m)?;
+        for u in self.vertices() {
+            if self.out_degree(u) == 0 {
+                continue;
+            }
+
+            write!(writer, " v{} -> {{", u)?;
+            for v in self.out_neighbors(u) {
+                write!(writer, " v{}", v)?;
+            }
+            write!(writer, " }}; ")?;
+        }
+        writeln!(writer, "}}")?;
+        Ok(())
+    }
+}
+
 pub trait PaceRead: Sized {
     fn try_read_pace<T: BufRead>(buf: T) -> Result<Self, std::io::Error>;
 }

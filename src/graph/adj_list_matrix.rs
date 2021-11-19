@@ -1,6 +1,8 @@
+use super::io::DotWrite;
 use super::*;
 use crate::bitset::BitSet;
-use std::fmt::{Debug, Formatter};
+use std::fmt::Debug;
+use std::{fmt, str};
 
 /// A data structure for a directed graph supporting self-loops,
 /// but no multi-edges. Supports constant time edge-existence queries
@@ -99,23 +101,6 @@ impl AdjacencyTest for AdjListMatrix {
     }
 }
 
-impl Debug for AdjListMatrix {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        writeln!(
-            f,
-            "AdjListMatrix with {} vertices and {} edges",
-            self.number_of_nodes(),
-            self.number_of_edges()
-        )?;
-        for v in self.vertices() {
-            for u in self.out_neighbors(v) {
-                writeln!(f, "{} -> {}", v, u,)?;
-            }
-        }
-        Ok(())
-    }
-}
-
 impl GraphNew for AdjListMatrix {
     /// Creates a new AdjListMatrix with *V={0,1,...,n-1}* and without any edges.
     fn new(n: usize) -> Self {
@@ -143,6 +128,17 @@ impl<'a, T: IntoIterator<Item = &'a Edge> + Clone> From<T> for AdjListMatrix {
             graph.add_edge(e.0, e.1);
         }
         graph
+    }
+}
+
+impl Debug for AdjListMatrix {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut buf = Vec::new();
+        if self.try_write_dot(&mut buf).is_ok() {
+            f.write_str(str::from_utf8(&buf).unwrap())?;
+        }
+
+        Ok(())
     }
 }
 
@@ -206,5 +202,15 @@ pub mod tests {
                 assert_ne!(v, 3);
             }
         }
+    }
+
+    #[test]
+    fn test_debug_format() {
+        let mut g = AdjListMatrix::new(8);
+        g.add_edges(&[(0, 1), (0, 2), (0, 3), (4, 5)]);
+        let str = format!("{:?}", g);
+        assert!(str.contains("digraph"));
+        assert!(str.contains("v0 ->"));
+        assert!(!str.contains("v3 ->"));
     }
 }
