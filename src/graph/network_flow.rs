@@ -278,7 +278,7 @@ impl Iterator for EdmondsKarp {
         }
         Some(
             path.iter()
-                .map(|v| self.residual_network.label(*v))
+                .map(|v| *self.residual_network.label(*v))
                 .rev()
                 .collect(),
         )
@@ -312,7 +312,7 @@ mod tests {
         g.add_edges(&EDGES);
         let edges_reverse: Vec<_> = EDGES.iter().map(|(u, v)| (*v, *u)).collect();
         g.add_edges(&edges_reverse);
-        let mut ec = EdmondsKarp::new(ResidualBitMatrix::for_edge_disjoint(&g, 0, 7));
+        let mut ec = EdmondsKarp::new(ResidualBitMatrix::edge_disjoint(&g, 0, 7));
         let mf = ec.num_disjoint();
         assert_eq!(mf, 3);
     }
@@ -321,7 +321,7 @@ mod tests {
     fn edmonds_carp_vertex_disjoint() {
         let mut g = AdjListMatrix::new(8);
         g.add_edges(&EDGES);
-        let mut ec = EdmondsKarp::new(ResidualBitMatrix::for_vertex_disjoint(&g, 0, 7));
+        let mut ec = EdmondsKarp::new(ResidualBitMatrix::vertex_disjoint(&g, 0, 7));
         let mf = ec.disjoint_paths();
         assert_eq!(mf.len(), 1);
     }
@@ -332,7 +332,7 @@ mod tests {
         g.add_edges(&EDGES);
         g.add_edge(3, 7);
         g.add_edge(7, 0);
-        let mut ec = EdmondsKarp::new(ResidualBitMatrix::for_petals(&g, 3));
+        let mut ec = EdmondsKarp::new(ResidualBitMatrix::petals(&g, 3));
         let mf = ec.disjoint_paths();
         assert_eq!(mf.len(), 2);
     }
@@ -341,7 +341,7 @@ mod tests {
     fn edmonds_carp_no_co_arcs() {
         let mut g = AdjListMatrix::new(8);
         g.add_edges(&EDGES);
-        let mut ec = EdmondsKarp::new(ResidualBitMatrix::for_edge_disjoint(&g, 0, 7));
+        let mut ec = EdmondsKarp::new(ResidualBitMatrix::edge_disjoint(&g, 0, 7));
         let mf = ec.num_disjoint();
         assert_eq!(mf, 2);
     }
