@@ -1,5 +1,6 @@
 pub mod adj_list_matrix;
 pub mod connectivity;
+pub mod generators;
 pub mod io;
 pub mod network_flow;
 pub mod subgraph;
