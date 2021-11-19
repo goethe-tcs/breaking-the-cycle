@@ -1,6 +1,6 @@
 use bitvec::prelude::*;
 use core::{fmt, iter, mem};
-use num::{NumCast, ToPrimitive};
+use num::{NumCast, ToPrimitive, Unsigned};
 use std::cmp::Ordering;
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::{Hash, Hasher};
@@ -109,12 +109,35 @@ impl BitSet {
         self.cardinality == self.bit_vec.len()
     }
 
-    #[inline]
     pub fn new_all_set(size: usize) -> Self {
         Self {
             cardinality: size,
             bit_vec: bitvec![1; size],
         }
+    }
+
+    pub fn new_all_set_but<T, I>(size: usize, bits_unset: I) -> Self
+    where
+        I: IntoIterator<Item = T>,
+        T: Unsigned + ToPrimitive,
+    {
+        let mut bs = BitSet::new_all_set(size);
+        for i in bits_unset {
+            bs.unset_bit(i.to_usize().unwrap());
+        }
+        bs
+    }
+
+    pub fn new_all_unset_but<T, I>(size: usize, bits_set: I) -> Self
+    where
+        I: IntoIterator<Item = T>,
+        T: Unsigned + ToPrimitive,
+    {
+        let mut bs = BitSet::new(size);
+        for i in bits_set {
+            bs.set_bit(i.to_usize().unwrap());
+        }
+        bs
     }
 
     #[inline]
@@ -509,5 +532,31 @@ mod tests {
         for i in (0..n).filter(|i| i % 2 == 0) {
             assert_eq!(false, tmp[i]);
         }
+    }
+
+    #[test]
+    fn test_new_all_set_but() {
+        // 0123456789
+        //  ++ ++ ++
+        let bs = BitSet::new_all_set_but(
+            10,
+            (0usize..10).filter_map(|x| if x % 3 == 0 { Some(x) } else { None }),
+        );
+        assert_eq!(bs.cardinality(), 6);
+        let out: Vec<usize> = bs.iter().collect();
+        assert_eq!(out, vec![1, 2, 4, 5, 7, 8]);
+    }
+
+    #[test]
+    fn test_new_all_unset_but() {
+        // 0123456789
+        // +  +  +  +
+        let into: Vec<usize> = (0..10)
+            .filter_map(|x| if x % 3 == 0 { Some(x) } else { None })
+            .collect();
+        let bs = BitSet::new_all_unset_but(10, into.clone().into_iter());
+        assert_eq!(bs.cardinality(), 4);
+        let out: Vec<usize> = bs.iter().collect();
+        assert_eq!(out, into);
     }
 }
