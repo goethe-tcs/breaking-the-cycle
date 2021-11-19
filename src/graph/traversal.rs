@@ -214,7 +214,7 @@ impl<'a, G: AdjacencyList> TopoSearch<'a, G> {
 }
 
 //////////////////////////////////////////////////////////////////////////////////////// Convenience
-trait RankFromOrder<'a, G: 'a + AdjacencyList>:
+pub trait RankFromOrder<'a, G: 'a + AdjacencyList>:
     WithGraphRef<G> + Iterator<Item = Node> + Sized
 {
     /// Consumes a graph traversal iterator and returns a mapping, where the i-th
