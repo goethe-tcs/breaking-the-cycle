@@ -389,9 +389,6 @@ impl<'a> Iterator for BitSetIterator<'a> {
 
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
-        if self.idx >= self.size {
-            return None;
-        }
         while self.block == 0 {
             self.block = if let Some(&i) = self.iter.next() {
                 if i == 0 {
@@ -409,6 +406,9 @@ impl<'a> Iterator for BitSetIterator<'a> {
         self.block >>= offset;
         self.block >>= 1;
         self.idx += offset + 1;
+        if self.idx > self.size {
+            return None;
+        }
         Some(self.idx - 1)
     }
 }
