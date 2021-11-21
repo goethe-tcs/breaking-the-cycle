@@ -129,13 +129,7 @@ impl ResidualNetwork for ResidualBitMatrix {
             m: 0,
             capacity: graph
                 .vertices()
-                .map(|u| {
-                    let mut bs = BitSet::new(n);
-                    for v in graph.out_neighbors(u) {
-                        bs.set_bit(v as usize);
-                    }
-                    bs
-                })
+                .map(|u| BitSet::new_all_unset_but(n, graph.out_neighbors(u)))
                 .collect(),
             labels: graph.vertices().collect(),
         }
