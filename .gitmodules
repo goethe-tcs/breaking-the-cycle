@@ -1,0 +1,3 @@
+[submodule "data"]
+	path = data
+	url = https://read:cVgsyRe9n5YZyz6ycoWQ@gitlab.ae.cs.uni-frankfurt.de/pace2022/graph-data.git
