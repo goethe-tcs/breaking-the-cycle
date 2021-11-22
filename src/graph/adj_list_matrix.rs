@@ -80,6 +80,8 @@ impl GraphEdgeEditing for AdjListMatrix {
     fn remove_edges_into_node(&mut self, u: Node) {
         for &v in &self.in_neighbors[u as usize] {
             remove_helper(&mut self.out_neighbors[v as usize], u);
+            self.out_matrix[v as usize].unset_bit(u as usize);
+            self.in_matrix[u as usize].unset_bit(v as usize);
         }
         self.m -= self.in_neighbors[u as usize].len();
         self.in_neighbors[u as usize].clear();
@@ -89,6 +91,8 @@ impl GraphEdgeEditing for AdjListMatrix {
     fn remove_edges_out_of_node(&mut self, u: Node) {
         for &v in &self.out_neighbors[u as usize] {
             remove_helper(&mut self.in_neighbors[v as usize], u);
+            self.out_matrix[u as usize].unset_bit(v as usize);
+            self.in_matrix[v as usize].unset_bit(u as usize);
         }
         self.m -= self.out_neighbors[u as usize].len();
         self.out_neighbors[u as usize].clear();
