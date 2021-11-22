@@ -32,17 +32,11 @@ cargo-format:
 coverage:
   image: gitlab.ae.cs.uni-frankfurt.de:5001/ae-ci/aeffm-rust-nightly
   stage: extras
-  variables:
-    RUSTFLAGS: "-Zinstrument-coverage"
-    LLVM_PROFILE_FILE: "coverage-%p-%m.profraw"
+  coverage: '/^\d+.\d+% coverage/'
   script:
-    - cargo test
-    - grcov . --binary-path ./target/debug/ -s . -t html --branch --ignore-not-existing --ignore "*cargo*" -o ./coverage/
-    - grcov . --binary-path ./target/debug/ -s . -t cobertura --branch --ignore-not-existing --ignore "*cargo*" -o coverage.xml
-    - grcov . --binary-path ./target/debug/ -s . -t lcov --branch --ignore-not-existing --ignore "*cargo*" -o coverage.lcov
-    - lcov --summary coverage.lcov
+    - cargo tarpaulin -o xml -o html
   artifacts:
     reports:
-      cobertura: coverage.xml
+      cobertura: cobertura.xml
     paths:
-      - 'coverage'
+      - 'tarpaulin-report.html'
