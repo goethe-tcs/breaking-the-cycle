@@ -32,7 +32,7 @@ where
     let (mst, mst_root): (G, Node) = random_mst(rng, nodes_in_mst as usize);
 
     let mut ranks: Vec<f64> = mst
-        .bfs_directed(mst_root)
+        .bfs(mst_root)
         .ranking()
         .unwrap()
         .into_iter()

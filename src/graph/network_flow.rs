@@ -83,27 +83,11 @@ impl GraphOrder for ResidualBitMatrix {
     }
 }
 
-const fn to_node(i: usize) -> Node {
-    i as Node
-}
-
 impl AdjacencyList for ResidualBitMatrix {
     type Iter<'a> = impl Iterator<Item = Node> + 'a;
 
     fn out_neighbors(&self, u: Node) -> Self::Iter<'_> {
-        self.capacity[u as usize].iter().map(to_node)
-    }
-
-    // TODO: SPLIT IN_NEIGHBORS AND OUT_NEIGHBORS TO TWO TRAITS
-    // CURRENT FUNCTION IS A WRONG IMPLEMENTATION TO PLEASE THE COMPILER
-    fn in_neighbors(&self, u: Node) -> Self::Iter<'_> {
-        self.capacity[u as usize].iter().map(to_node)
-    }
-
-    // TODO: SPLIT IN_NEIGHBORS AND OUT_NEIGHBORS TO TWO TRAITS
-    // CURRENT FUNCTION IS A WRONG IMPLEMENTATION TO PLEASE THE COMPILER
-    fn in_degree(&self, u: Node) -> Node {
-        self.capacity[u as usize].cardinality() as Node
+        self.capacity[u as usize].iter().map(|u| u as Node)
     }
 
     fn out_degree(&self, u: Node) -> Node {
@@ -222,7 +206,7 @@ impl EdmondsKarp {
         let f = Box::new(|u, v| {
             predecessor[v as usize] = u;
         });
-        let mut bfs = self.residual_network.bfs_directed(s).register_pre_push(f);
+        let mut bfs = self.residual_network.bfs(s).register_pre_push(f);
         loop {
             match bfs.next() {
                 None => {

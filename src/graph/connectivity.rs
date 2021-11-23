@@ -9,27 +9,6 @@ pub trait Connectivity: AdjacencyList + Traversal + Sized {
         let sc = StronglyConnected::new(self);
         sc.find()
     }
-
-    /// Returns the connected components of the graph as BitSets
-    fn connected_components(&self) -> Vec<BitSet> {
-        if self.len() == 0 {
-            // questionable corner case: what is a CC on an empty graph?
-            return Vec::new();
-        }
-
-        let mut components: Vec<BitSet> = vec![];
-        let mut traversal = self.dfs_undirected(0);
-
-        loop {
-            components.push(BitSet::new_all_unset_but(self.len(), traversal.by_ref()));
-
-            if !traversal.try_restart_at_unvisited() {
-                break;
-            }
-        }
-
-        components
-    }
 }
 
 impl<T: AdjacencyList + Traversal + Sized> Connectivity for T {}
@@ -105,35 +84,6 @@ impl<'a, T: AdjacencyList> StronglyConnected<'a, T> {
 #[cfg(test)]
 pub mod tests {
     use super::*;
-
-    #[test]
-    pub fn cc() {
-        let mut graph = AdjListMatrix::new(9);
-        graph.add_edges(&[(0, 3), (6, 3), (6, 7), (4, 1), (1, 8)]);
-        let mut ccs = graph.connected_components();
-
-        assert_eq!(ccs.len(), 4);
-
-        assert!(!ccs[0].is_empty());
-        assert!(!ccs[1].is_empty());
-        assert!(!ccs[2].is_empty());
-        assert!(!ccs[3].is_empty());
-
-        ccs.sort_by(|a, b| a.get_first_set().unwrap().cmp(&b.get_first_set().unwrap()));
-
-        assert_eq!(ccs[0].to_vec(), [0, 3, 6, 7]);
-        assert_eq!(ccs[1].to_vec(), [1, 4, 8]);
-        assert_eq!(ccs[2].to_vec(), [2]);
-        assert_eq!(ccs[3].to_vec(), [5]);
-    }
-
-    #[test]
-    pub fn cc_empty() {
-        let graph = AdjListMatrix::new(0);
-        let ccs = graph.connected_components();
-
-        assert_eq!(ccs.len(), 0);
-    }
 
     #[test]
     pub fn scc() {

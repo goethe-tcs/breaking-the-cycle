@@ -16,6 +16,22 @@ pub struct AdjListMatrix {
     in_matrix: Vec<BitSet>,
 }
 
+impl AdjacencyListIn for AdjListMatrix {
+    type IterIn<'a> = impl Iterator<Item = Node> + 'a;
+
+    fn in_neighbors(&self, u: Node) -> Self::IterIn<'_> {
+        self.in_neighbors[u as usize].iter().copied()
+    }
+
+    fn in_degree(&self, u: Node) -> Node {
+        self.in_neighbors[u as usize].len() as Node
+    }
+
+    fn total_degree(&self, u: Node) -> Node {
+        self.in_degree(u) + self.out_degree(u)
+    }
+}
+
 impl GraphOrder for AdjListMatrix {
     fn number_of_nodes(&self) -> Node {
         self.n as Node
@@ -32,16 +48,8 @@ impl AdjacencyList for AdjListMatrix {
         self.out_neighbors[u as usize].iter().copied()
     }
 
-    fn in_neighbors(&self, u: Node) -> Self::Iter<'_> {
-        self.in_neighbors[u as usize].iter().copied()
-    }
-
     fn out_degree(&self, u: Node) -> Node {
         self.out_neighbors[u as usize].len() as Node
-    }
-
-    fn in_degree(&self, u: Node) -> Node {
-        self.in_neighbors[u as usize].len() as Node
     }
 }
 

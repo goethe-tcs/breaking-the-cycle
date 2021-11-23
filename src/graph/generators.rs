@@ -206,14 +206,7 @@ mod tests {
             assert_eq!(mst.number_of_nodes() as usize, n);
             assert_eq!(mst.number_of_edges(), n - 1);
             assert!(root < mst.number_of_nodes());
-            assert_eq!(
-                mst.vertices()
-                    .map(|u| { mst.total_degree(u) as usize })
-                    .sum::<usize>(),
-                2 * (n - 1)
-            ); // otherwise there are cycles
-            assert_eq!(mst.connected_components().len(), 1_usize); // we are looking for a tree, so it better only has one cc
-            assert_eq!(mst.dfs_directed(root).count(), n); // check orientation of edges away from root
+            assert_eq!(mst.dfs(root).count(), n); // check orientation of edges away from root
         }
     }
 }
