@@ -58,7 +58,6 @@ pub struct TraversalSearch<'a, G: AdjacencyList, S: NodeSequencer> {
     graph: &'a G,
     visited: BitSet,
     sequencer: S,
-    directed: bool,
     pre_push: Option<Box<dyn FnMut(Node, Node) + 'a>>,
 }
 
@@ -83,35 +82,14 @@ impl<'a, G: AdjacencyList, S: NodeSequencer> Iterator for TraversalSearch<'a, G,
     fn next(&mut self) -> Option<Self::Item> {
         let u = self.sequencer.pop()?;
 
-        let visit_neighbors =
-            |visited: &mut BitSet,
-             sequencer: &mut S,
-             neighbors,
-             pre_push: &mut Option<Box<dyn FnMut(Node, Node)>>| {
-                for v in neighbors {
-                    if !visited[v as usize] {
-                        if let Some(f) = pre_push {
-                            f(u, v);
-                        }
-                        sequencer.push(v);
-                        visited.set_bit(v as usize);
-                    }
+        for v in self.graph.out_neighbors(u) {
+            if !self.visited[v as usize] {
+                if let Some(f) = &mut self.pre_push {
+                    f(u, v);
                 }
-            };
-
-        visit_neighbors(
-            &mut self.visited,
-            &mut self.sequencer,
-            self.graph.out_neighbors(u),
-            &mut self.pre_push,
-        );
-        if !self.directed {
-            visit_neighbors(
-                &mut self.visited,
-                &mut self.sequencer,
-                self.graph.in_neighbors(u),
-                &mut self.pre_push,
-            );
+                self.sequencer.push(v);
+                self.visited.set_bit(v as usize);
+            }
         }
 
         Some(u)
@@ -126,13 +104,12 @@ impl<'a, G: AdjacencyList, S: NodeSequencer> Iterator for TraversalSearch<'a, G,
 }
 
 impl<'a, G: AdjacencyList, S: NodeSequencer> TraversalSearch<'a, G, S> {
-    pub fn new(graph: &'a G, start: Node, directed: bool) -> Self {
+    pub fn new(graph: &'a G, start: Node) -> Self {
         let mut visited = BitSet::new(graph.len());
         visited.set_bit(start as usize);
         Self {
             graph,
             visited,
-            directed,
             sequencer: S::init(start),
             pre_push: None,
         }
@@ -198,7 +175,15 @@ impl<'a, G: AdjacencyList> Iterator for TopoSearch<'a, G> {
 
 impl<'a, G: AdjacencyList> TopoSearch<'a, G> {
     fn new(graph: &'a G) -> Self {
-        let in_degs: Vec<Node> = graph.vertices().map(|u| graph.in_degree(u)).collect();
+        // add an in_degree getter to each graph?
+        let mut in_degs: Vec<Node> = vec![0; graph.len()];
+        for u in graph.vertices() {
+            for v in graph.out_neighbors(u) {
+                // u -> v
+                in_degs[v as usize] += 1;
+            }
+        }
+
         let stack: Vec<Node> = in_degs
             .iter()
             .enumerate()
@@ -245,25 +230,13 @@ impl<'a, G: AdjacencyList> RankFromOrder<'a, G> for TopoSearch<'a, G> {}
 /// Offers graph traversal algorithms as methods of the graph representation
 pub trait Traversal: AdjacencyList + Sized {
     /// Returns an iterator traversing nodes reachable from `start` in breadth-first-search order
-    fn bfs_directed(&self, start: Node) -> BFS<Self> {
-        BFS::new(self, start, true)
-    }
-
-    /// Returns an iterator traversing nodes reachable from `start` in breadth-first-search order
-    /// while treating each directed edge as undirected
-    fn bfs_undirected(&self, start: Node) -> BFS<Self> {
-        BFS::new(self, start, false)
+    fn bfs(&self, start: Node) -> BFS<Self> {
+        BFS::new(self, start)
     }
 
     /// Returns an iterator traversing nodes reachable from `start` in depth-first-search order
-    fn dfs_directed(&self, start: Node) -> DFS<Self> {
-        DFS::new(self, start, true)
-    }
-
-    /// Returns an iterator traversing nodes reachable from `start` in depth-first-search order
-    /// while treating each directed edge as undirected
-    fn dfs_undirected(&self, start: Node) -> DFS<Self> {
-        DFS::new(self, start, false)
+    fn dfs(&self, start: Node) -> DFS<Self> {
+        DFS::new(self, start)
     }
 
     /// Returns an iterator traversing nodes in acyclic order. The iterator stops prematurely
@@ -293,7 +266,7 @@ pub mod tests {
         let graph = AdjListMatrix::from(&[(1, 2), (1, 0), (4, 3), (0, 5), (2, 4), (5, 4)]);
 
         {
-            let order: Vec<Node> = graph.bfs_directed(1).collect();
+            let order: Vec<Node> = graph.bfs(1).collect();
             assert_eq!(order.len(), 6);
 
             assert_eq!(order[0], 1);
@@ -303,14 +276,8 @@ pub mod tests {
         }
 
         {
-            let order: Vec<Node> = BFS::new(&graph, 5, true).collect();
+            let order: Vec<Node> = BFS::new(&graph, 5).collect();
             assert_eq!(order, [5, 4, 3]);
-        }
-
-        {
-            let mut order: Vec<Node> = graph.bfs_undirected(5).collect();
-            order.sort();
-            assert_eq!(vec![0, 1, 2, 3, 4, 5], order);
         }
     }
 
@@ -322,7 +289,7 @@ pub mod tests {
         let graph = AdjListMatrix::from(&[(1, 2), (1, 0), (4, 3), (0, 5), (5, 4)]);
 
         {
-            let order: Vec<Node> = DFS::new(&graph, 1, true).collect();
+            let order: Vec<Node> = DFS::new(&graph, 1).collect();
             assert_eq!(order.len(), 6);
 
             assert_eq!(order[0], 1);
@@ -335,14 +302,8 @@ pub mod tests {
         }
 
         {
-            let order: Vec<Node> = graph.dfs_directed(5).collect();
+            let order: Vec<Node> = graph.dfs(5).collect();
             assert_eq!(order, [5, 4, 3]);
-        }
-
-        {
-            let mut order: Vec<Node> = graph.dfs_undirected(5).collect();
-            order.sort();
-            assert_eq!(vec![0, 1, 2, 3, 4, 5], order);
         }
     }
 

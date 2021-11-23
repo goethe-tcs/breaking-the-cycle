@@ -40,6 +40,20 @@ pub trait GraphOrder {
     }
 }
 
+pub trait AdjacencyListIn: AdjacencyList {
+    type IterIn<'a>: Iterator<Item = Node>
+    where
+        Self: 'a;
+
+    fn in_neighbors(&self, u: Node) -> Self::IterIn<'_>;
+
+    fn in_degree(&self, u: Node) -> Node;
+
+    fn total_degree(&self, u: Node) -> Node {
+        self.in_degree(u) + self.out_degree(u)
+    }
+}
+
 /// Provides basic read-only functionality associated with an adjacency list
 pub trait AdjacencyList: GraphOrder {
     type Iter<'a>: Iterator<Item = Node>
@@ -50,20 +64,8 @@ pub trait AdjacencyList: GraphOrder {
     /// ** Panics if the v >= n **
     fn out_neighbors(&self, u: Node) -> Self::Iter<'_>;
 
-    /// Returns a slice over the incoming neighbors of a given vertex.
-    /// ** Panics if the v >= n **
-    fn in_neighbors(&self, u: Node) -> Self::Iter<'_>;
-
-    /// Returns the number of ingoing edges to *u*
-    fn in_degree(&self, u: Node) -> Node;
-
     /// Returns the number of outgoing edges from *u*
     fn out_degree(&self, u: Node) -> Node;
-
-    /// Returns the total number of edges incident to *u*
-    fn total_degree(&self, u: Node) -> Node {
-        self.in_degree(u) + self.out_degree(u)
-    }
 
     /// Returns a vector over all edges in the graph
     fn edges(&self) -> Vec<Edge> {
