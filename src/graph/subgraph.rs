@@ -124,15 +124,16 @@ impl<G: GraphNew + GraphEdgeEditing + AdjacencyList + Sized> InducedSubgraph for
 #[cfg(test)]
 pub mod tests {
     use super::*;
+    use crate::graph::adj_list_matrix::AdjListMatrixIn;
 
     #[test]
     fn test_concat() {
-        let g1 = AdjListMatrix::from(&[(0, 1), (2, 3)]);
+        let g1 = AdjListMatrixIn::from(&[(0, 1), (2, 3)]);
         assert_eq!(g1.number_of_nodes(), 4);
-        let g2 = AdjListMatrix::from(&[(0, 2)]);
+        let g2 = AdjListMatrixIn::from(&[(0, 2)]);
         assert_eq!(g2.number_of_nodes(), 3);
-        let g_empty = AdjListMatrix::new(0);
-        let cc = AdjListMatrix::concat([&g1, &g_empty, &g1, &g2]);
+        let g_empty = AdjListMatrixIn::new(0);
+        let cc = AdjListMatrixIn::concat([&g1, &g_empty, &g1, &g2]);
         assert_eq!(cc.number_of_nodes(), 11);
         assert_eq!(cc.number_of_edges(), 5);
         assert_eq!(cc.edges(), vec![(0, 1), (2, 3), (4, 5), (6, 7), (8, 10)]);
@@ -140,7 +141,7 @@ pub mod tests {
 
     #[test]
     fn test_induced() {
-        let mut g = AdjListMatrix::new(6);
+        let mut g = AdjListMatrixIn::new(6);
         for i in 0u32..4 {
             for j in 0u32..4 {
                 g.add_edge(i, j);
@@ -148,8 +149,8 @@ pub mod tests {
         }
         g.add_edge(4, 5);
 
-        let bs = BitSet::from_slice(6, &[0, 1, 3, 5]);
-        let (ind, mapping): (AdjListMatrix, NodeMapper) = g.vertex_induced(&bs);
+        let bs = BitSet::from_slice(6usize, &[0u32, 1u32, 3u32, 5u32]);
+        let (ind, mapping): (AdjListMatrixIn, NodeMapper) = g.vertex_induced(&bs);
         assert_eq!(ind.len(), bs.cardinality());
         assert!(g
             .vertices()
