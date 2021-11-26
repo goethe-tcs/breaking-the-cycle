@@ -2,13 +2,12 @@ pub mod adj_array;
 pub mod adj_list_matrix;
 pub mod connectivity;
 pub mod generators;
+pub mod hash_graph;
 pub mod io;
 pub mod matrix;
 pub mod network_flow;
 pub mod subgraph;
 pub mod traversal;
-
-use std::ops::Range;
 
 pub type Node = u32;
 pub type Edge = (Node, Node);
@@ -20,6 +19,10 @@ pub use traversal::*;
 
 /// Provides getters pertaining to the size of a graph
 pub trait GraphOrder {
+    type VertexIter<'a>: Iterator<Item = Node>
+    where
+        Self: 'a;
+
     /// Returns the number of nodes of the graph
     fn number_of_nodes(&self) -> Node;
 
@@ -32,9 +35,7 @@ pub trait GraphOrder {
     }
 
     /// Returns an iterator over V.
-    fn vertices(&self) -> Range<Node> {
-        0..self.number_of_nodes()
-    }
+    fn vertices(&self) -> Self::VertexIter<'_>;
 
     /// Returns true if the graph has no nodes (and thus no edges)
     fn is_empty(&self) -> bool {
@@ -90,6 +91,12 @@ pub trait GraphNew {
     fn new(n: usize) -> Self;
 }
 
+/// Provides the ability to remove vertices and all incident edges from the graph
+pub trait GraphVertexEditing {
+    fn remove_vertex(&mut self, u: Node);
+    fn has_vertex(&self, u: Node) -> bool;
+}
+
 mod graph_macros {
     macro_rules! impl_helper_graph_from_edges {
         ($t:ident) => {
@@ -129,11 +136,17 @@ mod graph_macros {
     macro_rules! impl_helper_graph_order {
         ($t:ident, $field:ident) => {
             impl GraphOrder for $t {
+                type VertexIter<'a> = impl Iterator<Item = Node> + 'a;
+
                 fn number_of_nodes(&self) -> Node {
                     self.$field.number_of_nodes()
                 }
                 fn number_of_edges(&self) -> usize {
                     self.$field.number_of_edges()
+                }
+
+                fn vertices(&self) -> Self::VertexIter<'_> {
+                    self.$field.vertices()
                 }
             }
         };

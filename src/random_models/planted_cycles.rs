@@ -67,13 +67,14 @@ where
                 + ((i + ci * cycle_len + 1) as f64) / ((nodes_in_cycles + 2) as f64);
         }
     }
+    let vertices: Vec<Node> = result_g.vertices().collect();
 
     // introduce additional edges that do not close additional cycles as they only
     // connect nodes of lower ranks to nodes of higher ranks
     let target_m = (n as f64 * avg_deg / 2.0) as usize;
     while result_g.number_of_edges() < target_m {
-        let u = rand::thread_rng().gen_range(result_g.vertices());
-        let v = rand::thread_rng().gen_range(result_g.vertices());
+        let u = vertices[rand::thread_rng().gen_range(0..vertices.len())];
+        let v = vertices[rand::thread_rng().gen_range(0..vertices.len())];
 
         if u == v {
             continue;

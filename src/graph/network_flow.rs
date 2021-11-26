@@ -74,12 +74,18 @@ impl SourceTarget for ResidualBitMatrix {
 }
 
 impl GraphOrder for ResidualBitMatrix {
+    type VertexIter<'a> = impl Iterator<Item = Node> + 'a;
+
     fn number_of_nodes(&self) -> Node {
         self.n as Node
     }
 
     fn number_of_edges(&self) -> usize {
         self.m
+    }
+
+    fn vertices(&self) -> Self::VertexIter<'_> {
+        0..self.number_of_nodes()
     }
 }
 

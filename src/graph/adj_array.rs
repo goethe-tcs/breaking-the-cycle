@@ -21,18 +21,24 @@ pub struct AdjArrayIn {
 graph_macros::impl_helper_graph_debug!(AdjArray);
 graph_macros::impl_helper_graph_from_edges!(AdjArray);
 
+graph_macros::impl_helper_graph_order!(AdjArrayIn, adj);
 graph_macros::impl_helper_graph_debug!(AdjArrayIn);
 graph_macros::impl_helper_graph_from_edges!(AdjArrayIn);
 graph_macros::impl_helper_adjacency_list!(AdjArrayIn, adj);
-graph_macros::impl_helper_graph_order!(AdjArrayIn, adj);
 graph_macros::impl_helper_adjacency_test!(AdjArrayIn, adj);
 
 impl GraphOrder for AdjArray {
+    type VertexIter<'a> = impl Iterator<Item = Node> + 'a;
+
     fn number_of_nodes(&self) -> Node {
         self.n as Node
     }
     fn number_of_edges(&self) -> usize {
         self.m
+    }
+
+    fn vertices(&self) -> Self::VertexIter<'_> {
+        0..self.number_of_nodes()
     }
 }
 
@@ -81,13 +87,13 @@ impl GraphEdgeEditing for AdjArray {
 
     fn remove_edge(&mut self, u: Node, v: Node) {
         remove_helper(&mut self.out_neighbors[u as usize], v);
+        self.m -= 1;
     }
 
     /// Removes all edges into node u, i.e. post-condition the in-degree is 0
     fn remove_edges_into_node(&mut self, u: Node) {
-        for v in self.vertices() {
+        for v in 0..self.number_of_nodes() {
             if try_remove_helper(&mut self.out_neighbors[v as usize], u).is_ok() {
-                println!("{}", v);
                 self.m -= 1;
             };
         }

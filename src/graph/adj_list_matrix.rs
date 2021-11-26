@@ -26,12 +26,11 @@ graph_macros::impl_helper_graph_debug!(AdjListMatrixIn);
 graph_macros::impl_helper_graph_from_edges!(AdjListMatrixIn);
 
 graph_macros::impl_helper_adjacency_list!(AdjListMatrix, adj_array);
-graph_macros::impl_helper_graph_order!(AdjListMatrix, adj_array);
 graph_macros::impl_helper_adjacency_test!(AdjListMatrix, adj_matrix);
-
+graph_macros::impl_helper_graph_order!(AdjListMatrix, adj_array);
 graph_macros::impl_helper_adjacency_list!(AdjListMatrixIn, adj_out);
-graph_macros::impl_helper_graph_order!(AdjListMatrixIn, adj_out);
 graph_macros::impl_helper_adjacency_test!(AdjListMatrixIn, adj_out);
+graph_macros::impl_helper_graph_order!(AdjListMatrixIn, adj_out);
 
 impl GraphEdgeEditing for AdjListMatrix {
     fn add_edge(&mut self, u: Node, v: Node) {
@@ -185,6 +184,75 @@ pub mod tests {
     #[test]
     fn test_debug_format() {
         let mut g = AdjListMatrix::new(8);
+        g.add_edges(&[(0, 1), (0, 2), (0, 3), (4, 5)]);
+        let str = format!("{:?}", g);
+        assert!(str.contains("digraph"));
+        assert!(str.contains("v0 ->"));
+        assert!(!str.contains("v3 ->"));
+    }
+
+    #[test]
+    fn graph_edges_in() {
+        let mut edges = vec![(1, 2), (1, 0), (4, 3), (0, 5), (2, 4), (5, 4)];
+        let graph = AdjListMatrixIn::from(&edges);
+        assert_eq!(graph.number_of_nodes(), 6);
+        assert_eq!(graph.number_of_edges(), edges.len());
+        let mut ret_edges = graph.edges();
+
+        edges.sort();
+        ret_edges.sort();
+
+        assert_eq!(edges, ret_edges);
+    }
+
+    #[test]
+    fn test_remove_edges_in() {
+        let org_graph = AdjListMatrixIn::from(&[(0, 3), (1, 3), (2, 3), (3, 4), (3, 5)]);
+
+        // no changes
+        {
+            let mut graph = org_graph.clone();
+
+            graph.remove_edges_into_node(0);
+            assert_eq!(graph.edges(), org_graph.edges());
+
+            graph.remove_edges_out_of_node(4);
+            assert_eq!(graph.edges(), org_graph.edges());
+        }
+
+        // remove out
+        {
+            let mut graph = org_graph.clone();
+
+            graph.remove_edges_out_of_node(3);
+            assert_eq!(
+                graph.number_of_edges(),
+                org_graph.number_of_edges() - org_graph.out_degree(3) as usize
+            );
+            for (u, _v) in graph.edges() {
+                assert_ne!(u, 3);
+            }
+        }
+
+        // remove in
+        {
+            let mut graph = org_graph.clone();
+
+            let in_degree = graph.in_degree(3) as usize;
+            graph.remove_edges_into_node(3);
+            assert_eq!(
+                graph.number_of_edges(),
+                org_graph.number_of_edges() - in_degree
+            );
+            for (_u, v) in graph.edges() {
+                assert_ne!(v, 3);
+            }
+        }
+    }
+
+    #[test]
+    fn test_debug_format_in() {
+        let mut g = AdjListMatrixIn::new(8);
         g.add_edges(&[(0, 1), (0, 2), (0, 3), (4, 5)]);
         let str = format!("{:?}", g);
         assert!(str.contains("digraph"));
