@@ -6,10 +6,26 @@ use std::fmt::{Debug, Display, Formatter};
 use std::hash::{Hash, Hasher};
 use std::ops::{AddAssign, Div, Index};
 
-#[derive(Clone, Default)]
+#[derive(Default)]
 pub struct BitSet {
     cardinality: usize,
     bit_vec: BitVec,
+}
+
+impl Clone for BitSet {
+    fn clone(&self) -> Self {
+        // it's quite common to write vec![BitSet::new(n), n] which is quite expensive
+        // if done by actually copying the BitSet. The following heuristic causes a massive
+        // speed-up in these situations.
+        if self.empty() {
+            Self::new(self.len())
+        } else {
+            Self {
+                cardinality: self.cardinality,
+                bit_vec: self.bit_vec.clone(),
+            }
+        }
+    }
 }
 
 impl Ord for BitSet {
@@ -448,6 +464,7 @@ impl Index<usize> for BitSet {
 #[cfg(test)]
 mod tests {
     use crate::bitset::BitSet;
+    use rand::Rng;
 
     #[test]
     fn iter() {
@@ -558,5 +575,31 @@ mod tests {
         assert_eq!(bs.cardinality(), 4);
         let out: Vec<usize> = bs.iter().collect();
         assert_eq!(out, into);
+    }
+
+    #[test]
+    fn test_clone() {
+        for n in [0, 1, 100] {
+            let empty = BitSet::new(n);
+            let copied = empty.clone();
+            assert_eq!(copied.len(), n);
+            assert_eq!(copied.cardinality(), 0);
+        }
+
+        for n in [10, 50, 100] {
+            let mut orig = BitSet::new(n);
+            for _ in 0..n / 5 {
+                orig.set_bit(rand::thread_rng().gen_range(0..n));
+            }
+
+            let copied = orig.clone();
+            assert_eq!(copied, orig);
+            assert_eq!(copied.len(), orig.len());
+            assert_eq!(copied.cardinality(), orig.cardinality());
+
+            for i in 0..n {
+                assert_eq!(copied[i], orig[i]);
+            }
+        }
     }
 }
