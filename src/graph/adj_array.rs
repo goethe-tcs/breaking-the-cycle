@@ -1,3 +1,4 @@
+use super::graph_macros::*;
 use super::io::DotWrite;
 use super::*;
 use std::fmt::Debug;
@@ -84,6 +85,7 @@ impl GraphEdgeEditing for AdjArray {
         self.out_neighbors[u as usize].push(v);
         self.m += 1;
     }
+    impl_helper_try_add_edge!(self);
 
     fn remove_edge(&mut self, u: Node, v: Node) {
         remove_helper(&mut self.out_neighbors[u as usize], v);
@@ -120,6 +122,8 @@ impl GraphEdgeEditing for AdjArrayIn {
         self.adj.add_edge(u, v);
         self.in_neighbors[v as usize].push(u);
     }
+
+    impl_helper_try_add_edge!(self);
 
     fn remove_edge(&mut self, u: Node, v: Node) {
         self.adj.remove_edge(u, v);
@@ -324,6 +328,32 @@ pub mod tests {
         ret_edges.sort();
 
         assert_eq!(edges, ret_edges);
+    }
+
+    #[test]
+    fn try_add_edge() {
+        let mut org_graph = AdjArray::from(&[(0, 3), (1, 3), (2, 3), (3, 4), (3, 5)]);
+        let old_m = org_graph.number_of_edges();
+        org_graph.try_add_edge(0, 3);
+        assert_eq!(org_graph.number_of_edges(), old_m);
+        assert!(org_graph.has_edge(0, 3));
+
+        org_graph.try_add_edge(2, 0);
+        assert_eq!(org_graph.number_of_edges(), old_m + 1);
+        assert!(org_graph.has_edge(2, 0));
+    }
+
+    #[test]
+    fn try_add_edge_in() {
+        let mut org_graph = AdjArrayIn::from(&[(0, 3), (1, 3), (2, 3), (3, 4), (3, 5)]);
+        let old_m = org_graph.number_of_edges();
+        org_graph.try_add_edge(0, 3);
+        assert_eq!(org_graph.number_of_edges(), old_m);
+        assert!(org_graph.has_edge(0, 3));
+
+        org_graph.try_add_edge(2, 0);
+        assert_eq!(org_graph.number_of_edges(), old_m + 1);
+        assert!(org_graph.has_edge(2, 0));
     }
 
     #[test]

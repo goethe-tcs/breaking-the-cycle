@@ -1,3 +1,4 @@
+use super::graph_macros::*;
 use super::io::DotWrite;
 use super::*;
 use fxhash::{FxHashMap, FxHashSet};
@@ -122,6 +123,8 @@ impl GraphEdgeEditing for HashGraph {
         self.m += 1;
     }
 
+    impl_helper_try_add_edge!(self);
+
     fn remove_edge(&mut self, u: Node, v: Node) {
         assert!(self.try_remove_edge(u, v));
     }
@@ -170,6 +173,8 @@ impl GraphEdgeEditing for HashGraphIn {
             .insert(u);
         self.adj_in.entry(u).or_insert_with(FxHashSet::default);
     }
+
+    impl_helper_try_add_edge!(self);
 
     fn remove_edge(&mut self, u: Node, v: Node) {
         assert!(self.try_remove_edge(u, v));
@@ -375,6 +380,32 @@ pub mod tests {
                 assert_ne!(v, 3);
             }
         }
+    }
+
+    #[test]
+    fn try_add_edge() {
+        let mut org_graph = HashGraph::from(&[(0, 3), (1, 3), (2, 3), (3, 4), (3, 5)]);
+        let old_m = org_graph.number_of_edges();
+        org_graph.try_add_edge(0, 3);
+        assert_eq!(org_graph.number_of_edges(), old_m);
+        assert!(org_graph.has_edge(0, 3));
+
+        org_graph.try_add_edge(2, 0);
+        assert_eq!(org_graph.number_of_edges(), old_m + 1);
+        assert!(org_graph.has_edge(2, 0));
+    }
+
+    #[test]
+    fn try_add_edge_in() {
+        let mut org_graph = HashGraphIn::from(&[(0, 3), (1, 3), (2, 3), (3, 4), (3, 5)]);
+        let old_m = org_graph.number_of_edges();
+        org_graph.try_add_edge(0, 3);
+        assert_eq!(org_graph.number_of_edges(), old_m);
+        assert!(org_graph.has_edge(0, 3));
+
+        org_graph.try_add_edge(2, 0);
+        assert_eq!(org_graph.number_of_edges(), old_m + 1);
+        assert!(org_graph.has_edge(2, 0));
     }
 
     #[test]

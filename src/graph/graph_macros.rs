@@ -92,9 +92,23 @@ macro_rules! impl_helper_adjacency_test_linear_search_bi_directed {
     };
 }
 
+macro_rules! impl_helper_try_add_edge {
+    ($self:ident) => {
+        fn try_add_edge(&mut $self, u: Node, v: Node) -> bool {
+            if $self.has_edge(u, v) {
+                false
+            } else {
+                $self.add_edge(u, v);
+                true
+            }
+        }
+    };
+}
+
 pub(super) use impl_helper_adjacency_list;
 pub(super) use impl_helper_adjacency_test;
 pub(super) use impl_helper_adjacency_test_linear_search_bi_directed;
 pub(super) use impl_helper_graph_debug;
 pub(super) use impl_helper_graph_from_edges;
 pub(super) use impl_helper_graph_order;
+pub(super) use impl_helper_try_add_edge;

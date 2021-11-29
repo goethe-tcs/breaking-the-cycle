@@ -1,3 +1,4 @@
+use super::graph_macros::*;
 use super::io::DotWrite;
 use super::*;
 use crate::bitset::BitSet;
@@ -75,6 +76,8 @@ impl GraphEdgeEditing for AdjMatrix {
         self.m += 1;
     }
 
+    impl_helper_try_add_edge!(self);
+
     fn remove_edge(&mut self, u: Node, v: Node) {
         assert!(self.out_matrix[u as usize][v as usize]);
         self.out_matrix[u as usize].unset_bit(v as usize);
@@ -112,6 +115,8 @@ impl GraphEdgeEditing for AdjMatrixIn {
         self.adj.add_edge(u, v);
         self.in_matrix[v as usize].set_bit(u as usize);
     }
+
+    impl_helper_try_add_edge!(self);
 
     fn remove_edge(&mut self, u: Node, v: Node) {
         self.adj.remove_edge(u, v);
@@ -340,6 +345,32 @@ pub mod tests {
     fn remove_edge_panic_in() {
         let mut org_graph = AdjMatrixIn::from(&[(0, 3), (1, 3), (2, 3), (3, 4), (3, 5)]);
         org_graph.remove_edge(3, 0);
+    }
+
+    #[test]
+    fn try_add_edge() {
+        let mut org_graph = AdjMatrix::from(&[(0, 3), (1, 3), (2, 3), (3, 4), (3, 5)]);
+        let old_m = org_graph.number_of_edges();
+        org_graph.try_add_edge(0, 3);
+        assert_eq!(org_graph.number_of_edges(), old_m);
+        assert!(org_graph.has_edge(0, 3));
+
+        org_graph.try_add_edge(2, 0);
+        assert_eq!(org_graph.number_of_edges(), old_m + 1);
+        assert!(org_graph.has_edge(2, 0));
+    }
+
+    #[test]
+    fn try_add_edge_in() {
+        let mut org_graph = AdjMatrixIn::from(&[(0, 3), (1, 3), (2, 3), (3, 4), (3, 5)]);
+        let old_m = org_graph.number_of_edges();
+        org_graph.try_add_edge(0, 3);
+        assert_eq!(org_graph.number_of_edges(), old_m);
+        assert!(org_graph.has_edge(0, 3));
+
+        org_graph.try_add_edge(2, 0);
+        assert_eq!(org_graph.number_of_edges(), old_m + 1);
+        assert!(org_graph.has_edge(2, 0));
     }
 
     #[test]

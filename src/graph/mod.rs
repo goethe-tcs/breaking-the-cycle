@@ -101,8 +101,13 @@ pub trait GraphVertexEditing {
 /// Provides functions to insert/delete edges
 pub trait GraphEdgeEditing: GraphNew {
     /// Adds the directed edge *(u,v)* to the graph. I.e., the edge FROM u TO v.
-    /// ** Panics if the edge is already contained or u, v >= n **
+    /// ** Panics if the edge is already contained or possibly if u, v >= n **
     fn add_edge(&mut self, u: Node, v: Node);
+
+    /// Adds the directed edge *(u,v)* to the graph. I.e., the edge FROM u TO v.
+    /// Returns *true* exactly if the edge was not present previously.
+    /// ** Can panic if u, v >= n, depending on implementation **
+    fn try_add_edge(&mut self, u: Node, v: Node) -> bool;
 
     /// Adds all edges in the collection
     fn add_edges<'a, T: IntoIterator<Item = &'a Edge>>(&'a mut self, edges: T) {
