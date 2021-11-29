@@ -65,7 +65,7 @@ impl AdjacencyListIn for AdjMatrixIn {
     }
 
     fn in_degree(&self, u: u32) -> u32 {
-        self.in_matrix[u as usize].len() as Node
+        self.in_matrix[u as usize].cardinality() as Node
     }
 }
 
