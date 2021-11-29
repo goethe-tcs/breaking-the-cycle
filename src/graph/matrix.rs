@@ -1,133 +1,175 @@
 use super::graph_macros::*;
 use super::io::DotWrite;
 use super::*;
-use crate::graph::adj_array::AdjArray;
-use crate::graph::matrix::AdjMatrix;
+use crate::bitset::BitSet;
 use std::fmt::Debug;
 use std::{fmt, str};
 
 /// A data structure for a directed graph supporting self-loops,
 /// but no multi-edges. Supports constant time edge-existence queries
-/// Stores no in_edges at each vertex, for this refer to AdjListMatrixIn
 #[derive(Clone)]
-pub struct AdjListMatrix {
-    adj_matrix: AdjMatrix,
-    adj_array: AdjArray,
+pub struct AdjMatrix {
+    n: usize,
+    m: usize,
+    out_matrix: Vec<BitSet>,
 }
 
+/// Same as AdjMatrix, but stores a matrix of all in-edges as well
 #[derive(Clone)]
-pub struct AdjListMatrixIn {
-    adj_out: AdjListMatrix,
-    adj_in: AdjListMatrix,
+pub struct AdjMatrixIn {
+    adj: AdjMatrix,
+    in_matrix: Vec<BitSet>,
 }
 
-graph_macros::impl_helper_graph_debug!(AdjListMatrix);
-graph_macros::impl_helper_graph_from_edges!(AdjListMatrix);
-graph_macros::impl_helper_graph_debug!(AdjListMatrixIn);
-graph_macros::impl_helper_graph_from_edges!(AdjListMatrixIn);
+graph_macros::impl_helper_graph_debug!(AdjMatrix);
+graph_macros::impl_helper_graph_from_edges!(AdjMatrix);
 
-graph_macros::impl_helper_adjacency_list!(AdjListMatrix, adj_array);
-graph_macros::impl_helper_adjacency_test!(AdjListMatrix, adj_matrix);
-graph_macros::impl_helper_graph_order!(AdjListMatrix, adj_array);
-graph_macros::impl_helper_adjacency_list!(AdjListMatrixIn, adj_out);
-graph_macros::impl_helper_adjacency_test_linear_search_bi_directed!(AdjListMatrixIn);
-graph_macros::impl_helper_graph_order!(AdjListMatrixIn, adj_out);
+graph_macros::impl_helper_graph_debug!(AdjMatrixIn);
+graph_macros::impl_helper_graph_from_edges!(AdjMatrixIn);
+graph_macros::impl_helper_adjacency_list!(AdjMatrixIn, adj);
+graph_macros::impl_helper_adjacency_test!(AdjMatrixIn, adj);
+graph_macros::impl_helper_graph_order!(AdjMatrixIn, adj);
 
-impl GraphEdgeEditing for AdjListMatrix {
-    fn add_edge(&mut self, u: Node, v: Node) {
-        self.adj_array.add_edge(u, v);
-        self.adj_matrix.add_edge(u, v);
+impl GraphOrder for AdjMatrix {
+    type VertexIter<'a> = impl Iterator<Item = Node> + 'a;
+
+    fn number_of_nodes(&self) -> Node {
+        self.n as Node
+    }
+    fn number_of_edges(&self) -> usize {
+        self.m
     }
 
-    impl_helper_try_add_edge!(self);
-
-    fn remove_edge(&mut self, u: Node, v: Node) {
-        self.adj_array.remove_edge(u, v);
-        self.adj_matrix.remove_edge(u, v);
-    }
-
-    fn try_remove_edge(&mut self, u: Node, v: Node) -> bool {
-        self.adj_array.try_remove_edge(u, v) && self.adj_matrix.try_remove_edge(u, v)
-    }
-
-    /// Removes all edges into node u, i.e. post-condition the in-degree is 0
-    fn remove_edges_into_node(&mut self, u: Node) {
-        self.adj_array.remove_edges_into_node(u);
-        self.adj_matrix.remove_edges_into_node(u);
-    }
-
-    /// Removes all edges out of node u, i.e. post-condition the out-degree is 0
-    fn remove_edges_out_of_node(&mut self, u: Node) {
-        self.adj_array.remove_edges_out_of_node(u);
-        self.adj_matrix.remove_edges_out_of_node(u);
+    fn vertices(&self) -> Self::VertexIter<'_> {
+        0..self.number_of_nodes()
     }
 }
 
-impl GraphEdgeEditing for AdjListMatrixIn {
-    fn add_edge(&mut self, u: Node, v: Node) {
-        self.adj_out.add_edge(u, v);
-        self.adj_in.add_edge(v, u);
+impl AdjacencyList for AdjMatrix {
+    type Iter<'a> = impl Iterator<Item = Node> + 'a;
+
+    fn out_neighbors(&self, u: Node) -> Self::Iter<'_> {
+        self.out_matrix[u as usize].iter().map(|v| v as Node)
     }
 
-    impl_helper_try_add_edge!(self);
-
-    fn remove_edge(&mut self, u: Node, v: Node) {
-        self.adj_out.remove_edge(u, v);
-        self.adj_in.remove_edge(v, u);
-    }
-
-    fn try_remove_edge(&mut self, u: Node, v: Node) -> bool {
-        self.adj_out.try_remove_edge(u, v) && self.adj_in.try_remove_edge(v, u)
-    }
-
-    /// Removes all edges into node u, i.e. post-condition the in-degree is 0
-    fn remove_edges_into_node(&mut self, u: Node) {
-        // contains all edges into u
-        let edges: Vec<_> = self.adj_in.adj_array.out_neighbors(u).collect();
-        for v in edges {
-            self.remove_edge(v, u);
-        }
-    }
-
-    /// Removes all edges out of node u, i.e. post-condition the out-degree is 0
-    fn remove_edges_out_of_node(&mut self, u: Node) {
-        // contains all edges into u
-        let edges: Vec<_> = self.adj_out.adj_array.out_neighbors(u).collect();
-        for v in edges {
-            self.remove_edge(u, v);
-        }
+    fn out_degree(&self, u: Node) -> Node {
+        self.out_matrix[u as usize].cardinality() as Node
     }
 }
 
-impl GraphNew for AdjListMatrix {
-    /// Creates a new AdjListMatrix with *V={0,1,...,n-1}* and without any edges.
-    fn new(n: usize) -> Self {
-        Self {
-            adj_matrix: AdjMatrix::new(n),
-            adj_array: AdjArray::new(n),
-        }
-    }
-}
-
-impl GraphNew for AdjListMatrixIn {
-    /// Creates a new AdjListMatrix with *V={0,1,...,n-1}* and without any edges.
-    fn new(n: usize) -> Self {
-        Self {
-            adj_in: AdjListMatrix::new(n),
-            adj_out: AdjListMatrix::new(n),
-        }
-    }
-}
-
-impl AdjacencyListIn for AdjListMatrixIn {
+impl AdjacencyListIn for AdjMatrixIn {
     type IterIn<'a> = impl Iterator<Item = Node> + 'a;
 
-    fn in_neighbors(&self, u: Node) -> Self::IterIn<'_> {
-        self.adj_in.out_neighbors(u)
+    fn in_neighbors(&self, u: u32) -> Self::IterIn<'_> {
+        self.in_matrix[u as usize].iter().map(|v| v as Node)
     }
 
-    fn in_degree(&self, u: Node) -> Node {
-        self.adj_in.out_degree(u)
+    fn in_degree(&self, u: u32) -> u32 {
+        self.in_matrix[u as usize].len() as Node
+    }
+}
+
+impl GraphEdgeEditing for AdjMatrix {
+    fn add_edge(&mut self, u: Node, v: Node) {
+        assert!(!self.out_matrix[u as usize][v as usize]);
+        self.out_matrix[u as usize].set_bit(v as usize);
+        self.m += 1;
+    }
+
+    impl_helper_try_add_edge!(self);
+
+    fn remove_edge(&mut self, u: Node, v: Node) {
+        assert!(self.out_matrix[u as usize][v as usize]);
+        self.out_matrix[u as usize].unset_bit(v as usize);
+        self.m -= 1;
+    }
+
+    fn try_remove_edge(&mut self, u: Node, v: Node) -> bool {
+        if self.out_matrix[u as usize].unset_bit(v as usize) {
+            self.m -= 1;
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Removes all edges into node u, i.e. post-condition the in-degree is 0
+    fn remove_edges_into_node(&mut self, u: Node) {
+        for v in 0..self.n {
+            if self.out_matrix[v as usize][u as usize] {
+                self.out_matrix[v as usize].unset_bit(u as usize);
+                self.m -= 1;
+            }
+        }
+    }
+
+    /// Removes all edges out of node u, i.e. post-condition the out-degree is 0
+    fn remove_edges_out_of_node(&mut self, u: Node) {
+        self.m -= self.out_matrix[u as usize].cardinality();
+        self.out_matrix[u as usize].unset_all();
+    }
+}
+
+impl GraphEdgeEditing for AdjMatrixIn {
+    fn add_edge(&mut self, u: Node, v: Node) {
+        self.adj.add_edge(u, v);
+        self.in_matrix[v as usize].set_bit(u as usize);
+    }
+
+    impl_helper_try_add_edge!(self);
+
+    fn remove_edge(&mut self, u: Node, v: Node) {
+        self.adj.remove_edge(u, v);
+        self.in_matrix[v as usize].unset_bit(u as usize);
+    }
+
+    fn try_remove_edge(&mut self, u: Node, v: Node) -> bool {
+        self.adj.try_remove_edge(u, v) && self.in_matrix[v as usize].unset_bit(u as usize)
+    }
+
+    /// Removes all edges into node u, i.e. post-condition the in-degree is 0
+    fn remove_edges_into_node(&mut self, u: Node) {
+        for v in self.in_matrix[u as usize].iter() {
+            self.adj.remove_edge(v as Node, u);
+        }
+        self.in_matrix[u as usize].unset_all();
+    }
+
+    /// Removes all edges out of node u, i.e. post-condition the out-degree is 0
+    fn remove_edges_out_of_node(&mut self, u: Node) {
+        self.adj.m -= self.adj.out_matrix[u as usize].cardinality();
+        let out = &mut self.adj.out_matrix[u as usize];
+        for v in out.iter() {
+            self.in_matrix[v].unset_bit(u as usize);
+        }
+        out.unset_all();
+    }
+}
+
+impl AdjacencyTest for AdjMatrix {
+    fn has_edge(&self, u: Node, v: Node) -> bool {
+        self.out_matrix[u as usize][v as usize]
+    }
+}
+
+impl GraphNew for AdjMatrix {
+    /// Creates a new AdjListMatrix with *V={0,1,...,n-1}* and without any edges.
+    fn new(n: usize) -> Self {
+        Self {
+            n,
+            m: 0,
+            out_matrix: vec![BitSet::new(n); n],
+        }
+    }
+}
+
+impl GraphNew for AdjMatrixIn {
+    /// Creates a new AdjListMatrix with *V={0,1,...,n-1}* and without any edges.
+    fn new(n: usize) -> Self {
+        Self {
+            adj: AdjMatrix::new(n),
+            in_matrix: vec![BitSet::new(n); n],
+        }
     }
 }
 
@@ -138,7 +180,7 @@ pub mod tests {
     #[test]
     fn graph_edges() {
         let mut edges = vec![(1, 2), (1, 0), (4, 3), (0, 5), (2, 4), (5, 4)];
-        let graph = AdjListMatrix::from(&edges);
+        let graph = AdjMatrix::from(&edges);
         assert_eq!(graph.number_of_nodes(), 6);
         assert_eq!(graph.number_of_edges(), edges.len());
         let mut ret_edges = graph.edges();
@@ -151,7 +193,7 @@ pub mod tests {
 
     #[test]
     fn test_remove_edges() {
-        let org_graph = AdjListMatrix::from(&[(0, 3), (1, 3), (2, 3), (3, 4), (3, 5)]);
+        let org_graph = AdjMatrix::from(&[(0, 3), (1, 3), (2, 3), (3, 4), (3, 5)]);
 
         // no changes
         {
@@ -182,7 +224,7 @@ pub mod tests {
         {
             let mut graph = org_graph.clone();
 
-            let in_degree = graph.vertices().filter(|v| graph.has_edge(*v, 3)).count();
+            let in_degree = 3;
             graph.remove_edges_into_node(3);
             assert_eq!(
                 graph.number_of_edges(),
@@ -196,7 +238,7 @@ pub mod tests {
 
     #[test]
     fn test_debug_format() {
-        let mut g = AdjListMatrix::new(8);
+        let mut g = AdjMatrix::new(8);
         g.add_edges(&[(0, 1), (0, 2), (0, 3), (4, 5)]);
         let str = format!("{:?}", g);
         assert!(str.contains("digraph"));
@@ -207,7 +249,7 @@ pub mod tests {
     #[test]
     fn graph_edges_in() {
         let mut edges = vec![(1, 2), (1, 0), (4, 3), (0, 5), (2, 4), (5, 4)];
-        let graph = AdjListMatrixIn::from(&edges);
+        let graph = AdjMatrixIn::from(&edges);
         assert_eq!(graph.number_of_nodes(), 6);
         assert_eq!(graph.number_of_edges(), edges.len());
         let mut ret_edges = graph.edges();
@@ -220,7 +262,7 @@ pub mod tests {
 
     #[test]
     fn test_remove_edges_in() {
-        let org_graph = AdjListMatrixIn::from(&[(0, 3), (1, 3), (2, 3), (3, 4), (3, 5)]);
+        let org_graph = AdjMatrixIn::from(&[(0, 3), (1, 3), (2, 3), (3, 4), (3, 5)]);
 
         // no changes
         {
@@ -251,7 +293,7 @@ pub mod tests {
         {
             let mut graph = org_graph.clone();
 
-            let in_degree = graph.in_degree(3) as usize;
+            let in_degree = 3;
             graph.remove_edges_into_node(3);
             assert_eq!(
                 graph.number_of_edges(),
@@ -265,7 +307,7 @@ pub mod tests {
 
     #[test]
     fn try_remove_edge() {
-        let mut org_graph = AdjListMatrix::from(&[(0, 3), (1, 3), (2, 3), (3, 4), (3, 5)]);
+        let mut org_graph = AdjMatrix::from(&[(0, 3), (1, 3), (2, 3), (3, 4), (3, 5)]);
         let old_m = org_graph.number_of_edges();
         assert!(org_graph.has_edge(0, 3));
         assert!(org_graph.try_remove_edge(0, 3));
@@ -279,7 +321,7 @@ pub mod tests {
 
     #[test]
     fn try_remove_edge_in() {
-        let mut org_graph = AdjListMatrixIn::from(&[(0, 3), (1, 3), (2, 3), (3, 4), (3, 5)]);
+        let mut org_graph = AdjMatrixIn::from(&[(0, 3), (1, 3), (2, 3), (3, 4), (3, 5)]);
         let old_m = org_graph.number_of_edges();
         assert!(org_graph.has_edge(0, 3));
         assert!(org_graph.try_remove_edge(0, 3));
@@ -294,40 +336,20 @@ pub mod tests {
     #[test]
     #[should_panic]
     fn remove_edge_panic() {
-        let mut org_graph = AdjListMatrix::from(&[(0, 3), (1, 3), (2, 3), (3, 4), (3, 5)]);
+        let mut org_graph = AdjMatrix::from(&[(0, 3), (1, 3), (2, 3), (3, 4), (3, 5)]);
         org_graph.remove_edge(3, 0);
     }
 
     #[test]
     #[should_panic]
     fn remove_edge_panic_in() {
-        let mut org_graph = AdjListMatrixIn::from(&[(0, 3), (1, 3), (2, 3), (3, 4), (3, 5)]);
+        let mut org_graph = AdjMatrixIn::from(&[(0, 3), (1, 3), (2, 3), (3, 4), (3, 5)]);
         org_graph.remove_edge(3, 0);
     }
 
     #[test]
-    fn remove_edge() {
-        let mut org_graph = AdjListMatrix::from(&[(0, 3), (1, 3), (2, 3), (3, 4), (3, 5)]);
-        let old_m = org_graph.number_of_edges();
-        assert!(org_graph.has_edge(0, 3));
-        org_graph.remove_edge(0, 3);
-        assert_eq!(org_graph.number_of_edges(), old_m - 1);
-        assert!(!org_graph.has_edge(0, 3));
-    }
-
-    #[test]
-    fn remove_edge_in() {
-        let mut org_graph = AdjListMatrixIn::from(&[(0, 3), (1, 3), (2, 3), (3, 4), (3, 5)]);
-        let old_m = org_graph.number_of_edges();
-        assert!(org_graph.has_edge(0, 3));
-        org_graph.remove_edge(0, 3);
-        assert_eq!(org_graph.number_of_edges(), old_m - 1);
-        assert!(!org_graph.has_edge(0, 3));
-    }
-
-    #[test]
     fn try_add_edge() {
-        let mut org_graph = AdjListMatrix::from(&[(0, 3), (1, 3), (2, 3), (3, 4), (3, 5)]);
+        let mut org_graph = AdjMatrix::from(&[(0, 3), (1, 3), (2, 3), (3, 4), (3, 5)]);
         let old_m = org_graph.number_of_edges();
         org_graph.try_add_edge(0, 3);
         assert_eq!(org_graph.number_of_edges(), old_m);
@@ -340,7 +362,7 @@ pub mod tests {
 
     #[test]
     fn try_add_edge_in() {
-        let mut org_graph = AdjListMatrixIn::from(&[(0, 3), (1, 3), (2, 3), (3, 4), (3, 5)]);
+        let mut org_graph = AdjMatrixIn::from(&[(0, 3), (1, 3), (2, 3), (3, 4), (3, 5)]);
         let old_m = org_graph.number_of_edges();
         org_graph.try_add_edge(0, 3);
         assert_eq!(org_graph.number_of_edges(), old_m);
@@ -352,10 +374,31 @@ pub mod tests {
     }
 
     #[test]
+    fn remove_edge() {
+        let mut org_graph = AdjMatrix::from(&[(0, 3), (1, 3), (2, 3), (3, 4), (3, 5)]);
+        let old_m = org_graph.number_of_edges();
+        assert!(org_graph.has_edge(0, 3));
+        org_graph.remove_edge(0, 3);
+        assert_eq!(org_graph.number_of_edges(), old_m - 1);
+        assert!(!org_graph.has_edge(0, 3));
+    }
+
+    #[test]
+    fn remove_edge_in() {
+        let mut org_graph = AdjMatrixIn::from(&[(0, 3), (1, 3), (2, 3), (3, 4), (3, 5)]);
+        let old_m = org_graph.number_of_edges();
+        assert!(org_graph.has_edge(0, 3));
+        org_graph.remove_edge(0, 3);
+        assert_eq!(org_graph.number_of_edges(), old_m - 1);
+        assert!(!org_graph.has_edge(0, 3));
+    }
+
+    #[test]
     fn test_debug_format_in() {
-        let mut g = AdjListMatrixIn::new(8);
+        let mut g = AdjMatrixIn::new(8);
         g.add_edges(&[(0, 1), (0, 2), (0, 3), (4, 5)]);
         let str = format!("{:?}", g);
+        println!("{}", &str);
         assert!(str.contains("digraph"));
         assert!(str.contains("v0 ->"));
         assert!(!str.contains("v3 ->"));

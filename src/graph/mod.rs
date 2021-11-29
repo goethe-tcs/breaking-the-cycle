@@ -1,12 +1,14 @@
+pub mod adj_array;
 pub mod adj_list_matrix;
 pub mod connectivity;
 pub mod generators;
+pub(super) mod graph_macros;
+pub mod hash_graph;
 pub mod io;
+pub mod matrix;
 pub mod network_flow;
 pub mod subgraph;
 pub mod traversal;
-
-use std::ops::Range;
 
 pub type Node = u32;
 pub type Edge = (Node, Node);
@@ -18,6 +20,10 @@ pub use traversal::*;
 
 /// Provides getters pertaining to the size of a graph
 pub trait GraphOrder {
+    type VertexIter<'a>: Iterator<Item = Node>
+    where
+        Self: 'a;
+
     /// Returns the number of nodes of the graph
     fn number_of_nodes(&self) -> Node;
 
@@ -30,9 +36,7 @@ pub trait GraphOrder {
     }
 
     /// Returns an iterator over V.
-    fn vertices(&self) -> Range<Node> {
-        0..self.number_of_nodes()
-    }
+    fn vertices(&self) -> Self::VertexIter<'_>;
 
     /// Returns true if the graph has no nodes (and thus no edges)
     fn is_empty(&self) -> bool {
@@ -88,11 +92,22 @@ pub trait GraphNew {
     fn new(n: usize) -> Self;
 }
 
+/// Provides the ability to remove vertices and all incident edges from the graph
+pub trait GraphVertexEditing {
+    fn remove_vertex(&mut self, u: Node);
+    fn has_vertex(&self, u: Node) -> bool;
+}
+
 /// Provides functions to insert/delete edges
 pub trait GraphEdgeEditing: GraphNew {
     /// Adds the directed edge *(u,v)* to the graph. I.e., the edge FROM u TO v.
-    /// ** Panics if the edge is already contained or u, v >= n **
+    /// ** Panics if the edge is already contained or possibly if u, v >= n **
     fn add_edge(&mut self, u: Node, v: Node);
+
+    /// Adds the directed edge *(u,v)* to the graph. I.e., the edge FROM u TO v.
+    /// Returns *true* exactly if the edge was not present previously.
+    /// ** Can panic if u, v >= n, depending on implementation **
+    fn try_add_edge(&mut self, u: Node, v: Node) -> bool;
 
     /// Adds all edges in the collection
     fn add_edges<'a, T: IntoIterator<Item = &'a Edge>>(&'a mut self, edges: T) {
@@ -104,6 +119,11 @@ pub trait GraphEdgeEditing: GraphNew {
     /// Removes the directed edge *(u,v)* from the graph. I.e., the edge FROM u TO v.
     /// ** Panics if the edge is not present or u, v >= n **
     fn remove_edge(&mut self, u: Node, v: Node);
+
+    /// Removes the directed edge *(u,v)* from the graph. I.e., the edge FROM u TO v.
+    /// If the edge was removed, returns *true* and *false* otherwise.
+    /// ** Panics if u, v >= n **
+    fn try_remove_edge(&mut self, u: Node, v: Node) -> bool;
 
     /// Removes all edges into and out of node u
     fn remove_edges_at_node(&mut self, u: Node) {
