@@ -2,13 +2,13 @@ pub mod adj_array;
 pub mod adj_list_matrix;
 pub mod connectivity;
 pub mod generators;
+pub(super) mod graph_macros;
 pub mod hash_graph;
 pub mod io;
 pub mod matrix;
 pub mod network_flow;
 pub mod subgraph;
 pub mod traversal;
-pub(super) mod graph_macros;
 
 pub type Node = u32;
 pub type Edge = (Node, Node);
