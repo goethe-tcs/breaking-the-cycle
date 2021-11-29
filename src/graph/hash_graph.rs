@@ -406,6 +406,39 @@ pub mod tests {
     }
 
     #[test]
+    #[should_panic]
+    fn remove_edge_panic() {
+        let mut org_graph = HashGraph::from(&[(0, 3), (1, 3), (2, 3), (3, 4), (3, 5)]);
+        org_graph.remove_edge(3, 0);
+    }
+
+    #[test]
+    #[should_panic]
+    fn remove_edge_panic_in() {
+        let mut org_graph = HashGraphIn::from(&[(0, 3), (1, 3), (2, 3), (3, 4), (3, 5)]);
+        org_graph.remove_edge(3, 0);
+    }
+
+    #[test]
+    fn remove_edge() {
+        let mut org_graph = HashGraph::from(&[(0, 3), (1, 3), (2, 3), (3, 4), (3, 5)]);
+        let old_m = org_graph.number_of_edges();
+        assert!(org_graph.has_edge(0, 3));
+        org_graph.remove_edge(0, 3);
+        assert_eq!(org_graph.number_of_edges(), old_m - 1);
+        assert!(!org_graph.has_edge(0, 3));
+    }
+
+    #[test]
+    fn remove_edge_in() {
+        let mut org_graph = HashGraphIn::from(&[(0, 3), (1, 3), (2, 3), (3, 4), (3, 5)]);
+        let old_m = org_graph.number_of_edges();
+        assert!(org_graph.has_edge(0, 3));
+        org_graph.remove_edge(0, 3);
+        assert_eq!(org_graph.number_of_edges(), old_m - 1);
+        assert!(!org_graph.has_edge(0, 3));
+    }
+    #[test]
     fn test_debug_format_in() {
         let mut g = HashGraphIn::new(8);
         g.add_edges(&[(0, 1), (0, 2), (0, 3), (4, 5)]);

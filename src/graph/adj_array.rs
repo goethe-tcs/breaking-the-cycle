@@ -279,6 +279,40 @@ pub mod tests {
     }
 
     #[test]
+    #[should_panic]
+    fn remove_edge_panic() {
+        let mut org_graph = AdjArray::from(&[(0, 3), (1, 3), (2, 3), (3, 4), (3, 5)]);
+        org_graph.remove_edge(3, 0);
+    }
+
+    #[test]
+    #[should_panic]
+    fn remove_edge_panic_in() {
+        let mut org_graph = AdjArrayIn::from(&[(0, 3), (1, 3), (2, 3), (3, 4), (3, 5)]);
+        org_graph.remove_edge(3, 0);
+    }
+
+    #[test]
+    fn remove_edge() {
+        let mut org_graph = AdjArray::from(&[(0, 3), (1, 3), (2, 3), (3, 4), (3, 5)]);
+        let old_m = org_graph.number_of_edges();
+        assert!(org_graph.has_edge(0, 3));
+        org_graph.remove_edge(0, 3);
+        assert_eq!(org_graph.number_of_edges(), old_m - 1);
+        assert!(!org_graph.has_edge(0, 3));
+    }
+
+    #[test]
+    fn remove_edge_in() {
+        let mut org_graph = AdjArrayIn::from(&[(0, 3), (1, 3), (2, 3), (3, 4), (3, 5)]);
+        let old_m = org_graph.number_of_edges();
+        assert!(org_graph.has_edge(0, 3));
+        org_graph.remove_edge(0, 3);
+        assert_eq!(org_graph.number_of_edges(), old_m - 1);
+        assert!(!org_graph.has_edge(0, 3));
+    }
+
+    #[test]
     fn graph_edges_in() {
         let mut edges = vec![(1, 2), (1, 0), (4, 3), (0, 5), (2, 4), (5, 4)];
         let graph = AdjArrayIn::from(&edges);

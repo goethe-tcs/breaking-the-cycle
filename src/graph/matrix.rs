@@ -171,7 +171,6 @@ impl GraphNew for AdjMatrixIn {
 #[cfg(test)]
 pub mod tests {
     use super::*;
-    use crate::graph::adj_array::AdjArrayIn;
 
     #[test]
     fn graph_edges() {
@@ -317,7 +316,7 @@ pub mod tests {
 
     #[test]
     fn try_remove_edge_in() {
-        let mut org_graph = AdjArrayIn::from(&[(0, 3), (1, 3), (2, 3), (3, 4), (3, 5)]);
+        let mut org_graph = AdjMatrixIn::from(&[(0, 3), (1, 3), (2, 3), (3, 4), (3, 5)]);
         let old_m = org_graph.number_of_edges();
         assert!(org_graph.has_edge(0, 3));
         assert!(org_graph.try_remove_edge(0, 3));
@@ -327,6 +326,40 @@ pub mod tests {
         let old_m = org_graph.number_of_edges();
         assert!(!org_graph.try_remove_edge(0, 3));
         assert_eq!(org_graph.number_of_edges(), old_m);
+    }
+
+    #[test]
+    #[should_panic]
+    fn remove_edge_panic() {
+        let mut org_graph = AdjMatrix::from(&[(0, 3), (1, 3), (2, 3), (3, 4), (3, 5)]);
+        org_graph.remove_edge(3, 0);
+    }
+
+    #[test]
+    #[should_panic]
+    fn remove_edge_panic_in() {
+        let mut org_graph = AdjMatrixIn::from(&[(0, 3), (1, 3), (2, 3), (3, 4), (3, 5)]);
+        org_graph.remove_edge(3, 0);
+    }
+
+    #[test]
+    fn remove_edge() {
+        let mut org_graph = AdjMatrix::from(&[(0, 3), (1, 3), (2, 3), (3, 4), (3, 5)]);
+        let old_m = org_graph.number_of_edges();
+        assert!(org_graph.has_edge(0, 3));
+        org_graph.remove_edge(0, 3);
+        assert_eq!(org_graph.number_of_edges(), old_m - 1);
+        assert!(!org_graph.has_edge(0, 3));
+    }
+
+    #[test]
+    fn remove_edge_in() {
+        let mut org_graph = AdjMatrixIn::from(&[(0, 3), (1, 3), (2, 3), (3, 4), (3, 5)]);
+        let old_m = org_graph.number_of_edges();
+        assert!(org_graph.has_edge(0, 3));
+        org_graph.remove_edge(0, 3);
+        assert_eq!(org_graph.number_of_edges(), old_m - 1);
+        assert!(!org_graph.has_edge(0, 3));
     }
 
     #[test]
