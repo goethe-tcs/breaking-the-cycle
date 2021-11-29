@@ -183,14 +183,14 @@ impl GraphNew for AdjArrayIn {
 
 #[cfg(test)]
 pub mod tests_adj_array_in {
-    use super::*;
     use super::graph_macros::base_tests_in;
+    use super::*;
     base_tests_in!(AdjArrayIn);
 }
 
 #[cfg(test)]
 pub mod tests_adj_array {
-    use super::*;
     use super::graph_macros::base_tests;
+    use super::*;
     base_tests!(AdjArray);
 }

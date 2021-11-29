@@ -212,14 +212,12 @@ impl GraphEdgeEditing for HashGraphIn {
 
 impl GraphNew for HashGraph {
     fn new(n: usize) -> Self {
-        let mut adj: FxHashMap<Node, FxHashSet<Node>> = FxHashMap::with_capacity_and_hasher(n, Default::default());
+        let mut adj: FxHashMap<Node, FxHashSet<Node>> =
+            FxHashMap::with_capacity_and_hasher(n, Default::default());
         for v in 0..n {
             adj.insert(v as Node, FxHashSet::default());
         }
-        Self {
-            adj,
-            m: 0,
-        }
+        Self { adj, m: 0 }
     }
 }
 
@@ -234,17 +232,16 @@ impl GraphNew for HashGraphIn {
 
 #[cfg(test)]
 pub mod tests_hash_graph {
-    use super::*;
     use super::graph_macros::{base_tests, test_helper_vertex_editing};
+    use super::*;
     base_tests!(HashGraph);
     test_helper_vertex_editing!(HashGraph);
 }
 
 #[cfg(test)]
 pub mod tests_hash_graph_in {
-    use super::*;
     use super::graph_macros::{base_tests_in, test_helper_vertex_editing};
+    use super::*;
     base_tests_in!(HashGraphIn);
     test_helper_vertex_editing!(HashGraphIn);
 }
-

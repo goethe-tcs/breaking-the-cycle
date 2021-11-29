@@ -123,7 +123,7 @@ macro_rules! test_helper_from_edges {
 
             assert_eq!(edges, ret_edges);
         }
-    }
+    };
 }
 
 macro_rules! test_helper_graph_order {
@@ -147,7 +147,7 @@ macro_rules! test_helper_graph_order {
             assert_eq!(graph.number_of_edges(), 0);
             assert_eq!(graph.number_of_nodes(), graph.len() as Node);
         }
-    }
+    };
 }
 
 macro_rules! test_helper_adjacency_list {
@@ -169,7 +169,7 @@ macro_rules! test_helper_adjacency_list {
             tmp.sort();
             assert_eq!(tmp, edges);
         }
-    }
+    };
 }
 
 macro_rules! test_helper_adjacency_list_in {
@@ -188,7 +188,7 @@ macro_rules! test_helper_adjacency_list_in {
             assert_eq!(3, graph.in_degree(3));
             assert_eq!(5, graph.total_degree(3));
         }
-    }
+    };
 }
 
 macro_rules! test_helper_adjacency_test {
@@ -202,7 +202,7 @@ macro_rules! test_helper_adjacency_test {
                 assert!(!graph.has_edge(v, u));
             }
         }
-    }
+    };
 }
 
 macro_rules! test_helper_debug_format {
@@ -216,7 +216,7 @@ macro_rules! test_helper_debug_format {
             assert!(str.contains("v0 ->"));
             assert!(!str.contains("v3 ->"));
         }
-    }
+    };
 }
 
 macro_rules! test_helper_graph_edge_editing {
@@ -238,15 +238,15 @@ macro_rules! test_helper_graph_edge_editing {
 
                 graph.add_edge(3, 0);
                 assert!(graph.has_edge(3, 0));
-                assert_eq!(org_graph.number_of_edges() +1, graph.number_of_edges());
+                assert_eq!(org_graph.number_of_edges() + 1, graph.number_of_edges());
 
                 graph.try_add_edge(3, 0);
                 assert!(graph.has_edge(3, 0));
-                assert_eq!(org_graph.number_of_edges() +1, graph.number_of_edges());
+                assert_eq!(org_graph.number_of_edges() + 1, graph.number_of_edges());
 
                 graph.try_add_edge(1, 5);
                 assert!(graph.has_edge(1, 5));
-                assert_eq!(org_graph.number_of_edges() +2, graph.number_of_edges());
+                assert_eq!(org_graph.number_of_edges() + 2, graph.number_of_edges());
             }
 
             // remove_edge and try_remove_edge
@@ -306,7 +306,7 @@ macro_rules! test_helper_graph_edge_editing {
                 }
             }
         }
-    }
+    };
 }
 
 macro_rules! test_helper_vertex_editing {
@@ -323,7 +323,7 @@ macro_rules! test_helper_vertex_editing {
             assert_eq!(graph.number_of_nodes(), org_graph.number_of_nodes() - 1);
             assert_eq!(graph.number_of_edges(), 1);
         }
-    }
+    };
 }
 
 macro_rules! base_tests {
@@ -334,14 +334,14 @@ macro_rules! base_tests {
         test_helper_adjacency_test!($t);
         test_helper_graph_edge_editing!($t);
         test_helper_debug_format!($t);
-    }
+    };
 }
 
 macro_rules! base_tests_in {
     ($t:ident) => {
         base_tests!($t);
         test_helper_adjacency_list_in!($t);
-    }
+    };
 }
 
 pub(super) use impl_helper_adjacency_list;
@@ -352,14 +352,13 @@ pub(super) use impl_helper_graph_from_edges;
 pub(super) use impl_helper_graph_order;
 pub(super) use impl_helper_try_add_edge;
 
-pub(super) use test_helper_from_edges;
-pub(super) use test_helper_graph_order;
+pub(super) use base_tests;
+pub(super) use base_tests_in;
 pub(super) use test_helper_adjacency_list;
 pub(super) use test_helper_adjacency_list_in;
 pub(super) use test_helper_adjacency_test;
-pub(super) use test_helper_graph_edge_editing;
 pub(super) use test_helper_debug_format;
+pub(super) use test_helper_from_edges;
+pub(super) use test_helper_graph_edge_editing;
+pub(super) use test_helper_graph_order;
 pub(super) use test_helper_vertex_editing;
-pub(super) use base_tests;
-pub(super) use base_tests_in;
-

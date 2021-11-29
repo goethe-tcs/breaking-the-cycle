@@ -175,14 +175,14 @@ impl GraphNew for AdjMatrixIn {
 
 #[cfg(test)]
 pub mod tests_adj_matrix {
-    use super::*;
     use super::graph_macros::base_tests;
+    use super::*;
     base_tests!(AdjMatrix);
 }
 
 #[cfg(test)]
 pub mod tests_adj_matrix_in {
-    use super::*;
     use super::graph_macros::base_tests_in;
+    use super::*;
     base_tests_in!(AdjMatrixIn);
 }
