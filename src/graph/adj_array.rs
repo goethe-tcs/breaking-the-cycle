@@ -91,7 +91,12 @@ impl GraphEdgeEditing for AdjArray {
     }
 
     fn try_remove_edge(&mut self, u: Node, v: Node) -> bool {
-        try_remove_helper(&mut self.out_neighbors[u as usize], v).is_ok()
+        if try_remove_helper(&mut self.out_neighbors[u as usize], v).is_ok() {
+            self.m -= 1;
+            true
+        } else {
+            false
+        }
     }
 
     /// Removes all edges into node u, i.e. post-condition the in-degree is 0
@@ -191,6 +196,20 @@ pub mod tests {
     }
 
     #[test]
+    fn try_remove_edge() {
+        let mut org_graph = AdjArray::from(&[(0, 3), (1, 3), (2, 3), (3, 4), (3, 5)]);
+        let old_m = org_graph.number_of_edges();
+        assert!(org_graph.has_edge(0, 3));
+        assert!(org_graph.try_remove_edge(0, 3));
+        assert_eq!(org_graph.number_of_edges(), old_m - 1);
+        assert!(!org_graph.has_edge(0, 3));
+
+        let old_m = org_graph.number_of_edges();
+        assert!(!org_graph.try_remove_edge(0, 3));
+        assert_eq!(org_graph.number_of_edges(), old_m);
+    }
+
+    #[test]
     fn test_remove_edges() {
         let org_graph = AdjArray::from(&[(0, 3), (1, 3), (2, 3), (3, 4), (3, 5)]);
 
@@ -243,6 +262,20 @@ pub mod tests {
         assert!(str.contains("digraph"));
         assert!(str.contains("v0 ->"));
         assert!(!str.contains("v3 ->"));
+    }
+
+    #[test]
+    fn try_remove_edge_in() {
+        let mut org_graph = AdjArrayIn::from(&[(0, 3), (1, 3), (2, 3), (3, 4), (3, 5)]);
+        let old_m = org_graph.number_of_edges();
+        assert!(org_graph.has_edge(0, 3));
+        assert!(org_graph.try_remove_edge(0, 3));
+        assert_eq!(org_graph.number_of_edges(), old_m - 1);
+        assert!(!org_graph.has_edge(0, 3));
+
+        let old_m = org_graph.number_of_edges();
+        assert!(!org_graph.try_remove_edge(0, 3));
+        assert_eq!(org_graph.number_of_edges(), old_m);
     }
 
     #[test]

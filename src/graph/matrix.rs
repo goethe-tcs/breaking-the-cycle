@@ -82,7 +82,12 @@ impl GraphEdgeEditing for AdjMatrix {
     }
 
     fn try_remove_edge(&mut self, u: Node, v: Node) -> bool {
-        self.out_matrix[u as usize].unset_bit(v as usize)
+        if self.out_matrix[u as usize].unset_bit(v as usize) {
+            self.m -= 1;
+            true
+        } else {
+            false
+        }
     }
 
     /// Removes all edges into node u, i.e. post-condition the in-degree is 0
@@ -166,6 +171,7 @@ impl GraphNew for AdjMatrixIn {
 #[cfg(test)]
 pub mod tests {
     use super::*;
+    use crate::graph::adj_array::AdjArrayIn;
 
     #[test]
     fn graph_edges() {
@@ -293,6 +299,34 @@ pub mod tests {
                 assert_ne!(v, 3);
             }
         }
+    }
+
+    #[test]
+    fn try_remove_edge() {
+        let mut org_graph = AdjMatrix::from(&[(0, 3), (1, 3), (2, 3), (3, 4), (3, 5)]);
+        let old_m = org_graph.number_of_edges();
+        assert!(org_graph.has_edge(0, 3));
+        assert!(org_graph.try_remove_edge(0, 3));
+        assert_eq!(org_graph.number_of_edges(), old_m - 1);
+        assert!(!org_graph.has_edge(0, 3));
+
+        let old_m = org_graph.number_of_edges();
+        assert!(!org_graph.try_remove_edge(0, 3));
+        assert_eq!(org_graph.number_of_edges(), old_m);
+    }
+
+    #[test]
+    fn try_remove_edge_in() {
+        let mut org_graph = AdjArrayIn::from(&[(0, 3), (1, 3), (2, 3), (3, 4), (3, 5)]);
+        let old_m = org_graph.number_of_edges();
+        assert!(org_graph.has_edge(0, 3));
+        assert!(org_graph.try_remove_edge(0, 3));
+        assert_eq!(org_graph.number_of_edges(), old_m - 1);
+        assert!(!org_graph.has_edge(0, 3));
+
+        let old_m = org_graph.number_of_edges();
+        assert!(!org_graph.try_remove_edge(0, 3));
+        assert_eq!(org_graph.number_of_edges(), old_m);
     }
 
     #[test]

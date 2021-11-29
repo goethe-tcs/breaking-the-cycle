@@ -378,6 +378,34 @@ pub mod tests {
     }
 
     #[test]
+    fn try_remove_edge() {
+        let mut org_graph = HashGraph::from(&[(0, 3), (1, 3), (2, 3), (3, 4), (3, 5)]);
+        let old_m = org_graph.number_of_edges();
+        assert!(org_graph.has_edge(0, 3));
+        assert!(org_graph.try_remove_edge(0, 3));
+        assert_eq!(org_graph.number_of_edges(), old_m - 1);
+        assert!(!org_graph.has_edge(0, 3));
+
+        let old_m = org_graph.number_of_edges();
+        assert!(!org_graph.try_remove_edge(0, 3));
+        assert_eq!(org_graph.number_of_edges(), old_m);
+    }
+
+    #[test]
+    fn try_remove_edge_in() {
+        let mut org_graph = HashGraphIn::from(&[(0, 3), (1, 3), (2, 3), (3, 4), (3, 5)]);
+        let old_m = org_graph.number_of_edges();
+        assert!(org_graph.has_edge(0, 3));
+        assert!(org_graph.try_remove_edge(0, 3));
+        assert_eq!(org_graph.number_of_edges(), old_m - 1);
+        assert!(!org_graph.has_edge(0, 3));
+
+        let old_m = org_graph.number_of_edges();
+        assert!(!org_graph.try_remove_edge(0, 3));
+        assert_eq!(org_graph.number_of_edges(), old_m);
+    }
+
+    #[test]
     fn test_debug_format_in() {
         let mut g = HashGraphIn::new(8);
         g.add_edges(&[(0, 1), (0, 2), (0, 3), (4, 5)]);
