@@ -8,6 +8,7 @@ pub mod matrix;
 pub mod network_flow;
 pub mod subgraph;
 pub mod traversal;
+pub(super) mod graph_macros;
 
 pub type Node = u32;
 pub type Edge = (Node, Node);
@@ -97,94 +98,6 @@ pub trait GraphVertexEditing {
     fn has_vertex(&self, u: Node) -> bool;
 }
 
-mod graph_macros {
-    macro_rules! impl_helper_graph_from_edges {
-        ($t:ident) => {
-            impl<'a, T: IntoIterator<Item = &'a Edge> + Clone> From<T> for $t {
-                fn from(edges: T) -> Self {
-                    let n = edges
-                        .clone()
-                        .into_iter()
-                        .map(|e| e.0.max(e.1) + 1)
-                        .max()
-                        .unwrap_or(0);
-                    let mut graph = Self::new(n as usize);
-                    for e in edges {
-                        graph.add_edge(e.0, e.1);
-                    }
-                    graph
-                }
-            }
-        };
-    }
-
-    macro_rules! impl_helper_graph_debug {
-        ($t:ident) => {
-            impl Debug for $t {
-                fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                    let mut buf = Vec::new();
-                    if self.try_write_dot(&mut buf).is_ok() {
-                        f.write_str(str::from_utf8(&buf).unwrap())?;
-                    }
-
-                    Ok(())
-                }
-            }
-        };
-    }
-
-    macro_rules! impl_helper_graph_order {
-        ($t:ident, $field:ident) => {
-            impl GraphOrder for $t {
-                type VertexIter<'a> = impl Iterator<Item = Node> + 'a;
-
-                fn number_of_nodes(&self) -> Node {
-                    self.$field.number_of_nodes()
-                }
-                fn number_of_edges(&self) -> usize {
-                    self.$field.number_of_edges()
-                }
-
-                fn vertices(&self) -> Self::VertexIter<'_> {
-                    self.$field.vertices()
-                }
-            }
-        };
-    }
-
-    macro_rules! impl_helper_adjacency_list {
-        ($t:ident, $field:ident) => {
-            impl AdjacencyList for $t {
-                type Iter<'a> = impl Iterator<Item = Node> + 'a;
-
-                fn out_neighbors(&self, u: Node) -> Self::Iter<'_> {
-                    self.$field.out_neighbors(u)
-                }
-
-                fn out_degree(&self, u: Node) -> Node {
-                    self.$field.out_degree(u)
-                }
-            }
-        };
-    }
-
-    macro_rules! impl_helper_adjacency_test {
-        ($t:ident, $field:ident) => {
-            impl AdjacencyTest for $t {
-                fn has_edge(&self, u: Node, v: Node) -> bool {
-                    self.$field.has_edge(u, v)
-                }
-            }
-        };
-    }
-
-    pub(crate) use impl_helper_adjacency_list;
-    pub(crate) use impl_helper_adjacency_test;
-    pub(crate) use impl_helper_graph_debug;
-    pub(crate) use impl_helper_graph_from_edges;
-    pub(crate) use impl_helper_graph_order;
-}
-
 /// Provides functions to insert/delete edges
 pub trait GraphEdgeEditing: GraphNew {
     /// Adds the directed edge *(u,v)* to the graph. I.e., the edge FROM u TO v.
@@ -201,6 +114,11 @@ pub trait GraphEdgeEditing: GraphNew {
     /// Removes the directed edge *(u,v)* from the graph. I.e., the edge FROM u TO v.
     /// ** Panics if the edge is not present or u, v >= n **
     fn remove_edge(&mut self, u: Node, v: Node);
+
+    /// Removes the directed edge *(u,v)* from the graph. I.e., the edge FROM u TO v.
+    /// If the edge was removed, returns *true* and *false* otherwise.
+    /// ** Panics if u, v >= n **
+    fn try_remove_edge(&mut self, u: Node, v: Node) -> bool;
 
     /// Removes all edges into and out of node u
     fn remove_edges_at_node(&mut self, u: Node) {

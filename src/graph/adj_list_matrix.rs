@@ -29,7 +29,7 @@ graph_macros::impl_helper_adjacency_list!(AdjListMatrix, adj_array);
 graph_macros::impl_helper_adjacency_test!(AdjListMatrix, adj_matrix);
 graph_macros::impl_helper_graph_order!(AdjListMatrix, adj_array);
 graph_macros::impl_helper_adjacency_list!(AdjListMatrixIn, adj_out);
-graph_macros::impl_helper_adjacency_test!(AdjListMatrixIn, adj_out);
+graph_macros::impl_helper_adjacency_test_linear_search_bi_directed!(AdjListMatrixIn);
 graph_macros::impl_helper_graph_order!(AdjListMatrixIn, adj_out);
 
 impl GraphEdgeEditing for AdjListMatrix {
@@ -41,6 +41,10 @@ impl GraphEdgeEditing for AdjListMatrix {
     fn remove_edge(&mut self, u: Node, v: Node) {
         self.adj_array.remove_edge(u, v);
         self.adj_matrix.remove_edge(u, v);
+    }
+
+    fn try_remove_edge(&mut self, u: Node, v: Node) -> bool {
+        self.adj_array.try_remove_edge(u, v) && self.adj_matrix.try_remove_edge(u, v)
     }
 
     /// Removes all edges into node u, i.e. post-condition the in-degree is 0
@@ -65,6 +69,10 @@ impl GraphEdgeEditing for AdjListMatrixIn {
     fn remove_edge(&mut self, u: Node, v: Node) {
         self.adj_out.remove_edge(u, v);
         self.adj_in.remove_edge(v, u);
+    }
+
+    fn try_remove_edge(&mut self, u: Node, v: Node) -> bool {
+        self.adj_out.try_remove_edge(u, v) && self.adj_in.try_remove_edge(v, u)
     }
 
     /// Removes all edges into node u, i.e. post-condition the in-degree is 0

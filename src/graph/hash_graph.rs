@@ -123,10 +123,20 @@ impl GraphEdgeEditing for HashGraph {
     }
 
     fn remove_edge(&mut self, u: Node, v: Node) {
-        assert!(self.adj.contains_key(&u));
-        assert!(self.adj.get(&u).unwrap().contains(&v));
-        self.adj.get_mut(&u).unwrap().remove(&v);
-        self.m -= 1;
+        assert!(self.try_remove_edge(u, v));
+    }
+
+    fn try_remove_edge(&mut self, u: Node, v: Node) -> bool {
+        if let Some(nb) = self.adj.get_mut(&u) {
+            if nb.remove(&v) {
+                self.m -= 1;
+                true
+            } else {
+                false
+            }
+        } else {
+            false
+        }
     }
 
     /// Removes all edges into node u, i.e. post-condition the in-degree is 0
@@ -162,8 +172,15 @@ impl GraphEdgeEditing for HashGraphIn {
     }
 
     fn remove_edge(&mut self, u: Node, v: Node) {
-        self.adj_out.remove_edge(u, v);
-        self.adj_in.get_mut(&v).unwrap().remove(&u);
+        assert!(self.try_remove_edge(u, v));
+    }
+
+    fn try_remove_edge(&mut self, u: Node, v: Node) -> bool {
+        self.adj_out.try_remove_edge(u, v)
+            && match self.adj_in.get_mut(&v).unwrap().remove(&u) {
+                true => true,
+                false => panic!("Edge not found in adj_in, should not happen!"),
+            }
     }
 
     /// Removes all edges into node u, i.e. post-condition the in-degree is 0

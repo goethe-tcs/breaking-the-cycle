@@ -76,12 +76,13 @@ impl GraphEdgeEditing for AdjMatrix {
     }
 
     fn remove_edge(&mut self, u: Node, v: Node) {
-        assert!(u < self.n as Node);
-        assert!(v < self.n as Node);
         assert!(self.out_matrix[u as usize][v as usize]);
-        assert!(self.m > 0);
         self.out_matrix[u as usize].unset_bit(v as usize);
         self.m -= 1;
+    }
+
+    fn try_remove_edge(&mut self, u: Node, v: Node) -> bool {
+        self.out_matrix[u as usize].unset_bit(v as usize)
     }
 
     /// Removes all edges into node u, i.e. post-condition the in-degree is 0
@@ -97,7 +98,7 @@ impl GraphEdgeEditing for AdjMatrix {
     /// Removes all edges out of node u, i.e. post-condition the out-degree is 0
     fn remove_edges_out_of_node(&mut self, u: Node) {
         self.m -= self.out_matrix[u as usize].cardinality();
-        self.out_matrix[u as usize] = BitSet::new(self.n);
+        self.out_matrix[u as usize].unset_all();
     }
 }
 
@@ -112,22 +113,26 @@ impl GraphEdgeEditing for AdjMatrixIn {
         self.in_matrix[v as usize].unset_bit(u as usize);
     }
 
+    fn try_remove_edge(&mut self, u: Node, v: Node) -> bool {
+        self.adj.try_remove_edge(u, v) && self.in_matrix[v as usize].unset_bit(u as usize)
+    }
+
     /// Removes all edges into node u, i.e. post-condition the in-degree is 0
     fn remove_edges_into_node(&mut self, u: Node) {
         for v in self.in_matrix[u as usize].iter() {
             self.adj.remove_edge(v as Node, u);
         }
-        self.in_matrix[u as usize] = BitSet::new(self.adj.n);
+        self.in_matrix[u as usize].unset_all();
     }
 
     /// Removes all edges out of node u, i.e. post-condition the out-degree is 0
     fn remove_edges_out_of_node(&mut self, u: Node) {
         self.adj.m -= self.adj.out_matrix[u as usize].cardinality();
-        let mut out = BitSet::new(self.adj.n);
-        std::mem::swap(&mut out, &mut self.adj.out_matrix[u as usize]);
+        let out = &mut self.adj.out_matrix[u as usize];
         for v in out.iter() {
             self.in_matrix[v].unset_bit(u as usize);
         }
+        out.unset_all();
     }
 }
 
