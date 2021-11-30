@@ -158,6 +158,8 @@ mod tests {
         pq.insert(16, 1);
         pq.insert(1, 15);
 
+        assert_eq!(pq.peek_min(), Some((16, 1)));
+        assert_eq!(pq.peek_min(), Some((16, 1)));
         assert_eq!(pq.pop_min(), Some((16, 1)));
         assert_eq!(pq.pop_min(), Some((0, 10)));
         assert_eq!(pq.pop_min(), Some((1, 15)));
