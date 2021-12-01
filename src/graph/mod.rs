@@ -13,6 +13,7 @@ pub mod traversal;
 pub type Node = u32;
 pub type Edge = (Node, Node);
 
+pub use adj_array::AdjArray;
 pub use adj_list_matrix::AdjListMatrix;
 pub use connectivity::Connectivity;
 pub use subgraph::*;
