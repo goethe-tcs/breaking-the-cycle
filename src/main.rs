@@ -4,6 +4,15 @@ use dfvs::graph::io::{PaceRead, PaceWrite};
 use dfvs::graph::AdjListMatrix;
 use std::io::{stdin, stdout};
 
+#[cfg(feature = "jemallocator")]
+#[cfg(not(target_env = "msvc"))]
+use jemallocator::Jemalloc;
+
+#[cfg(feature = "jemallocator")]
+#[cfg(not(target_env = "msvc"))]
+#[global_allocator]
+static GLOBAL: Jemalloc = Jemalloc;
+
 fn main() -> std::io::Result<()> {
     #[cfg(feature = "pace-logging")]
     dfvs::log::build_pace_logger();
