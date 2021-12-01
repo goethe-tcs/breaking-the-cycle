@@ -10,12 +10,16 @@ cargo-test:
   stage: primary
   script:
     - cargo test
+    - cargo test --all-features
+    - cargo build --all-features
 
 cargo-test-release:
   image: gitlab.ae.cs.uni-frankfurt.de:5001/ae-ci/aeffm-rust-nightly
   stage: extras
   script:
     - cargo test --release
+    - cargo test --release --all-features
+    - cargo build --release --all-features
 
 cargo-clippy:
   image: gitlab.ae.cs.uni-frankfurt.de:5001/ae-ci/aeffm-rust-nightly
