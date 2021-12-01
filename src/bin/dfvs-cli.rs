@@ -1,12 +1,12 @@
 #![deny(warnings)]
 
 use dfvs::graph::adj_array::AdjArrayIn;
-use dfvs::graph::io::{PaceRead, PaceWrite};
+use dfvs::graph::io::{DefaultWriter, PaceRead};
 #[cfg(feature = "log")]
 use log::info;
 use std::convert::TryFrom;
-use std::fs::{File, OpenOptions};
-use std::io::{stdin, stdout, BufReader};
+use std::fs::File;
+use std::io::{stdin, BufReader};
 use std::path::PathBuf;
 use structopt::StructOpt;
 
@@ -74,10 +74,7 @@ fn main() -> std::io::Result<()> {
     #[cfg(feature = "pace-logging")]
     info!("Running in mode {:?}", _mode);
 
-    let file = match opt.output {
-        Some(path) => Some(OpenOptions::new().write(true).create(true).open(path)?),
-        None => None,
-    };
+    let writer = DefaultWriter::from_path(opt.output)?;
 
     let graph: AdjArrayIn = match opt.input {
         Some(path) => {
@@ -90,15 +87,7 @@ fn main() -> std::io::Result<()> {
         }
     };
 
-    match file {
-        None => {
-            let stdout = stdout();
-            graph.try_write_pace(stdout.lock())?;
-        }
-        Some(path) => {
-            graph.try_write_pace(path)?;
-        }
-    }
+    writer.write(&graph)?;
 
     Ok(())
 }

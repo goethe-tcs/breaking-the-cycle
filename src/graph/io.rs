@@ -1,5 +1,37 @@
 use super::*;
-use std::io::{BufRead, ErrorKind, Write};
+use std::fs::{File, OpenOptions};
+use std::io::{stdout, BufRead, ErrorKind, Write};
+use std::path::PathBuf;
+
+/// Intended for binaries to output a resulting graph
+pub struct DefaultWriter {
+    file: Option<File>,
+}
+
+impl DefaultWriter {
+    /// If output is None, we will try to write to stdout, otherwise we will try to open the file
+    pub fn from_path(output: Option<PathBuf>) -> std::io::Result<Self> {
+        let file = match output {
+            Some(path) => Some(OpenOptions::new().write(true).create(true).open(path)?),
+            None => None,
+        };
+        Ok(Self { file })
+    }
+
+    pub fn write<G: AdjacencyList>(self, graph: &G) -> std::io::Result<()> {
+        match self.file {
+            None => {
+                let stdout = stdout();
+                graph.try_write_pace(stdout.lock())?;
+            }
+            Some(path) => {
+                graph.try_write_pace(path)?;
+            }
+        }
+
+        Ok(())
+    }
+}
 
 pub trait DotWrite {
     /// produces a minimalistic DOT representation of the graph
