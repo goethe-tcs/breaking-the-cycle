@@ -23,6 +23,6 @@ cli = ["structopt"]
 
 [[bin]]
 name = "dfvs-cli"
-path = "src/main.rs"
+path = "src/bin/dfvs-cli.rs"
 required-features = ["cli"]
 test = false

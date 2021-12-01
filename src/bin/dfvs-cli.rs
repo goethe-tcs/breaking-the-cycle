@@ -2,6 +2,7 @@
 
 use dfvs::graph::adj_array::AdjArrayIn;
 use dfvs::graph::io::{PaceRead, PaceWrite};
+#[cfg(feature = "log")]
 use log::info;
 use std::convert::TryFrom;
 use std::fs::{File, OpenOptions};
@@ -68,10 +69,10 @@ fn main() -> std::io::Result<()> {
     dfvs::log::build_pace_logger();
 
     let opt = Opt::from_args();
-    let mode: Mode = Mode::try_from(opt.mode.as_str()).expect("Failed parsing 'mode' flag: ");
+    let _mode: Mode = Mode::try_from(opt.mode.as_str()).expect("Failed parsing 'mode' flag: ");
 
     #[cfg(feature = "pace-logging")]
-    info!("Running in mode {:?}", mode);
+    info!("Running in mode {:?}", _mode);
 
     let file = match opt.output {
         Some(path) => Some(OpenOptions::new().write(true).create(true).open(path)?),
@@ -88,10 +89,10 @@ fn main() -> std::io::Result<()> {
             AdjArrayIn::try_read_pace(stdin.lock())?
         }
     };
-    let stdout = stdout();
 
     match file {
         None => {
+            let stdout = stdout();
             graph.try_write_pace(stdout.lock())?;
         }
         Some(path) => {
