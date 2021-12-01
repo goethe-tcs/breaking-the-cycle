@@ -26,8 +26,8 @@ struct Opt {
 
     /// Mode. 'heuristic', 'exact'. Defaults to Exact.
     /// Any invalid input fails silently to 'exact'.
-    #[structopt(short, long)]
-    mode: Option<String>,
+    #[structopt(short, long, default_value = "exact")]
+    mode: String,
 }
 
 #[derive(Debug)]
@@ -43,13 +43,13 @@ impl Default for Mode {
 }
 
 impl TryFrom<&str> for Mode {
-    type Error = ();
+    type Error = String;
 
     fn try_from(value: &str) -> Result<Self, Self::Error> {
         match value {
             "heuristic" => Ok(Mode::Heuristic),
             "exact" => Ok(Mode::Exact),
-            _ => Err(()),
+            _ => Err(format!("'{}' is an invalid Mode.", value)),
         }
     }
 }
@@ -59,10 +59,7 @@ fn main() -> std::io::Result<()> {
     dfvs::log::build_pace_logger();
 
     let opt = Opt::from_args();
-    let mode: Mode = match opt.mode {
-        Some(value) => Mode::try_from(value.as_str()).unwrap_or_default(),
-        None => Default::default(),
-    };
+    let mode: Mode = Mode::try_from(opt.mode.as_str()).expect("Failed parsing 'mode' flag: ");
 
     #[cfg(feature = "pace-logging")]
     info!("Running in mode {:?}", mode);
