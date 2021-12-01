@@ -33,3 +33,9 @@ name = "gen-gnp"
 path = "src/bin/gen-gnp.rs"
 required-features = ["cli"]
 test = false
+
+[[bin]]
+name = "gen-planted-cycles"
+path = "src/bin/gen-planted-cycles.rs"
+required-features = ["cli"]
+test = false
