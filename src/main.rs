@@ -9,6 +9,15 @@ use std::io::{stdin, stdout, BufReader};
 use std::path::PathBuf;
 use structopt::StructOpt;
 
+#[cfg(feature = "jemallocator")]
+#[cfg(not(target_env = "msvc"))]
+use jemallocator::Jemalloc;
+
+#[cfg(feature = "jemallocator")]
+#[cfg(not(target_env = "msvc"))]
+#[global_allocator]
+static GLOBAL: Jemalloc = Jemalloc;
+
 #[derive(Debug, StructOpt)]
 #[structopt(
     name = "dfvs-cli",
