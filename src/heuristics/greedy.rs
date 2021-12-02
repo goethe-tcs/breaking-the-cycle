@@ -13,7 +13,7 @@ pub trait Selector<G: AdjacencyListIn + GraphEdgeEditing> {
     /// Returns the best vertex to be added to a dfvs according to some heuristic.
     fn best(&self) -> Node;
 
-    /// Removes the node u and returns all relevant information to undo the removal
+    /// Removes the best vertex according to the implemented internal heuristic
     fn remove_best(&mut self) -> Node {
         let u = self.best();
         self.graph_mut().remove_edges_at_node(u);
