@@ -1,6 +1,6 @@
-use crate::binary_queue::BinaryQueue;
 use crate::graph::{AdjacencyListIn, GraphEdgeEditing, Node, Traversal};
-use fxhash::FxHashSet;
+use fxhash::{FxBuildHasher, FxHashSet};
+use keyed_priority_queue::KeyedPriorityQueue;
 use std::iter::FromIterator;
 use std::marker::PhantomData;
 
@@ -58,18 +58,17 @@ impl<G: AdjacencyListIn + GraphEdgeEditing, S: Selector<G>> Iterator for Selecto
 /// Updates only the values of the neighbors of a vertex v
 pub struct MaxDegreeSelector<G: AdjacencyListIn + GraphEdgeEditing> {
     graph: G,
-    n: Node,
-    queue: BinaryQueue,
+    queue: KeyedPriorityQueue<Node, Node, FxBuildHasher>,
 }
 
 impl<G: AdjacencyListIn + GraphEdgeEditing> Selector<G> for MaxDegreeSelector<G> {
     fn new(graph: G) -> Self {
-        let n = graph.number_of_nodes();
-        let mut queue = BinaryQueue::with_capacity(graph.len());
+        let n = graph.len();
+        let mut queue = KeyedPriorityQueue::with_capacity_and_hasher(n, FxBuildHasher::default());
         for v in graph.vertices() {
-            queue.insert(v, (n - graph.total_degree(v)) as i64)
+            queue.push(v, graph.total_degree(v));
         }
-        Self { graph, n, queue }
+        Self { graph, queue }
     }
 
     fn graph(&self) -> &G {
@@ -81,7 +80,10 @@ impl<G: AdjacencyListIn + GraphEdgeEditing> Selector<G> for MaxDegreeSelector<G>
     }
 
     fn remove_best(&mut self) -> Node {
-        let u = self.queue.pop_min().unwrap().0;
+        let (u, _) = self
+            .queue
+            .pop()
+            .expect("Expected to queue to be non-empty!");
         let nb: FxHashSet<_> = self
             .graph
             .in_neighbors(u)
@@ -90,13 +92,18 @@ impl<G: AdjacencyListIn + GraphEdgeEditing> Selector<G> for MaxDegreeSelector<G>
         self.graph.remove_edges_at_node(u);
         for v in nb {
             self.queue
-                .insert(v, (self.n - self.graph.total_degree(v)) as i64);
+                .set_priority(&v, self.graph.total_degree(v))
+                .expect(&format!("Expected to find entry {} in queue!", v));
         }
         u
     }
 
     fn best(&self) -> Node {
-        self.queue.peek_min().unwrap().0
+        *self
+            .queue
+            .peek()
+            .expect("Expected queue to be non-empty!")
+            .0
     }
 }
 

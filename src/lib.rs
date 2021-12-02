@@ -1,7 +1,6 @@
 #![feature(type_alias_impl_trait)]
 #![feature(generic_associated_types)]
 
-pub mod binary_queue;
 pub mod bitset;
 pub mod graph;
 pub mod heuristics;
