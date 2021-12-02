@@ -93,7 +93,7 @@ impl<G: AdjacencyListIn + GraphEdgeEditing> Selector<G> for MaxDegreeSelector<G>
         for v in nb {
             self.queue
                 .set_priority(&v, self.graph.total_degree(v))
-                .expect(&format!("Expected to find entry {} in queue!", v));
+                .unwrap_or_else(|_| panic!("Expected to find entry {} in queue!", v));
         }
         u
     }
