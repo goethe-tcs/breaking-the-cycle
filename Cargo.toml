@@ -17,6 +17,7 @@ rand_distr = "0.4.2"
 rand_pcg = "0.3.1"
 itertools = "0.10.1"
 fxhash = "0.2.1"
+glob = "0.3.0"
 
 [features]
 pace-logging=["log", "env_logger"]
@@ -38,4 +39,9 @@ test = false
 name = "gen-planted-cycles"
 path = "src/bin/gen-planted-cycles.rs"
 required-features = ["cli"]
+test = false
+
+[[bin]]
+name = "bench-preprocessing-reduction"
+path = "src/bin/bench-preprocessing-reduction.rs"
 test = false
