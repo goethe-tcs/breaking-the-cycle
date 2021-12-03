@@ -8,7 +8,4 @@ fi
 
 cargo clippy --all-features -- -D clippy::all
 
-cargo test -q
-
 cargo tarpaulin -o html
-
