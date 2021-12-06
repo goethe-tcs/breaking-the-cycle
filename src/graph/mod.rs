@@ -9,6 +9,7 @@ pub mod matrix;
 pub mod network_flow;
 pub mod subgraph;
 pub mod traversal;
+use std::ops::Range;
 
 pub type Node = u32;
 pub type Edge = (Node, Node);
@@ -38,6 +39,17 @@ pub trait GraphOrder {
 
     /// Returns an iterator over V.
     fn vertices(&self) -> Self::VertexIter<'_>;
+
+    /// Returns a range of vertices possibly including deleted vertices
+    /// In contrast to self.vertices(), the range returned by self.vertices_ranges() does
+    /// not borrow self and hence may be used where additional mutable references of self are needed
+    ///
+    /// # Warning
+    /// This method may iterate over deleted vertices (if supported by an implementation). It is the
+    /// responsibility of the caller to identify and treat them accordingly.
+    fn vertices_range(&self) -> Range<Node> {
+        0..self.number_of_nodes()
+    }
 
     /// Returns true if the graph has no nodes (and thus no edges)
     fn is_empty(&self) -> bool {

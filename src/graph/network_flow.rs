@@ -85,7 +85,7 @@ impl GraphOrder for ResidualBitMatrix {
     }
 
     fn vertices(&self) -> Self::VertexIter<'_> {
-        0..self.number_of_nodes()
+        self.vertices_range()
     }
 }
 
