@@ -5,13 +5,13 @@ use fxhash::{FxHashMap, FxHashSet};
 use std::fmt::Debug;
 use std::{fmt, str};
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct HashGraph {
     adj: FxHashMap<Node, FxHashSet<Node>>,
     m: usize,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct HashGraphIn {
     adj_out: HashGraph,
     adj_in: FxHashMap<Node, FxHashSet<Node>>,
@@ -212,10 +212,12 @@ impl GraphEdgeEditing for HashGraphIn {
 
 impl GraphNew for HashGraph {
     fn new(n: usize) -> Self {
-        Self {
-            adj: FxHashMap::with_capacity_and_hasher(n, Default::default()),
-            m: 0,
+        let mut adj: FxHashMap<Node, FxHashSet<Node>> =
+            FxHashMap::with_capacity_and_hasher(n, Default::default());
+        for v in 0..n {
+            adj.insert(v as Node, FxHashSet::default());
         }
+        Self { adj, m: 0 }
     }
 }
 
@@ -229,253 +231,17 @@ impl GraphNew for HashGraphIn {
 }
 
 #[cfg(test)]
-pub mod tests {
+pub mod tests_hash_graph {
+    use super::graph_macros::{base_tests, test_helper_vertex_editing};
     use super::*;
+    base_tests!(HashGraph);
+    test_helper_vertex_editing!(HashGraph);
+}
 
-    #[test]
-    fn graph_edges() {
-        let mut edges = vec![(1, 2), (1, 0), (4, 3), (0, 5), (2, 4), (5, 4)];
-        let graph = HashGraph::from(&edges);
-        assert_eq!(graph.number_of_nodes(), 6);
-        assert_eq!(graph.number_of_edges(), edges.len());
-        let mut ret_edges = graph.edges();
-
-        edges.sort();
-        ret_edges.sort();
-
-        assert_eq!(edges, ret_edges);
-    }
-
-    #[test]
-    fn test_remove_edges() {
-        let org_graph = HashGraph::from(&[(0, 3), (1, 3), (2, 3), (3, 4), (3, 5)]);
-
-        // no changes
-        {
-            let mut graph = org_graph.clone();
-
-            graph.remove_edges_into_node(0);
-            assert_eq!(graph.edges(), org_graph.edges());
-
-            graph.remove_edges_out_of_node(4);
-            assert_eq!(graph.edges(), org_graph.edges());
-        }
-
-        // remove out
-        {
-            let mut graph = org_graph.clone();
-
-            graph.remove_edges_out_of_node(3);
-            assert_eq!(
-                graph.number_of_edges(),
-                org_graph.number_of_edges() - org_graph.out_degree(3) as usize
-            );
-            for (u, _v) in graph.edges() {
-                assert_ne!(u, 3);
-            }
-        }
-
-        // remove in
-        {
-            let mut graph = org_graph.clone();
-
-            let in_degree = graph.vertices().filter(|v| graph.has_edge(*v, 3)).count();
-            graph.remove_edges_into_node(3);
-            assert_eq!(
-                graph.number_of_edges(),
-                org_graph.number_of_edges() - in_degree
-            );
-            for (_u, v) in graph.edges() {
-                assert_ne!(v, 3);
-            }
-        }
-    }
-
-    #[test]
-    fn test_debug_format() {
-        let mut g = HashGraph::new(8);
-        g.add_edges(&[(0, 1), (0, 2), (0, 3), (4, 5)]);
-        let str = format!("{:?}", g);
-        assert!(str.contains("digraph"));
-        assert!(str.contains("v0 ->"));
-        assert!(!str.contains("v3 ->"));
-    }
-
-    #[test]
-    fn test_remove_vertex() {
-        let org_graph = HashGraph::from(&[(0, 3), (1, 3), (2, 3), (3, 4), (3, 5), (5, 4)]);
-        let mut graph = org_graph.clone();
-
-        graph.remove_vertex(3);
-        assert_eq!(graph.has_vertex(3), false);
-        assert_eq!(graph.number_of_nodes(), org_graph.number_of_nodes() - 1);
-        assert_eq!(graph.number_of_edges(), 1);
-    }
-
-    #[test]
-    fn test_remove_vertex_in() {
-        let org_graph = HashGraphIn::from(&[(0, 3), (1, 3), (2, 3), (3, 4), (3, 5), (5, 4)]);
-        let mut graph = org_graph.clone();
-
-        graph.remove_vertex(3);
-        assert_eq!(graph.has_vertex(3), false);
-        assert_eq!(graph.number_of_nodes(), org_graph.number_of_nodes() - 1);
-        assert_eq!(graph.number_of_edges(), 1);
-    }
-
-    #[test]
-    fn graph_edges_in() {
-        let mut edges = vec![(1, 2), (1, 0), (4, 3), (0, 5), (2, 4), (5, 4)];
-        let graph = HashGraphIn::from(&edges);
-        assert_eq!(graph.number_of_nodes(), 6);
-        assert_eq!(graph.number_of_edges(), edges.len());
-        let mut ret_edges = graph.edges();
-
-        edges.sort();
-        ret_edges.sort();
-
-        assert_eq!(edges, ret_edges);
-    }
-
-    #[test]
-    fn test_remove_edges_in() {
-        let org_graph = HashGraphIn::from(&[(0, 3), (1, 3), (2, 3), (3, 4), (3, 5)]);
-
-        // no changes
-        {
-            let mut graph = org_graph.clone();
-
-            graph.remove_edges_into_node(0);
-            assert_eq!(graph.edges(), org_graph.edges());
-
-            graph.remove_edges_out_of_node(4);
-            assert_eq!(graph.edges(), org_graph.edges());
-        }
-
-        // remove out
-        {
-            let mut graph = org_graph.clone();
-
-            graph.remove_edges_out_of_node(3);
-            assert_eq!(
-                graph.number_of_edges(),
-                org_graph.number_of_edges() - org_graph.out_degree(3) as usize
-            );
-            for (u, _v) in graph.edges() {
-                assert_ne!(u, 3);
-            }
-        }
-
-        // remove in
-        {
-            let mut graph = org_graph.clone();
-
-            let in_degree = graph.vertices().filter(|v| graph.has_edge(*v, 3)).count();
-            graph.remove_edges_into_node(3);
-            assert_eq!(
-                graph.number_of_edges(),
-                org_graph.number_of_edges() - in_degree
-            );
-            for (_u, v) in graph.edges() {
-                assert_ne!(v, 3);
-            }
-        }
-    }
-
-    #[test]
-    fn try_add_edge() {
-        let mut org_graph = HashGraph::from(&[(0, 3), (1, 3), (2, 3), (3, 4), (3, 5)]);
-        let old_m = org_graph.number_of_edges();
-        org_graph.try_add_edge(0, 3);
-        assert_eq!(org_graph.number_of_edges(), old_m);
-        assert!(org_graph.has_edge(0, 3));
-
-        org_graph.try_add_edge(2, 0);
-        assert_eq!(org_graph.number_of_edges(), old_m + 1);
-        assert!(org_graph.has_edge(2, 0));
-    }
-
-    #[test]
-    fn try_add_edge_in() {
-        let mut org_graph = HashGraphIn::from(&[(0, 3), (1, 3), (2, 3), (3, 4), (3, 5)]);
-        let old_m = org_graph.number_of_edges();
-        org_graph.try_add_edge(0, 3);
-        assert_eq!(org_graph.number_of_edges(), old_m);
-        assert!(org_graph.has_edge(0, 3));
-
-        org_graph.try_add_edge(2, 0);
-        assert_eq!(org_graph.number_of_edges(), old_m + 1);
-        assert!(org_graph.has_edge(2, 0));
-    }
-
-    #[test]
-    fn try_remove_edge() {
-        let mut org_graph = HashGraph::from(&[(0, 3), (1, 3), (2, 3), (3, 4), (3, 5)]);
-        let old_m = org_graph.number_of_edges();
-        assert!(org_graph.has_edge(0, 3));
-        assert!(org_graph.try_remove_edge(0, 3));
-        assert_eq!(org_graph.number_of_edges(), old_m - 1);
-        assert!(!org_graph.has_edge(0, 3));
-
-        let old_m = org_graph.number_of_edges();
-        assert!(!org_graph.try_remove_edge(0, 3));
-        assert_eq!(org_graph.number_of_edges(), old_m);
-    }
-
-    #[test]
-    fn try_remove_edge_in() {
-        let mut org_graph = HashGraphIn::from(&[(0, 3), (1, 3), (2, 3), (3, 4), (3, 5)]);
-        let old_m = org_graph.number_of_edges();
-        assert!(org_graph.has_edge(0, 3));
-        assert!(org_graph.try_remove_edge(0, 3));
-        assert_eq!(org_graph.number_of_edges(), old_m - 1);
-        assert!(!org_graph.has_edge(0, 3));
-
-        let old_m = org_graph.number_of_edges();
-        assert!(!org_graph.try_remove_edge(0, 3));
-        assert_eq!(org_graph.number_of_edges(), old_m);
-    }
-
-    #[test]
-    #[should_panic]
-    fn remove_edge_panic() {
-        let mut org_graph = HashGraph::from(&[(0, 3), (1, 3), (2, 3), (3, 4), (3, 5)]);
-        org_graph.remove_edge(3, 0);
-    }
-
-    #[test]
-    #[should_panic]
-    fn remove_edge_panic_in() {
-        let mut org_graph = HashGraphIn::from(&[(0, 3), (1, 3), (2, 3), (3, 4), (3, 5)]);
-        org_graph.remove_edge(3, 0);
-    }
-
-    #[test]
-    fn remove_edge() {
-        let mut org_graph = HashGraph::from(&[(0, 3), (1, 3), (2, 3), (3, 4), (3, 5)]);
-        let old_m = org_graph.number_of_edges();
-        assert!(org_graph.has_edge(0, 3));
-        org_graph.remove_edge(0, 3);
-        assert_eq!(org_graph.number_of_edges(), old_m - 1);
-        assert!(!org_graph.has_edge(0, 3));
-    }
-
-    #[test]
-    fn remove_edge_in() {
-        let mut org_graph = HashGraphIn::from(&[(0, 3), (1, 3), (2, 3), (3, 4), (3, 5)]);
-        let old_m = org_graph.number_of_edges();
-        assert!(org_graph.has_edge(0, 3));
-        org_graph.remove_edge(0, 3);
-        assert_eq!(org_graph.number_of_edges(), old_m - 1);
-        assert!(!org_graph.has_edge(0, 3));
-    }
-    #[test]
-    fn test_debug_format_in() {
-        let mut g = HashGraphIn::new(8);
-        g.add_edges(&[(0, 1), (0, 2), (0, 3), (4, 5)]);
-        let str = format!("{:?}", g);
-        assert!(str.contains("digraph"));
-        assert!(str.contains("v0 ->"));
-        assert!(!str.contains("v3 ->"));
-    }
+#[cfg(test)]
+pub mod tests_hash_graph_in {
+    use super::graph_macros::{base_tests_in, test_helper_vertex_editing};
+    use super::*;
+    base_tests_in!(HashGraphIn);
+    test_helper_vertex_editing!(HashGraphIn);
 }

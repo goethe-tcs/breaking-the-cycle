@@ -73,8 +73,8 @@ where
     // connect nodes of lower ranks to nodes of higher ranks
     let target_m = (n as f64 * avg_deg / 2.0) as usize;
     while result_g.number_of_edges() < target_m {
-        let u = vertices[rand::thread_rng().gen_range(0..vertices.len())];
-        let v = vertices[rand::thread_rng().gen_range(0..vertices.len())];
+        let u = vertices[rng.gen_range(0..vertices.len())];
+        let v = vertices[rng.gen_range(0..vertices.len())];
 
         if u == v {
             continue;
