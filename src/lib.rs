@@ -3,6 +3,7 @@
 
 pub mod bitset;
 pub mod graph;
+pub mod heuristics;
 pub mod pre_processor;
 pub mod pre_processor_reduction;
 pub mod random_models;
