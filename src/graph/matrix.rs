@@ -41,7 +41,7 @@ impl GraphOrder for AdjMatrix {
     }
 
     fn vertices(&self) -> Self::VertexIter<'_> {
-        0..self.number_of_nodes()
+        self.vertices_range()
     }
 }
 
@@ -95,7 +95,7 @@ impl GraphEdgeEditing for AdjMatrix {
 
     /// Removes all edges into node u, i.e. post-condition the in-degree is 0
     fn remove_edges_into_node(&mut self, u: Node) {
-        for v in 0..self.n {
+        for v in self.vertices_range() {
             if self.out_matrix[v as usize][u as usize] {
                 self.out_matrix[v as usize].unset_bit(u as usize);
                 self.m -= 1;

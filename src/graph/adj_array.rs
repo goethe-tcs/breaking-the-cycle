@@ -39,7 +39,7 @@ impl GraphOrder for AdjArray {
     }
 
     fn vertices(&self) -> Self::VertexIter<'_> {
-        0..self.number_of_nodes()
+        self.vertices_range()
     }
 }
 
@@ -103,7 +103,7 @@ impl GraphEdgeEditing for AdjArray {
 
     /// Removes all edges into node u, i.e. post-condition the in-degree is 0
     fn remove_edges_into_node(&mut self, u: Node) {
-        for v in 0..self.number_of_nodes() {
+        for v in self.vertices_range() {
             if try_remove_helper(&mut self.out_neighbors[v as usize], u).is_ok() {
                 self.m -= 1;
             };
