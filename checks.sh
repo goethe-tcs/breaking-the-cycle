@@ -1,11 +1,13 @@
 #!/bin/bash
 cd `dirname $0`
+set -e
 set -v
+FEATURES="cli,pace-logging"
 
-if ! cargo fmt --check; then
+if ! cargo +nightly fmt --check; then
   echo "Run 'cargo fmt' to auto-format the sources or apply previous changes manually <--------------------------------------"
 fi
 
-cargo clippy --all-features -- -D clippy::all
+cargo +nightly clippy --features=$FEATURES -- -D clippy::all
 
-cargo tarpaulin -o html
+cargo +nightly tarpaulin --features=$FEATURES -o html
