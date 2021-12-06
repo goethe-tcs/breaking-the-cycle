@@ -84,6 +84,7 @@ impl<G: AdjacencyListIn + GraphEdgeEditing> Selector<G> for MaxDegreeSelector<G>
             .queue
             .pop()
             .expect("Expected to queue to be non-empty!");
+        // TODO: Check with benchmarks if this is slower than simply updating the priority of elements twice
         let nb: FxHashSet<_> = self
             .graph
             .in_neighbors(u)
