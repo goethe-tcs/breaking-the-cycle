@@ -9,6 +9,15 @@ pub trait Connectivity: AdjacencyList + Traversal + Sized {
         let sc = StronglyConnected::new(self);
         sc.find()
     }
+
+    /// Returns the strongly connected components of the graph as a Vec<Vec<Node>>
+    /// In contrast to [strongly_connected_components], this methods includes SCCs of size 1
+    /// if and only if the node has a self-loop
+    fn strongly_connected_components_no_singletons(&self) -> Vec<Vec<Node>> {
+        let mut sc = StronglyConnected::new(self);
+        sc.set_include_singletons(false);
+        sc.find()
+    }
 }
 
 impl<T: AdjacencyList + Traversal + Sized> Connectivity for T {}
@@ -21,6 +30,7 @@ pub struct StronglyConnected<'a, T: AdjacencyList> {
     low_links: Vec<Node>,
     on_stack: BitSet,
     components: Vec<Vec<Node>>,
+    include_singletons: bool,
 }
 
 impl<'a, T: AdjacencyList> StronglyConnected<'a, T> {
@@ -33,6 +43,7 @@ impl<'a, T: AdjacencyList> StronglyConnected<'a, T> {
             low_links: vec![0; graph.len()],
             on_stack: BitSet::new(graph.len()),
             components: vec![],
+            include_singletons: true,
         }
     }
 
@@ -42,17 +53,29 @@ impl<'a, T: AdjacencyList> StronglyConnected<'a, T> {
                 self.sc(v);
             }
         }
+
+        assert!(self.stack.is_empty());
+
         self.components
+    }
+
+    pub fn set_include_singletons(&mut self, include: bool) {
+        self.include_singletons = include;
     }
 
     fn sc(&mut self, v: Node) {
         self.indices[v as usize] = Some(self.idx);
         self.low_links[v as usize] = self.idx;
         self.idx += 1;
-        self.stack.push(v);
-        self.on_stack.set_bit(v as usize);
+
+        let initial_stack_len = self.stack.len();
+        self.push_stack(v);
+
+        let mut self_loop = false;
 
         for w in self.graph.out_neighbors(v) {
+            self_loop |= w == v;
+
             if self.indices[w as usize].is_none() {
                 self.sc(w);
                 self.low_links[v as usize] =
@@ -66,24 +89,50 @@ impl<'a, T: AdjacencyList> StronglyConnected<'a, T> {
         }
 
         if self.low_links[v as usize] == self.indices[v as usize].unwrap() {
-            // found SC
-            let mut component = Vec::with_capacity(self.graph.len());
-            loop {
-                let w = self.stack.pop().unwrap();
-                self.on_stack.unset_bit(w as usize);
-                component.push(w);
-                if w == v {
-                    break;
+            if !self.include_singletons && *self.stack.last().unwrap() == v && !self_loop {
+                // skip producing component descriptor, since we have a singleton node
+                // but we need to undo
+                self.pop_stack();
+            } else {
+                // this component goes into the result, so produce a descriptor and clean-up stack
+                // while doing so
+                let mut component = Vec::with_capacity(self.stack.len() - initial_stack_len);
+                loop {
+                    let w = self.pop_stack().unwrap();
+                    self.on_stack.unset_bit(w as usize);
+                    component.push(w);
+                    if w == v {
+                        break;
+                    }
                 }
+                self.components.push(component);
             }
-            self.components.push(component);
         }
+    }
+
+    fn push_stack(&mut self, v: Node) {
+        self.stack.push(v);
+        self.on_stack.set_bit(v as usize);
+    }
+
+    fn pop_stack(&mut self) -> Option<Node> {
+        let w = self.stack.pop()?;
+        self.on_stack.unset_bit(w as usize);
+        Some(w)
     }
 }
 
 #[cfg(test)]
 pub mod tests {
     use super::*;
+
+    fn sort_sccs(mut sccs: Vec<Vec<Node>>) -> Vec<Vec<Node>> {
+        for scc in &mut sccs {
+            scc.sort();
+        }
+        sccs.sort_by(|a, b| a[0].cmp(&b[0]));
+        sccs
+    }
 
     #[test]
     pub fn scc() {
@@ -104,19 +153,50 @@ pub mod tests {
             (7, 6),
         ]);
 
-        let mut sccs = graph.strongly_connected_components();
+        let sccs = graph.strongly_connected_components();
         assert_eq!(sccs.len(), 3);
         assert!(!sccs[0].is_empty());
         assert!(!sccs[1].is_empty());
         assert!(!sccs[2].is_empty());
 
-        for scc in &mut sccs {
-            scc.sort();
-        }
-        sccs.sort_by(|a, b| a[0].cmp(&b[0]));
+        let sccs = sort_sccs(sccs);
         assert_eq!(sccs[0], [0, 1, 4]);
         assert_eq!(sccs[1], [2, 3, 7]);
         assert_eq!(sccs[2], [5, 6]);
+    }
+
+    #[test]
+    pub fn scc_singletons() {
+        // {0,1} and {4,5} are scc pairs, 2 is a loop, 3 is a singleton
+        let graph = AdjListMatrix::from(&[
+            (0, 1),
+            (1, 0),
+            (2, 2),
+            // 3 is missing
+            (4, 5),
+            (5, 4),
+        ]);
+
+        {
+            let sccs = graph.strongly_connected_components();
+            assert_eq!(sccs.len(), 4);
+
+            let sccs = sort_sccs(sccs);
+            assert_eq!(sccs[0], [0, 1]);
+            assert_eq!(sccs[1], [2]);
+            assert_eq!(sccs[2], [3]); // 3 is included
+            assert_eq!(sccs[3], [4, 5]);
+        }
+
+        {
+            let sccs = graph.strongly_connected_components_no_singletons();
+            assert_eq!(sccs.len(), 3);
+            let sccs = sort_sccs(sccs);
+
+            assert_eq!(sccs[0], [0, 1]);
+            assert_eq!(sccs[1], [2]);
+            assert_eq!(sccs[2], [4, 5]);
+        }
     }
 
     #[test]
