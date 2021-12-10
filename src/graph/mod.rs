@@ -87,8 +87,7 @@ pub trait AdjacencyList: GraphOrder {
     /// Returns a vector over all edges in the graph
     fn edges(&self) -> Vec<Edge> {
         self.vertices()
-            .map(|u| self.out_neighbors(u).map(move |v| (u, v)))
-            .flatten()
+            .flat_map(|u| self.out_neighbors(u).map(move |v| (u, v)))
             .collect()
     }
 }
