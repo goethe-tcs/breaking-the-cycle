@@ -19,10 +19,16 @@ itertools = "0.10.1"
 fxhash = "0.2.1"
 keyed_priority_queue = "0.4.1"
 glob = "0.3.0"
+digest = { version = "0.10.0", optional = true }
+sha2 = { version = "0.10.0", optional = true }
 
 [features]
 pace-logging=["log", "env_logger"]
+pace-digest = ["digest", "sha2"]
 cli = ["structopt"]
+
+[profile.release]
+debug = true
 
 [[bin]]
 name = "dfvs-cli"
