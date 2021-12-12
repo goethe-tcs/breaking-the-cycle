@@ -1,9 +1,9 @@
+variables:
+  GIT_SUBMODULE_STRATEGY: normal
+
 stages:
   - primary
   - extras
-
-before_script:
-  - git submodule update --init --recursive
 
 cargo-test:
   image: gitlab.ae.cs.uni-frankfurt.de:5001/ae-ci/aeffm-rust-nightly
