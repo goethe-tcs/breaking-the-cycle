@@ -74,7 +74,7 @@ impl<G: AdjacencyList> PaceWrite for G {
         writeln!(writer, "p dfvs {} {}", n, m,)?;
         for u in self.vertices() {
             for v in self.out_neighbors(u) {
-                writeln!(writer, "{} {}", u, v)?;
+                writeln!(writer, "{} {}", u + 1, v + 1)?;
             }
         }
         Ok(())
@@ -160,6 +160,9 @@ fn parse_order(elements: &[&str]) -> Result<usize, std::io::Error> {
 mod tests {
     use super::super::AdjListMatrix;
     use super::*;
+    use crate::random_models::gnp::generate_gnp;
+    use rand::SeedableRng;
+    use rand_pcg::Pcg64Mcg;
 
     #[test]
     fn read_graph() {
@@ -180,5 +183,28 @@ mod tests {
         assert!(graph.has_edge(2, 6));
         assert!(graph.has_edge(3, 4));
         assert!(graph.has_edge(3, 5));
+    }
+
+    #[test]
+    fn test_pace_round_trip() {
+        // redirects the output of try_write_pace into Vec<u8> and then reads from the buffer
+        // with try_read_pace. Test succeeds if the original graph and the read graph match.
+        let mut gen = Pcg64Mcg::seed_from_u64(123);
+        for i in 1..20 {
+            let graph: AdjListMatrix = generate_gnp(&mut gen, 3 * i, 0.1 / i as f64);
+            let mut buffer = vec![];
+            graph.try_write_pace(&mut buffer).unwrap();
+            let read_graph = AdjListMatrix::try_read_pace(buffer.as_slice()).unwrap();
+
+            assert_eq!(graph.number_of_nodes(), read_graph.number_of_nodes());
+            assert_eq!(graph.number_of_edges(), read_graph.number_of_edges());
+
+            let mut org_edges = graph.edges();
+            let mut read_edges = read_graph.edges();
+            org_edges.sort_unstable();
+            read_edges.sort_unstable();
+
+            assert_eq!(org_edges, read_edges);
+        }
     }
 }
