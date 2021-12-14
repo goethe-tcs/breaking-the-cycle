@@ -7,6 +7,7 @@ pub mod hash_graph;
 pub mod io;
 pub mod matrix;
 pub mod network_flow;
+pub mod node_mapper;
 pub mod subgraph;
 pub mod traversal;
 use std::ops::Range;
@@ -17,6 +18,7 @@ pub type Edge = (Node, Node);
 pub use adj_array::AdjArray;
 pub use adj_list_matrix::AdjListMatrix;
 pub use connectivity::Connectivity;
+pub use node_mapper::{Compose, Getter, Inverse, NodeMapper, Setter};
 pub use subgraph::*;
 pub use traversal::*;
 
