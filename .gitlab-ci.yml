@@ -38,7 +38,7 @@ coverage:
   stage: extras
   coverage: '/^\d+.\d+% coverage/'
   script:
-    - cargo tarpaulin -o xml -o html
+    - cargo tarpaulin --all-features -o xml -o html
   artifacts:
     reports:
       cobertura: cobertura.xml
