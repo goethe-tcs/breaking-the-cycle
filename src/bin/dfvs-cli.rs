@@ -74,7 +74,7 @@ fn main() -> std::io::Result<()> {
     #[cfg(feature = "pace-logging")]
     info!("Running in mode {:?}", _mode);
 
-    let writer = DefaultWriter::from_path(opt.output)?;
+    let writer = DefaultWriter::from_path(opt.output, None)?;
 
     let graph: AdjArrayIn = match opt.input {
         Some(path) => {

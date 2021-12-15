@@ -7,6 +7,7 @@ use structopt::StructOpt;
 use rand::SeedableRng;
 use rand_pcg::Pcg64Mcg;
 
+use dfvs::graph::io::FileFormat;
 use dfvs::graph::{io::DefaultWriter, AdjArray, Node};
 use dfvs::random_models::planted_cycles::generate_planted_cycles;
 
@@ -19,6 +20,9 @@ struct Opt {
     /// Output file. `stdout` if not specified.
     #[structopt(parse(from_os_str))]
     output: Option<PathBuf>,
+
+    #[structopt(short, long)]
+    format: Option<FileFormat>,
 
     /// Number of nodes to generate
     #[structopt(short, long)]
@@ -65,7 +69,7 @@ fn main() -> std::io::Result<()> {
         None => Pcg64Mcg::from_entropy(),
     };
 
-    let writer = DefaultWriter::from_path(opt.output)?;
+    let writer = DefaultWriter::from_path(opt.output, opt.format)?;
 
     let (graph, _): (AdjArray, _) = generate_planted_cycles(
         &mut gen,
