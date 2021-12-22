@@ -1,6 +1,7 @@
 use super::*;
 use crate::bitset::BitSet;
 use std::collections::VecDeque;
+use std::marker::PhantomData;
 
 pub trait WithGraphRef<G> {
     fn graph(&self) -> &G;
@@ -14,22 +15,70 @@ pub trait TraversalState {
     }
 }
 
-pub trait NodeSequencer {
+pub trait SequencedItem {
+    fn new_with_predecessor(predecessor: Node, item: Node) -> Self;
+    fn new_without_predecessor(item: Node) -> Self;
+    fn item(&self) -> Node;
+    fn predecessor(&self) -> Option<Node>;
+    fn predecessor_with_item(&self) -> (Option<Node>, Node) {
+        (self.predecessor(), self.item())
+    }
+}
+
+impl SequencedItem for Node {
+    fn new_with_predecessor(_: Node, item: Node) -> Self {
+        item
+    }
+    fn new_without_predecessor(item: Node) -> Self {
+        item
+    }
+    fn item(&self) -> Node {
+        *self
+    }
+    fn predecessor(&self) -> Option<Node> {
+        None
+    }
+}
+
+// We use an ordinary Edge to encode the item and the optional predecessor to safe some
+// memory. We can easily accomplish this by exploiting that the traversal algorithms do
+// not take self-loops. So "None" is encoded by setting the predecessor as the node itself.
+type PredecessorOfNode = Edge;
+impl SequencedItem for PredecessorOfNode {
+    fn new_with_predecessor(predecessor: Node, item: Node) -> Self {
+        (predecessor, item)
+    }
+    fn new_without_predecessor(item: Node) -> Self {
+        (item, item)
+    }
+    fn item(&self) -> Node {
+        self.1
+    }
+    fn predecessor(&self) -> Option<Node> {
+        if self.0 == self.1 {
+            None
+        } else {
+            Some(self.0)
+        }
+    }
+}
+
+pub trait NodeSequencer<T> {
     // would prefer this to be private
-    fn init(u: Node) -> Self;
-    fn push(&mut self, u: Node);
-    fn pop(&mut self) -> Option<Node>;
+    fn init(u: T) -> Self;
+    fn push(&mut self, item: T);
+    fn pop(&mut self) -> Option<T>;
     fn cardinality(&self) -> usize;
 }
 
-impl NodeSequencer for VecDeque<Node> {
-    fn init(u: Node) -> Self {
+impl<T> NodeSequencer<T> for VecDeque<T> {
+    fn init(u: T) -> Self {
         Self::from(vec![u])
     }
-    fn push(&mut self, u: Node) {
+    fn push(&mut self, u: T) {
         self.push_back(u)
     }
-    fn pop(&mut self) -> Option<Node> {
+    fn pop(&mut self) -> Option<T> {
         self.pop_front()
     }
     fn cardinality(&self) -> usize {
@@ -37,14 +86,14 @@ impl NodeSequencer for VecDeque<Node> {
     }
 }
 
-impl NodeSequencer for Vec<Node> {
-    fn init(u: Node) -> Self {
+impl<T> NodeSequencer<T> for Vec<T> {
+    fn init(u: T) -> Self {
         vec![u]
     }
-    fn push(&mut self, u: Node) {
+    fn push(&mut self, u: T) {
         self.push(u)
     }
-    fn pop(&mut self) -> Option<Node> {
+    fn pop(&mut self) -> Option<T> {
         self.pop()
     }
     fn cardinality(&self) -> usize {
@@ -53,46 +102,58 @@ impl NodeSequencer for Vec<Node> {
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////// BFS & DFS
-pub struct TraversalSearch<'a, G: AdjacencyList, S: NodeSequencer> {
+pub struct TraversalSearch<'a, G: AdjacencyList, S: NodeSequencer<I>, I: SequencedItem> {
     // would prefer this to be private
     graph: &'a G,
     visited: BitSet,
     sequencer: S,
     pre_push: Option<Box<dyn FnMut(Node, Node) + 'a>>,
+    _item: PhantomData<I>,
 }
 
-pub type BFS<'a, G> = TraversalSearch<'a, G, VecDeque<Node>>;
-pub type DFS<'a, G> = TraversalSearch<'a, G, Vec<Node>>;
+pub type BFS<'a, G> = TraversalSearch<'a, G, VecDeque<Node>, Node>;
+pub type DFS<'a, G> = TraversalSearch<'a, G, Vec<Node>, Node>;
+pub type BFSWithPredecessor<'a, G> =
+    TraversalSearch<'a, G, VecDeque<PredecessorOfNode>, PredecessorOfNode>;
+pub type DFSWithPredecessor<'a, G> =
+    TraversalSearch<'a, G, Vec<PredecessorOfNode>, PredecessorOfNode>;
 
-impl<'a, G: AdjacencyList, S: NodeSequencer> WithGraphRef<G> for TraversalSearch<'a, G, S> {
+impl<'a, G: AdjacencyList, S: NodeSequencer<I>, I: SequencedItem> WithGraphRef<G>
+    for TraversalSearch<'a, G, S, I>
+{
     fn graph(&self) -> &G {
         self.graph
     }
 }
 
-impl<'a, G: AdjacencyList, S: NodeSequencer> TraversalState for TraversalSearch<'a, G, S> {
+impl<'a, G: AdjacencyList, S: NodeSequencer<I>, I: SequencedItem> TraversalState
+    for TraversalSearch<'a, G, S, I>
+{
     fn visited(&self) -> &BitSet {
         &self.visited
     }
 }
 
-impl<'a, G: AdjacencyList, S: NodeSequencer> Iterator for TraversalSearch<'a, G, S> {
-    type Item = Node;
+impl<'a, G: AdjacencyList, S: NodeSequencer<I>, I: SequencedItem> Iterator
+    for TraversalSearch<'a, G, S, I>
+{
+    type Item = I;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let u = self.sequencer.pop()?;
+        let popped = self.sequencer.pop()?;
+        let u = popped.item();
 
         for v in self.graph.out_neighbors(u) {
             if !self.visited[v as usize] {
                 if let Some(f) = &mut self.pre_push {
                     f(u, v);
                 }
-                self.sequencer.push(v);
+                self.sequencer.push(I::new_with_predecessor(u, v));
                 self.visited.set_bit(v as usize);
             }
         }
 
-        Some(u)
+        Some(popped)
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
@@ -103,15 +164,16 @@ impl<'a, G: AdjacencyList, S: NodeSequencer> Iterator for TraversalSearch<'a, G,
     }
 }
 
-impl<'a, G: AdjacencyList, S: NodeSequencer> TraversalSearch<'a, G, S> {
+impl<'a, G: AdjacencyList, S: NodeSequencer<I>, I: SequencedItem> TraversalSearch<'a, G, S, I> {
     pub fn new(graph: &'a G, start: Node) -> Self {
         let mut visited = BitSet::new(graph.len());
         visited.set_bit(start as usize);
         Self {
             graph,
             visited,
-            sequencer: S::init(start),
+            sequencer: S::init(I::new_without_predecessor(start)),
             pre_push: None,
+            _item: PhantomData,
         }
     }
 
@@ -124,7 +186,7 @@ impl<'a, G: AdjacencyList, S: NodeSequencer> TraversalSearch<'a, G, S> {
             None => false,
             Some(x) => {
                 self.visited.set_bit(x);
-                self.sequencer.push(x as Node);
+                self.sequencer.push(I::new_without_predecessor(x as Node));
                 true
             }
         }
@@ -223,9 +285,41 @@ pub trait RankFromOrder<'a, G: 'a + AdjacencyList>:
     }
 }
 
-impl<'a, G: AdjacencyList, S: NodeSequencer> RankFromOrder<'a, G> for TraversalSearch<'a, G, S> {}
+impl<'a, G: AdjacencyList, S: NodeSequencer<Node>> RankFromOrder<'a, G>
+    for TraversalSearch<'a, G, S, Node>
+{
+}
 
 impl<'a, G: AdjacencyList> RankFromOrder<'a, G> for TopoSearch<'a, G> {}
+
+pub trait TraversalTree<'a, G: 'a + AdjacencyList>:
+    WithGraphRef<G> + Iterator<Item = PredecessorOfNode> + Sized
+{
+    /// Consumes the underlying graph traversal iterator and records the implied tree structure
+    /// into an parent-array, i.e. [result\[i\]] stores the predecessor of node [i]. It is the
+    /// calling code's responsibility to ensure that the slice [tree] is sufficiently large to
+    /// store all reachable nodes (i.e. in general of size at least [graph.len()]).
+    fn parent_array_into(&mut self, tree: &mut [Node]) {
+        for pred_with_item in self.by_ref() {
+            if let Some(p) = pred_with_item.predecessor() {
+                tree[pred_with_item.item() as usize] = p;
+            }
+        }
+    }
+
+    /// Calls allocates a vector of size [graph.len()] and calls [self.parent_array_into] on it.
+    /// Unvisited nodes have themselves as parents.
+    fn parent_array(&mut self) -> Vec<Node> {
+        let mut tree: Vec<_> = self.graph().vertices_range().collect();
+        self.parent_array_into(&mut tree);
+        tree
+    }
+}
+
+impl<'a, G: AdjacencyList, S: NodeSequencer<PredecessorOfNode>> TraversalTree<'a, G>
+    for TraversalSearch<'a, G, S, PredecessorOfNode>
+{
+}
 
 /// Offers graph traversal algorithms as methods of the graph representation
 pub trait Traversal: AdjacencyList + Sized {
@@ -237,6 +331,18 @@ pub trait Traversal: AdjacencyList + Sized {
     /// Returns an iterator traversing nodes reachable from `start` in depth-first-search order
     fn dfs(&self, start: Node) -> DFS<Self> {
         DFS::new(self, start)
+    }
+
+    /// Returns an iterator traversing nodes reachable from `start` in breadth-first-search order
+    /// The items returned are the edges taken
+    fn bfs_with_predecessor(&self, start: Node) -> BFSWithPredecessor<Self> {
+        BFSWithPredecessor::new(self, start)
+    }
+
+    /// Returns an iterator traversing nodes reachable from `start` in depth-first-search order
+    /// The items returned are the edges taken
+    fn dfs_with_predecessor(&self, start: Node) -> DFSWithPredecessor<Self> {
+        DFSWithPredecessor::new(self, start)
     }
 
     /// Returns an iterator traversing nodes in acyclic order. The iterator stops prematurely
@@ -282,6 +388,35 @@ pub mod tests {
     }
 
     #[test]
+    fn test_bfs_with_predecessor() {
+        let graph = AdjListMatrix::from(&[(1, 2), (1, 0), (4, 3), (0, 5), (2, 4), (5, 4)]);
+
+        let mut edges: Vec<_> = graph
+            .bfs_with_predecessor(1)
+            .map(|x| x.predecessor_with_item())
+            .collect();
+        edges.sort();
+        assert_eq!(
+            edges,
+            vec![
+                (None, 1),
+                (Some(0), 5),
+                (Some(1), 0),
+                (Some(1), 2),
+                (Some(2), 4),
+                (Some(4), 3)
+            ]
+        );
+    }
+
+    #[test]
+    fn test_bfs_tree() {
+        let graph = AdjListMatrix::from(&[(1, 2), (1, 0), (4, 3), (0, 5), (2, 4), (5, 4)]);
+        let tree = graph.bfs_with_predecessor(1).parent_array();
+        assert_eq!(tree, vec![1, 1, 1, 4, 2, 0]);
+    }
+
+    #[test]
     fn test_dfs_order() {
         //  / 2
         // 1         4 - 3
@@ -305,6 +440,35 @@ pub mod tests {
             let order: Vec<Node> = graph.dfs(5).collect();
             assert_eq!(order, [5, 4, 3]);
         }
+    }
+
+    #[test]
+    fn test_dfs_tree() {
+        let graph = AdjListMatrix::from(&[(1, 2), (1, 0), (4, 3), (0, 5), (5, 4)]);
+        let tree = graph.dfs_with_predecessor(1).parent_array();
+        assert_eq!(tree, vec![1, 1, 1, 4, 5, 0]);
+    }
+
+    #[test]
+    fn test_dfs_with_predecessor() {
+        let graph = AdjListMatrix::from(&[(1, 2), (1, 0), (4, 3), (0, 5), (5, 4)]);
+
+        let mut edges: Vec<_> = graph
+            .dfs_with_predecessor(1)
+            .map(|x| x.predecessor_with_item())
+            .collect();
+        edges.sort();
+        assert_eq!(
+            edges,
+            vec![
+                (None, 1),
+                (Some(0), 5),
+                (Some(1), 0),
+                (Some(1), 2),
+                (Some(4), 3),
+                (Some(5), 4)
+            ]
+        );
     }
 
     #[test]
