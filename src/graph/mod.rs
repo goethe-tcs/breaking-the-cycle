@@ -20,6 +20,11 @@ pub use connectivity::Connectivity;
 pub use subgraph::*;
 pub use traversal::*;
 
+#[cfg(feature = "pace-digest")]
+pub mod digest;
+#[cfg(feature = "pace-digest")]
+pub use self::digest::GraphDigest;
+
 /// Provides getters pertaining to the size of a graph
 pub trait GraphOrder {
     type VertexIter<'a>: Iterator<Item = Node>
