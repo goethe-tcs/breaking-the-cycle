@@ -1,46 +1,5 @@
 use super::*;
 use crate::bitset::BitSet;
-use std::collections::HashMap;
-
-pub trait NodeMapperWriter {
-    fn with_capacity(n: Node) -> Self;
-    fn map_node_to(&mut self, old: Node, new: Node);
-}
-
-pub trait NodeMapperGetter {
-    fn get(&self, old: Node) -> Option<Node>;
-}
-
-/// This Node Mapper cannot be read from, and all insertions are dumped.
-/// It can be used to optimize a way the cost of producing a mapping if it is not used
-pub struct WriteOnlyNodeMapper {}
-impl NodeMapperWriter for WriteOnlyNodeMapper {
-    fn with_capacity(_: Node) -> Self {
-        Self {}
-    }
-    fn map_node_to(&mut self, _old: Node, _new: Node) {}
-}
-
-pub struct NodeMapper {
-    mapping: HashMap<Node, Node>,
-}
-
-impl NodeMapperWriter for NodeMapper {
-    fn with_capacity(n: Node) -> Self {
-        Self {
-            mapping: HashMap::with_capacity(n as usize),
-        }
-    }
-    fn map_node_to(&mut self, old: Node, new: Node) {
-        self.mapping.insert(old, new);
-    }
-}
-
-impl NodeMapperGetter for NodeMapper {
-    fn get(&self, old: Node) -> Option<Node> {
-        Some(*self.mapping.get(&old)?)
-    }
-}
 
 pub trait Concat {
     /// Takes a list of graphs and outputs a single graph containing disjoint copies of them all
@@ -82,7 +41,7 @@ pub trait InducedSubgraph: Sized {
     /// Returns a new graph instance containing all nodes i with vertices\[i\] == true
     fn vertex_induced_as<M, Gout>(&self, vertices: &BitSet) -> (Gout, M)
     where
-        M: NodeMapperGetter + NodeMapperWriter,
+        M: node_mapper::Getter + node_mapper::Setter,
         Gout: GraphNew + GraphEdgeEditing;
 
     fn vertex_induced(&self, vertices: &BitSet) -> (Self, NodeMapper)
@@ -96,7 +55,7 @@ pub trait InducedSubgraph: Sized {
 impl<G: GraphNew + GraphEdgeEditing + AdjacencyList + Sized> InducedSubgraph for G {
     fn vertex_induced_as<M, Gout>(&self, vertices: &BitSet) -> (Gout, M)
     where
-        M: NodeMapperGetter + NodeMapperWriter,
+        M: node_mapper::Getter + node_mapper::Setter,
         Gout: GraphNew + GraphEdgeEditing,
     {
         assert_eq!(vertices.len(), self.len());
@@ -110,8 +69,8 @@ impl<G: GraphNew + GraphEdgeEditing + AdjacencyList + Sized> InducedSubgraph for
         }
 
         for u in self.vertices() {
-            if let Some(new_u) = mapping.get(u) {
-                for new_v in self.out_neighbors(u).filter_map(|v| mapping.get(v)) {
+            if let Some(new_u) = mapping.new_id_of(u) {
+                for new_v in self.out_neighbors(u).filter_map(|v| mapping.new_id_of(v)) {
                     result.add_edge(new_u, new_v);
                 }
             }
@@ -154,13 +113,13 @@ pub mod tests {
         assert_eq!(ind.len(), bs.cardinality());
         assert!(g
             .vertices()
-            .all(|u| { mapping.get(u).is_some() == bs[u as usize] }));
+            .all(|u| { mapping.new_id_of(u).is_some() == bs[u as usize] }));
 
-        let v_iso = mapping.get(5 as Node).unwrap();
+        let v_iso = mapping.new_id_of(5 as Node).unwrap();
         assert_eq!(ind.out_degree(v_iso), 0);
         assert_eq!(ind.in_degree(v_iso), 0);
 
-        for u in [0, 1, 3].map(|u| mapping.get(u as Node).unwrap()) {
+        for u in [0, 1, 3].map(|u| mapping.new_id_of(u as Node).unwrap()) {
             assert_eq!(ind.in_degree(u), 3);
             assert_eq!(ind.out_degree(u), 3);
         }
