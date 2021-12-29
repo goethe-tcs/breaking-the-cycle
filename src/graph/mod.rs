@@ -9,6 +9,8 @@ pub mod matrix;
 pub mod network_flow;
 pub mod subgraph;
 pub mod traversal;
+pub mod unique_node_stack;
+
 use std::ops::Range;
 
 pub type Node = u32;
@@ -19,6 +21,7 @@ pub use adj_list_matrix::AdjListMatrix;
 pub use connectivity::Connectivity;
 pub use subgraph::*;
 pub use traversal::*;
+pub use unique_node_stack::UniqueNodeStack;
 
 #[cfg(feature = "pace-digest")]
 pub mod digest;
