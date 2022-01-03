@@ -1,6 +1,5 @@
 use super::traversal::*;
 use super::*;
-use crate::bitset::BitSet;
 use std::cmp::min;
 
 pub trait Connectivity: AdjacencyList + Traversal + Sized {
@@ -25,10 +24,9 @@ impl<T: AdjacencyList + Traversal + Sized> Connectivity for T {}
 pub struct StronglyConnected<'a, T: AdjacencyList> {
     graph: &'a T,
     idx: Node,
-    stack: Vec<Node>,
+    stack: UniqueNodeStack,
     indices: Vec<Option<Node>>,
     low_links: Vec<Node>,
-    on_stack: BitSet,
     components: Vec<Vec<Node>>,
     include_singletons: bool,
 }
@@ -38,10 +36,9 @@ impl<'a, T: AdjacencyList> StronglyConnected<'a, T> {
         Self {
             graph,
             idx: 0,
-            stack: vec![],
+            stack: UniqueNodeStack::new(graph.len()),
             indices: vec![None; graph.len()],
             low_links: vec![0; graph.len()],
-            on_stack: BitSet::new(graph.len()),
             components: vec![],
             include_singletons: true,
         }
@@ -69,7 +66,7 @@ impl<'a, T: AdjacencyList> StronglyConnected<'a, T> {
         self.idx += 1;
 
         let initial_stack_len = self.stack.len();
-        self.push_stack(v);
+        self.stack.try_push(v);
 
         let mut self_loop = false;
 
@@ -80,7 +77,7 @@ impl<'a, T: AdjacencyList> StronglyConnected<'a, T> {
                 self.sc(w);
                 self.low_links[v as usize] =
                     min(self.low_links[v as usize], self.low_links[w as usize]);
-            } else if self.on_stack[w as usize] {
+            } else if self.stack.contains(w) {
                 self.low_links[v as usize] = min(
                     self.low_links[v as usize],
                     self.indices[w as usize].unwrap(),
@@ -89,17 +86,16 @@ impl<'a, T: AdjacencyList> StronglyConnected<'a, T> {
         }
 
         if self.low_links[v as usize] == self.indices[v as usize].unwrap() {
-            if !self.include_singletons && *self.stack.last().unwrap() == v && !self_loop {
+            if !self.include_singletons && self.stack.peek().unwrap() == v && !self_loop {
                 // skip producing component descriptor, since we have a singleton node
                 // but we need to undo
-                self.pop_stack();
+                self.stack.pop();
             } else {
                 // this component goes into the result, so produce a descriptor and clean-up stack
                 // while doing so
                 let mut component = Vec::with_capacity(self.stack.len() - initial_stack_len);
                 loop {
-                    let w = self.pop_stack().unwrap();
-                    self.on_stack.unset_bit(w as usize);
+                    let w = self.stack.pop().unwrap();
                     component.push(w);
                     if w == v {
                         break;
@@ -108,17 +104,6 @@ impl<'a, T: AdjacencyList> StronglyConnected<'a, T> {
                 self.components.push(component);
             }
         }
-    }
-
-    fn push_stack(&mut self, v: Node) {
-        self.stack.push(v);
-        self.on_stack.set_bit(v as usize);
-    }
-
-    fn pop_stack(&mut self) -> Option<Node> {
-        let w = self.stack.pop()?;
-        self.on_stack.unset_bit(w as usize);
-        Some(w)
     }
 }
 

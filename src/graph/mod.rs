@@ -7,8 +7,11 @@ pub mod hash_graph;
 pub mod io;
 pub mod matrix;
 pub mod network_flow;
+pub mod node_mapper;
 pub mod subgraph;
 pub mod traversal;
+pub mod unique_node_stack;
+
 use std::ops::Range;
 
 pub type Node = u32;
@@ -17,8 +20,15 @@ pub type Edge = (Node, Node);
 pub use adj_array::AdjArray;
 pub use adj_list_matrix::AdjListMatrix;
 pub use connectivity::Connectivity;
+pub use node_mapper::{Compose, Getter, Inverse, NodeMapper, Setter};
 pub use subgraph::*;
 pub use traversal::*;
+pub use unique_node_stack::UniqueNodeStack;
+
+#[cfg(feature = "pace-digest")]
+pub mod digest;
+#[cfg(feature = "pace-digest")]
+pub use self::digest::GraphDigest;
 
 /// Provides getters pertaining to the size of a graph
 pub trait GraphOrder {
