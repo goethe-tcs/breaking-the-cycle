@@ -1,5 +1,6 @@
 pub mod adj_array;
 pub mod adj_list_matrix;
+pub mod complete_subgraphs;
 pub mod connectivity;
 pub mod generators;
 pub(super) mod graph_macros;
@@ -19,6 +20,7 @@ pub type Edge = (Node, Node);
 
 pub use adj_array::AdjArray;
 pub use adj_list_matrix::AdjListMatrix;
+pub use complete_subgraphs::CompleteSubgraphEnumerator;
 pub use connectivity::Connectivity;
 pub use node_mapper::{Compose, Getter, Inverse, NodeMapper, Setter};
 pub use subgraph::*;
