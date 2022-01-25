@@ -1,5 +1,5 @@
 use crate::bitset::BitSet;
-use crate::graph::{AdjacencyList, GraphOrder, Node, Traversal, TraversalState};
+use crate::graph::{AdjacencyList, GraphOrder, Node, Traversal, TraversalState, TraversalTree};
 
 pub struct EdmondsKarp {
     residual_network: ResidualBitMatrix,
@@ -207,22 +207,11 @@ impl EdmondsKarp {
 
     fn bfs(&mut self) -> bool {
         let s = *self.residual_network.source();
-        let t = *self.residual_network.target() as usize;
-        let predecessor = &mut self.predecessor;
-        let f = Box::new(|u, v| {
-            predecessor[v as usize] = u;
-        });
-        let mut bfs = self.residual_network.bfs(s).register_pre_push(f);
-        loop {
-            match bfs.next() {
-                None => {
-                    return bfs.visited()[t];
-                }
-                Some(_) => {
-                    continue;
-                }
-            }
-        }
+        let t = *self.residual_network.target();
+
+        let mut bfs = self.residual_network.bfs_with_predecessor(s);
+        bfs.parent_array_into(self.predecessor.as_mut_slice());
+        bfs.did_visit_node(t)
     }
 
     /// Finds the number of edge disjoint paths from s to t
