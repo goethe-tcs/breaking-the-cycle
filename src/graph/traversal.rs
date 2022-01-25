@@ -107,7 +107,6 @@ pub struct TraversalSearch<'a, G: AdjacencyList, S: NodeSequencer<I>, I: Sequenc
     graph: &'a G,
     visited: BitSet,
     sequencer: S,
-    pre_push: Option<Box<dyn FnMut(Node, Node) + 'a>>,
     _item: PhantomData<I>,
 }
 
@@ -145,9 +144,6 @@ impl<'a, G: AdjacencyList, S: NodeSequencer<I>, I: SequencedItem> Iterator
 
         for v in self.graph.out_neighbors(u) {
             if !self.visited[v as usize] {
-                if let Some(f) = &mut self.pre_push {
-                    f(u, v);
-                }
                 self.sequencer.push(I::new_with_predecessor(u, v));
                 self.visited.set_bit(v as usize);
             }
@@ -172,7 +168,6 @@ impl<'a, G: AdjacencyList, S: NodeSequencer<I>, I: SequencedItem> TraversalSearc
             graph,
             visited,
             sequencer: S::init(I::new_without_predecessor(start)),
-            pre_push: None,
             _item: PhantomData,
         }
     }
@@ -190,14 +185,6 @@ impl<'a, G: AdjacencyList, S: NodeSequencer<I>, I: SequencedItem> TraversalSearc
                 true
             }
         }
-    }
-
-    // Registers a boxed dynamic Trait Object implementing Fn(Node, Node)->().
-    // It is called every time a new vertex is pushed on the sequencer.
-    // The first argument is the vertex popped from the sequencer, and the second the vertex being pushed.
-    pub fn register_pre_push(mut self, f: Box<dyn FnMut(Node, Node) + 'a>) -> Self {
-        self.pre_push = Some(f);
-        self
     }
 }
 
