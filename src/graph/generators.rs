@@ -43,7 +43,7 @@ impl<G: GraphEdgeEditing> GeneratorSubstructures for G {
                     continue;
                 }
 
-                self.try_add_edge(u as Node, v as Node);
+                self.add_edge(u as Node, v as Node);
             }
         }
     }
