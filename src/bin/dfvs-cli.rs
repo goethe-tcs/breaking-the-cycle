@@ -2,7 +2,6 @@
 
 use dfvs::graph::adj_array::AdjArrayIn;
 use dfvs::graph::io::{DefaultWriter, PaceRead};
-#[cfg(feature = "log")]
 use log::info;
 use std::convert::TryFrom;
 use std::fs::File;
@@ -65,13 +64,10 @@ impl TryFrom<&str> for Mode {
 }
 
 fn main() -> std::io::Result<()> {
-    #[cfg(feature = "pace-logging")]
     dfvs::log::build_pace_logger();
 
     let opt = Opt::from_args();
     let _mode: Mode = Mode::try_from(opt.mode.as_str()).expect("Failed parsing 'mode' flag: ");
-
-    #[cfg(feature = "pace-logging")]
     info!("Running in mode {:?}", _mode);
 
     let writer = DefaultWriter::from_path(opt.output, None)?;
