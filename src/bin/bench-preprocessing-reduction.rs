@@ -9,7 +9,6 @@ use std::io::BufReader;
 use std::time::Instant;
 
 fn main() -> std::io::Result<()> {
-    #[cfg(feature = "pace-logging")]
     dfvs::log::build_pace_logger();
 
     for filename in glob("data/netrep/*/*").unwrap().filter_map(Result::ok) {
