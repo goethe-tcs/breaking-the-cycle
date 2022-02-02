@@ -56,7 +56,7 @@ pub fn random_mst<G: GraphNew + GraphEdgeEditing, R: Rng>(rng: &mut R, n: usize)
     if n == 1 {
         return (G::new(1), 0);
     }
-    assert!(n > 1);
+    debug_assert!(n > 1);
 
     let mut mst = G::new(n);
     let mut connected = BitSet::new(n);

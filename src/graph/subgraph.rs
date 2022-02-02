@@ -58,7 +58,7 @@ impl<G: GraphNew + GraphEdgeEditing + AdjacencyList + Sized> InducedSubgraph for
         M: node_mapper::Getter + node_mapper::Setter,
         Gout: GraphNew + GraphEdgeEditing,
     {
-        assert_eq!(vertices.len(), self.len());
+        debug_assert_eq!(vertices.len(), self.len());
         let new_n = vertices.cardinality();
         let mut result = Gout::new(new_n);
 

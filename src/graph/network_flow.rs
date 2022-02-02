@@ -105,7 +105,7 @@ impl ResidualNetwork for ResidualBitMatrix {
     fn reverse(&mut self, u: Node, v: Node) {
         let u = u as usize;
         let v = v as usize;
-        assert!(self.capacity[u][v]);
+        debug_assert!(self.capacity[u][v]);
         self.capacity[u].unset_bit(v);
         self.capacity[v].set_bit(u);
     }
