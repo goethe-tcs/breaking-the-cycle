@@ -158,4 +158,14 @@ pub trait GraphEdgeEditing: GraphNew {
 
     /// Removes all edges out of node u, i.e. post-condition the out-degree is 0
     fn remove_edges_out_of_node(&mut self, u: Node);
+
+    /// Removes all edges of the passed in nodes
+    fn remove_edges_of_nodes<'a>(&mut self, nodes: impl IntoIterator<Item = &'a Node>)
+    where
+        Self: AdjacencyListIn,
+    {
+        for node in nodes {
+            self.remove_edges_at_node(*node);
+        }
+    }
 }

@@ -1,7 +1,7 @@
 use super::*;
 use std::fs::{File, OpenOptions};
-use std::io::{stdout, BufRead, ErrorKind, Write};
-use std::path::PathBuf;
+use std::io::{stdout, BufRead, BufReader, ErrorKind, Write};
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 pub use dot::DotWrite;
@@ -254,6 +254,25 @@ impl FromStr for FileFormat {
         }
     }
 }
+
+pub trait GraphRead: Sized + PaceRead + MetisRead {
+    /// Tries to read the graph file at the passed in path
+    fn try_read_graph(format: FileFormat, path: impl AsRef<Path>) -> std::io::Result<Self> {
+        let file = File::open(path)?;
+        let buf_reader = BufReader::new(file);
+
+        match format {
+            FileFormat::Metis => Self::try_read_metis(buf_reader),
+            FileFormat::Pace => Self::try_read_pace(buf_reader),
+            FileFormat::Dot => Err(std::io::Error::new(
+                ErrorKind::InvalidInput,
+                "Can't read dot files",
+            )),
+        }
+    }
+}
+
+impl<G: PaceRead + MetisRead> GraphRead for G {}
 
 /// Intended for binaries to output a resulting graph
 pub struct DefaultWriter {
