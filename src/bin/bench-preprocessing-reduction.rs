@@ -1,4 +1,3 @@
-use dfvs::bitset::BitSet;
 use dfvs::graph::adj_array::AdjArrayIn;
 use dfvs::graph::io::PaceRead;
 use dfvs::graph::*;
@@ -27,14 +26,7 @@ fn main() -> std::io::Result<()> {
         state.apply_rules_exhaustively();
 
         // remove all disconnected vertices
-        let out_graph = {
-            let graph = state.graph();
-            let bs = BitSet::new_all_unset_but(
-                graph.len(),
-                graph.vertices().filter(|&u| graph.total_degree(u) > 0),
-            );
-            graph.vertex_induced(&bs).0
-        };
+        let out_graph = state.graph().remove_disconnected_verts().0;
 
         // report performance
         println!(

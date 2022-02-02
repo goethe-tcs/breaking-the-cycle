@@ -3,7 +3,7 @@
 set -euov pipefail
 
 cd "$(dirname "$0")"
-FEATURES="cli"
+FEATURES="cli,tempfile"
 
 if ! cargo +nightly fmt --check; then
   echo "Run 'cargo fmt' to auto-format the sources or apply previous changes manually <--------------------------------------"
