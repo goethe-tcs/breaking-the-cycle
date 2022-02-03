@@ -283,17 +283,12 @@ pub struct DefaultWriter {
 impl DefaultWriter {
     /// If output is None, we will try to write to stdout, otherwise we will try to open the file
     pub fn from_path(output: Option<PathBuf>, format: Option<FileFormat>) -> std::io::Result<Self> {
-        let detected_format = output
-            .as_ref()
-            .map(|p| {
-                p.extension().map(|ext| {
-                    ext.to_str()
-                        .map(|ext_str| FileFormat::from_str(ext_str).ok())
-                })
+        let detected_format = output.as_ref().and_then(|p| {
+            p.extension().and_then(|ext| {
+                ext.to_str()
+                    .and_then(|ext_str| FileFormat::from_str(ext_str).ok())
             })
-            .flatten()
-            .flatten()
-            .flatten();
+        });
 
         let used_format = match format {
             Some(f) => f,
