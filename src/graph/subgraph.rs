@@ -50,6 +50,17 @@ pub trait InducedSubgraph: Sized {
     {
         self.vertex_induced_as(vertices)
     }
+
+    /// Creates a subgraph where all nodes without edges are removed
+    fn remove_disconnected_verts(&self) -> (Self, NodeMapper)
+    where
+        Self: GraphNew + GraphEdgeEditing + AdjacencyList + AdjacencyListIn,
+    {
+        self.vertex_induced(&BitSet::new_all_unset_but(
+            self.len(),
+            self.vertices().filter(|&u| self.total_degree(u) > 0),
+        ))
+    }
 }
 
 impl<G: GraphNew + GraphEdgeEditing + AdjacencyList + Sized> InducedSubgraph for G {
@@ -58,7 +69,7 @@ impl<G: GraphNew + GraphEdgeEditing + AdjacencyList + Sized> InducedSubgraph for
         M: node_mapper::Getter + node_mapper::Setter,
         Gout: GraphNew + GraphEdgeEditing,
     {
-        assert_eq!(vertices.len(), self.len());
+        debug_assert_eq!(vertices.len(), self.len());
         let new_n = vertices.cardinality();
         let mut result = Gout::new(new_n);
 

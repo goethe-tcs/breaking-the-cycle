@@ -22,9 +22,9 @@ where
         + Sized,
     R: Rng,
 {
-    assert!(avg_deg < n as f64 / 2.0);
-    assert!(n > num_cycles * cycle_len + k);
-    assert!(num_cycles >= k);
+    debug_assert!(avg_deg < n as f64 / 2.0);
+    debug_assert!(n > num_cycles * cycle_len + k);
+    debug_assert!(num_cycles >= k);
 
     let nodes_in_cycles = num_cycles * cycle_len;
     let nodes_in_mst = n - nodes_in_cycles;
@@ -79,7 +79,7 @@ where
         if u == v {
             continue;
         }
-        assert_ne!(ranks[u as usize], ranks[v as usize]);
+        debug_assert_ne!(ranks[u as usize], ranks[v as usize]);
 
         if ranks[u as usize] < ranks[v as usize] {
             if result_g.has_edge(u, v) {

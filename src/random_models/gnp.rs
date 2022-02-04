@@ -13,8 +13,8 @@ pub struct BernoulliSamplingRange<'a, R: Rng> {
 
 impl<'a, R: Rng> BernoulliSamplingRange<'a, R> {
     pub fn new(rng: &'a mut R, begin: i64, end: i64, prob: f64) -> Self {
-        assert!(begin <= end);
-        assert!((0.0..=1.0).contains(&prob));
+        debug_assert!(begin <= end);
+        debug_assert!((0.0..=1.0).contains(&prob));
         Self {
             rng,
             current: begin - 1,

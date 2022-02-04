@@ -71,7 +71,7 @@ impl AdjacencyListIn for AdjMatrixIn {
 
 impl GraphEdgeEditing for AdjMatrix {
     fn add_edge(&mut self, u: Node, v: Node) {
-        assert!(!self.out_matrix[u as usize][v as usize]);
+        debug_assert!(!self.out_matrix[u as usize][v as usize]);
         self.out_matrix[u as usize].set_bit(v as usize);
         self.m += 1;
     }

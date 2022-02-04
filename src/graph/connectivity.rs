@@ -51,7 +51,7 @@ impl<'a, T: AdjacencyList> StronglyConnected<'a, T> {
             }
         }
 
-        assert!(self.stack.is_empty());
+        debug_assert!(self.stack.is_empty());
 
         self.components
     }
