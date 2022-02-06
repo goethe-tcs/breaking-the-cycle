@@ -132,9 +132,7 @@ mod tests {
         {
             let mut g = AdjListMatrix::new(6);
             g.connect_path([0, 3, 1, 4]);
-            let mut edges = g.edges();
-            edges.sort();
-            assert_eq!(g.edges(), vec![(0, 3), (1, 4), (3, 1)]);
+            assert_eq!(g.edges_vec(), vec![(0, 3), (1, 4), (3, 1)]);
         }
     }
 
@@ -156,9 +154,7 @@ mod tests {
         {
             let mut g = AdjListMatrix::new(6);
             g.connect_cycle([0, 3, 1, 4]);
-            let mut edges = g.edges();
-            edges.sort();
-            assert_eq!(g.edges(), vec![(0, 3), (1, 4), (3, 1), (4, 0)]);
+            assert_eq!(g.edges_vec(), vec![(0, 3), (1, 4), (3, 1), (4, 0)]);
         }
     }
 

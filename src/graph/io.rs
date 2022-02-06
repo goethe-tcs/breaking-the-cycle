@@ -408,10 +408,7 @@ mod tests {
                 };
 
                 assert_eq!(graph.number_of_nodes(), read_graph.number_of_nodes());
-
-                let mut read_edges = read_graph.edges();
-                read_edges.sort();
-                assert_eq!(org_edges, read_edges);
+                assert_eq!(org_edges, read_graph.edges_vec());
             }
         }
     }
@@ -495,13 +492,7 @@ mod tests {
 
                     assert_eq!(graph.number_of_nodes(), read_graph.number_of_nodes());
                     assert_eq!(graph.number_of_edges(), read_graph.number_of_edges());
-
-                    let mut org_edges = graph.edges();
-                    let mut read_edges = read_graph.edges();
-                    org_edges.sort_unstable();
-                    read_edges.sort_unstable();
-
-                    assert_eq!(org_edges, read_edges);
+                    assert_eq!(graph.edges_vec(), read_graph.edges_vec());
                 }
             }
         };

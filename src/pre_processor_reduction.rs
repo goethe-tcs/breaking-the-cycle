@@ -218,7 +218,7 @@ mod test {
         let mut test_pre_process = create_test_pre_processor();
         test_pre_process.apply_rule_1();
 
-        assert_eq!(test_pre_process.graph.edges().len(), 4);
+        assert_eq!(test_pre_process.graph.number_of_edges(), 4);
         assert_eq!(test_pre_process.in_fvs.len(), 2);
     }
 
@@ -226,7 +226,7 @@ mod test {
     fn test_rule_3() {
         let mut test_pre_process = create_test_pre_processor();
         test_pre_process.apply_rule_3();
-        assert_eq!(test_pre_process.graph.edges().len(), 8);
+        assert_eq!(test_pre_process.graph.number_of_edges(), 8);
         assert_eq!(test_pre_process.graph.out_degree(5), 0);
     }
 
@@ -235,7 +235,7 @@ mod test {
         let mut test_pre_process = create_test_pre_processor_2();
         test_pre_process.apply_rule_4();
         assert_eq!(test_pre_process.in_fvs.len(), 3);
-        assert_eq!(test_pre_process.graph.edges().len(), 0);
+        assert_eq!(test_pre_process.graph.number_of_edges(), 0);
     }
 
     #[test]
@@ -265,7 +265,7 @@ mod test {
 
         test_pre_process.apply_rule_4();
         assert_eq!(test_pre_process.in_fvs.len(), 0);
-        assert_eq!(test_pre_process.graph.edges().len(), 10);
+        assert_eq!(test_pre_process.graph.number_of_edges(), 10);
     }
     #[test]
     fn test_use_rules_exhaustively() {

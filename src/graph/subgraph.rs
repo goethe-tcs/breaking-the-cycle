@@ -106,7 +106,10 @@ pub mod tests {
         let cc = AdjListMatrixIn::concat([&g1, &g_empty, &g1, &g2]);
         assert_eq!(cc.number_of_nodes(), 11);
         assert_eq!(cc.number_of_edges(), 5);
-        assert_eq!(cc.edges(), vec![(0, 1), (2, 3), (4, 5), (6, 7), (8, 10)]);
+        assert_eq!(
+            cc.edges_vec(),
+            vec![(0, 1), (2, 3), (4, 5), (6, 7), (8, 10)]
+        );
     }
 
     #[test]

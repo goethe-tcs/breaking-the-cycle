@@ -34,9 +34,7 @@ impl<G: AdjacencyList> GraphDigest for G {
         hasher.update(&buffer);
 
         // then append a sorted edge list
-        let mut edges = self.edges();
-        edges.sort_unstable();
-        for (u, v) in edges {
+        for (u, v) in self.edges_iter() {
             encode(&mut buffer[0..], u);
             encode(&mut buffer[4..], v);
             hasher.update(&buffer);

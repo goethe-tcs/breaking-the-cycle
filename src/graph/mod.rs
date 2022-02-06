@@ -12,8 +12,6 @@ pub mod subgraph;
 pub mod traversal;
 pub mod unique_node_stack;
 
-use std::ops::Range;
-
 pub type Node = u32;
 pub type Edge = (Node, Node);
 
@@ -29,6 +27,8 @@ pub use unique_node_stack::UniqueNodeStack;
 pub mod digest;
 #[cfg(feature = "pace-digest")]
 pub use self::digest::GraphDigest;
+
+use std::ops::Range;
 
 /// Provides getters pertaining to the size of a graph
 pub trait GraphOrder {
@@ -82,7 +82,7 @@ pub trait AdjacencyListIn: AdjacencyList {
 }
 
 /// Provides basic read-only functionality associated with an adjacency list
-pub trait AdjacencyList: GraphOrder {
+pub trait AdjacencyList: GraphOrder + Sized {
     type Iter<'a>: Iterator<Item = Node>
     where
         Self: 'a;
@@ -94,11 +94,52 @@ pub trait AdjacencyList: GraphOrder {
     /// Returns the number of outgoing edges from *u*
     fn out_degree(&self, u: Node) -> Node;
 
-    /// Returns a vector over all edges in the graph
-    fn edges(&self) -> Vec<Edge> {
-        self.vertices()
-            .flat_map(|u| self.out_neighbors(u).map(move |v| (u, v)))
-            .collect()
+    /// Returns an iterator over all edges in the graph in increasing order.
+    fn edges_iter(&self) -> EdgeIterator<Self> {
+        let mut vertices: Vec<Node> = self.vertices().collect();
+        vertices.sort_by(|a, b| b.cmp(a)); // reverse order since we pop from the back
+        EdgeIterator {
+            graph: self,
+            current_node: 0,
+            vertices,
+            neighbors: Vec::new(),
+        }
+    }
+
+    /// Returns a vector over all edges in the graph in increasing order.
+    /// If the sequence is only scanned once, [edges_iter] should preferred.
+    fn edges_vec(&self) -> Vec<Edge> {
+        self.edges_iter().collect()
+    }
+}
+
+/// Iterates over the edges of a graph in sorted order
+pub struct EdgeIterator<'a, G>
+where
+    G: 'a + AdjacencyList,
+{
+    graph: &'a G,
+    current_node: Node,
+    vertices: Vec<Node>,
+    neighbors: Vec<Node>,
+}
+
+impl<'a, G> Iterator for EdgeIterator<'a, G>
+where
+    G: 'a + AdjacencyList,
+{
+    type Item = Edge;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            if let Some(v) = self.neighbors.pop() {
+                return Some((self.current_node, v));
+            }
+
+            self.current_node = self.vertices.pop()?;
+            self.neighbors = self.graph.out_neighbors(self.current_node).collect();
+            self.neighbors.sort_by(|a, b| b.cmp(a)); // reverse order, since we pop from the back
+        }
     }
 }
 
