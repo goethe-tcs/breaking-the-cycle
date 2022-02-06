@@ -94,13 +94,13 @@ impl<W: Write + 'static> Drop for KeyedWriter<W> {
     }
 }
 
+#[cfg(feature = "tempfile")]
 #[cfg(test)]
 mod tests_keyed_writer {
     use super::*;
     use itertools::Itertools;
     use std::io::Read;
 
-    #[cfg(feature = "tempfile")]
     #[test]
     fn test_inconsistent_writes() {
         let temp_dir = tempfile::TempDir::new().unwrap();
@@ -133,7 +133,6 @@ mod tests_keyed_writer {
         );
     }
 
-    #[cfg(feature = "tempfile")]
     #[test]
     fn test_custom_formater() {
         let temp_dir = tempfile::TempDir::new().unwrap();

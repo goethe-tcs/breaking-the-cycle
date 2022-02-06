@@ -294,9 +294,78 @@ where
 mod tests_bench {
     use super::*;
     use crate::graph::adj_array::AdjArrayIn;
-    use crate::graph::io::PaceWrite;
+
+    #[test]
+    #[should_panic]
+    fn test_zero_iterations_panic() {
+        FvsBench::new()
+            .iterations(0)
+            .add_graph("self_loop", AdjArrayIn::from(&[(0, 0)]))
+            .add_algo("do_nothing", |_, _| vec![])
+            .run_with_writer(&mut ())
+            .unwrap();
+    }
+
+    #[test]
+    fn test_strict_no_error() {
+        FvsBench::default()
+            .add_graph("test_graph", AdjArrayIn::from(&vec![(0, 0)]))
+            .add_algo("test_algo", |_, _| vec![0])
+            .strict(true)
+            .reduce_graphs(false)
+            .run_with_writer(&mut ())
+            .unwrap();
+    }
+
+    #[test]
+    fn test_strict_error() {
+        let error_kind = FvsBench::default()
+            .add_graph("test_graph", AdjArrayIn::from(&vec![(0, 0)]))
+            .add_algo("test_algo", |_, _| vec![])
+            .strict(true)
+            .reduce_graphs(false)
+            .run_with_writer(&mut ())
+            .err()
+            .unwrap()
+            .kind();
+
+        assert_eq!(error_kind, ErrorKind::Other);
+    }
+
+    #[test]
+    fn test_zero_graphs_error() {
+        let error_kind = FvsBench::new()
+            .add_algo("test_algo", |_graph: AdjArrayIn, _| vec![])
+            .run_with_writer(&mut ())
+            .err()
+            .unwrap()
+            .kind();
+
+        assert_eq!(error_kind, ErrorKind::InvalidInput);
+    }
+
+    #[test]
+    fn test_zero_algos_error() {
+        let error_kind = FvsBench::new()
+            .add_graph("test_graph", AdjArrayIn::from(&vec![(0, 0)]))
+            .run_with_writer(&mut ())
+            .err()
+            .unwrap()
+            .kind();
+
+        assert_eq!(error_kind, ErrorKind::InvalidInput);
+    }
+}
+
+#[cfg(feature = "tempfile")]
+#[cfg(test)]
+mod tests_bench_with_tempfile {
+    use super::*;
+    use crate::graph::adj_array::AdjArrayIn;
     use csv::Reader;
     use itertools::Itertools;
+
+    use crate::graph::io::PaceWrite;
     use std::fs::File;
 
     fn read_bench_output(file_path: impl AsRef<Path>) -> Vec<Vec<String>> {
@@ -342,7 +411,6 @@ mod tests_bench {
         ]
     }
 
-    #[cfg(feature = "tempfile")]
     #[test]
     fn test_reduce_graphs() {
         let temp_dir = tempfile::TempDir::new().unwrap();
@@ -388,7 +456,6 @@ mod tests_bench {
     }
 
     #[test]
-    #[cfg(feature = "tempfile")]
     fn test_graph_provider() {
         let temp_dir = tempfile::TempDir::new().unwrap();
         let output_path = temp_dir.path().join("test_graph_provider.csv");
@@ -463,7 +530,6 @@ mod tests_bench {
     }
 
     #[test]
-    #[cfg(feature = "tempfile")]
     fn test_bench_design_point_count() {
         let temp_dir = tempfile::TempDir::new().unwrap();
         let output_path = temp_dir.path().join("test_bench_design_point_count.csv");
@@ -488,66 +554,5 @@ mod tests_bench {
 
         let output = read_bench_output(output_path);
         assert_eq!(output.len(), 19);
-    }
-
-    #[test]
-    #[should_panic]
-    fn test_zero_iterations_panic() {
-        FvsBench::new()
-            .iterations(0)
-            .add_graph("self_loop", AdjArrayIn::from(&[(0, 0)]))
-            .add_algo("do_nothing", |_, _| vec![])
-            .run_with_writer(&mut ())
-            .unwrap();
-    }
-
-    #[test]
-    fn test_strict_no_error() {
-        FvsBench::default()
-            .add_graph("test_graph", AdjArrayIn::from(&vec![(0, 0)]))
-            .add_algo("test_algo", |_, _| vec![0])
-            .strict(true)
-            .reduce_graphs(false)
-            .run_with_writer(&mut ())
-            .unwrap();
-    }
-
-    #[test]
-    fn test_strict_error() {
-        let error_kind = FvsBench::default()
-            .add_graph("test_graph", AdjArrayIn::from(&vec![(0, 0)]))
-            .add_algo("test_algo", |_, _| vec![])
-            .strict(true)
-            .reduce_graphs(false)
-            .run_with_writer(&mut ())
-            .err()
-            .unwrap()
-            .kind();
-
-        assert_eq!(error_kind, ErrorKind::Other);
-    }
-
-    #[test]
-    fn test_zero_graphs_error() {
-        let error_kind = FvsBench::new()
-            .add_algo("test_algo", |_graph: AdjArrayIn, _| vec![])
-            .run_with_writer(&mut ())
-            .err()
-            .unwrap()
-            .kind();
-
-        assert_eq!(error_kind, ErrorKind::InvalidInput);
-    }
-
-    #[test]
-    fn test_zero_algos_error() {
-        let error_kind = FvsBench::new()
-            .add_graph("test_graph", AdjArrayIn::from(&vec![(0, 0)]))
-            .run_with_writer(&mut ())
-            .err()
-            .unwrap()
-            .kind();
-
-        assert_eq!(error_kind, ErrorKind::InvalidInput);
     }
 }

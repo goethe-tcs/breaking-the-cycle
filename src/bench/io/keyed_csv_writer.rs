@@ -233,13 +233,13 @@ impl From<KeyedCsvWriterBuilder> for ReaderBuilder {
     }
 }
 
+#[cfg(feature = "tempfile")]
 #[cfg(test)]
 mod tests_keyed_csv_writer {
     use super::*;
     use csv::Reader;
     use std::result::Result;
 
-    #[cfg(feature = "tempfile")]
     #[test]
     fn test_inconsistent_writes() {
         let temp_dir = tempfile::TempDir::new().unwrap();
@@ -271,7 +271,6 @@ mod tests_keyed_csv_writer {
         );
     }
 
-    #[cfg(feature = "tempfile")]
     #[test]
     fn test_fix_columns() {
         let temp_dir = tempfile::TempDir::new().unwrap();
