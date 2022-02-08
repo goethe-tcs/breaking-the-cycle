@@ -14,6 +14,16 @@ cargo-test:
     - cargo test --all-features
     - cargo build --all-features
 
+cargo-test-deny-warnings:
+  image: gitlab.ae.cs.uni-frankfurt.de:5001/ae-ci/aeffm-rust-nightly
+  stage: primary
+  variables:
+    RUSTFLAGS: "-D warnings"
+  script:
+    - cargo test
+    - cargo test --all-features
+    - cargo build --all-features
+
 cargo-test-release:
   image: gitlab.ae.cs.uni-frankfurt.de:5001/ae-ci/aeffm-rust-nightly
   stage: extras
