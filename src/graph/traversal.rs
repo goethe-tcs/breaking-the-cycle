@@ -466,7 +466,7 @@ pub mod tests {
             let ranks = graph.topo_search().ranking().unwrap();
             assert_eq!(*ranks.iter().min().unwrap(), 0);
             assert_eq!(*ranks.iter().max().unwrap(), graph.number_of_nodes() - 1);
-            for (u, v) in graph.edges() {
+            for (u, v) in graph.edges_iter() {
                 assert!(ranks[u as usize] < ranks[v as usize]);
             }
         }

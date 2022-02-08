@@ -116,12 +116,8 @@ macro_rules! test_helper_from_edges {
             let graph = $t::from(&edges);
             assert_eq!(graph.number_of_nodes(), 6);
             assert_eq!(graph.number_of_edges(), edges.len());
-            let mut ret_edges = graph.edges();
-
             edges.sort();
-            ret_edges.sort();
-
-            assert_eq!(edges, ret_edges);
+            assert_eq!(edges, graph.edges_vec());
         }
     };
 }
@@ -164,10 +160,7 @@ macro_rules! test_helper_adjacency_list {
             assert_eq!(nb, expected);
 
             assert_eq!(nb.len() as Node, graph.out_degree(3));
-
-            let mut tmp = graph.edges();
-            tmp.sort();
-            assert_eq!(tmp, edges);
+            assert_eq!(graph.edges_vec(), edges);
         }
     };
 }
@@ -271,10 +264,10 @@ macro_rules! test_helper_graph_edge_editing {
                 let mut graph = org_graph.clone();
 
                 graph.remove_edges_into_node(0);
-                assert_eq!(graph.edges(), org_graph.edges());
+                assert_eq!(graph.edges_vec(), org_graph.edges_vec());
 
                 graph.remove_edges_out_of_node(4);
-                assert_eq!(graph.edges(), org_graph.edges());
+                assert_eq!(graph.edges_vec(), org_graph.edges_vec());
             }
 
             // remove out
@@ -286,7 +279,7 @@ macro_rules! test_helper_graph_edge_editing {
                     graph.number_of_edges(),
                     org_graph.number_of_edges() - org_graph.out_degree(3) as usize
                 );
-                for (u, _v) in graph.edges() {
+                for (u, _v) in graph.edges_iter() {
                     assert_ne!(u, 3);
                 }
             }
@@ -301,7 +294,7 @@ macro_rules! test_helper_graph_edge_editing {
                     graph.number_of_edges(),
                     org_graph.number_of_edges() - in_degree
                 );
-                for (_u, v) in graph.edges() {
+                for (_u, v) in graph.edges_iter() {
                     assert_ne!(v, 3);
                 }
             }
