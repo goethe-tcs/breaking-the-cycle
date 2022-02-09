@@ -1,45 +1,46 @@
-use log::{debug, info, trace};
+use itertools::Itertools;
+use log::{info, log_enabled, trace, warn, Level};
+use rayon::prelude::*;
 use std::fmt::{Debug, Display};
-use std::io::{ErrorKind, Result};
-use std::marker::PhantomData;
+use std::io::{self, sink, ErrorKind};
 use std::path::Path;
+use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use super::io::keyed_csv_writer::KeyedCsvWriter;
 use super::io::keyed_writer::KeyedWriter;
 use crate::bench::io::bench_writer::{BenchWriter, DualWriter};
+use crate::bench::io::design_point_buffer::DesignPointBuffer;
+use crate::bench::io::fvs_writer::{FvsFileWriter, FvsWriter};
+use crate::bench::io::other_io_error;
+use crate::bitset::BitSet;
 use crate::graph::io::{FileFormat, GraphRead};
-use crate::graph::{
-    AdjacencyListIn, AdjacencyTest, Getter, GraphEdgeEditing, GraphNew, GraphOrder,
-    InducedSubgraph, Node, Traversal,
-};
+use crate::graph::*;
 use crate::pre_processor_reduction::{PreprocessorReduction, ReductionState};
 
 /// Measures the computation time and solution size of multiple DFVS-algorithms against multiple
 /// graphs. Each algorithm is run for each graph at least once.
-pub struct FvsBench<G, W> {
+pub struct FvsBench<G> {
     strict: bool,
     reduce_graphs: bool,
     iterations: usize,
+    num_threads: usize,
 
-    /// Provide (load/create/etc) graphs that are passed into the DFVS-algorithms. Each graph will
-    /// be processed by every algorithm at least once
-    graph_providers: Vec<LabeledGraphProvider<G>>,
+    /// Input graphs with a label
+    graphs: Vec<LabeledGraph<G>>,
 
     /// DFVS algorithms with a label
-    algos: Vec<LabeledFvsAlgo<G, W>>,
+    algos: Vec<LabeledFvsAlgo<G>>,
 
-    /// Enables using W as a generic type parameter, which helps the compiler to determine the type
-    /// of the BenchWriter of algorithm closures, when passing algorithms into the benchmark.
-    _phantom_writer: PhantomData<W>,
+    /// Writes the result DFVS of all design points
+    fvs_writer: Arc<Mutex<dyn FvsWriter + Send>>,
 }
-type GraphProvider<G> = dyn Fn() -> Result<G>;
-type LabeledGraphProvider<G> = (String, Box<GraphProvider<G>>);
+type LabeledGraph<G> = (String, Arc<G>);
 
-type FvsAlgo<G, W> = dyn Fn(G, &mut W) -> Vec<Node>;
-type LabeledFvsAlgo<G, W> = (String, Box<FvsAlgo<G, W>>);
+type FvsAlgo<G> = Arc<dyn Fn(G, &mut DesignPointBuffer) -> Vec<Node> + Send + Sync>;
+type LabeledFvsAlgo<G> = (String, FvsAlgo<G>);
 
-impl<G, W> FvsBench<G, W>
+impl<G> FvsBench<G>
 where
     G: GraphOrder
         + AdjacencyListIn
@@ -49,68 +50,50 @@ where
         + GraphRead
         + Debug
         + Clone
-        + 'static,
-    W: BenchWriter,
+        + Send
+        + Sync,
 {
     pub fn new() -> Self {
         Self {
             strict: false,
             reduce_graphs: true,
             iterations: 1,
+            num_threads: num_cpus::get_physical(),
 
-            graph_providers: vec![],
+            graphs: vec![],
             algos: vec![],
-            _phantom_writer: Default::default(),
+            fvs_writer: Arc::new(Mutex::new(sink())),
         }
     }
 
-    /// **Only use this method for small test graphs!**
-    ///
-    /// Use `Bench::add_graph_file` or `Bench::add_graph_provider()` instead, to delay loading
-    /// the graph into memory until it is needed by the benchmark and can be freed by the
-    /// benchmark when it is no longer needed.
     pub fn add_graph(&mut self, label: impl Display, graph: G) -> &mut Self {
-        self.add_graph_provider(label, move || Ok(graph.clone()))
+        self.graphs.push((label.to_string(), Arc::new(graph)));
+        self
     }
 
-    /// Adds a graph file that will be loaded by the benchmark.
+    /// Adds a graph file using its name as the graph label
     pub fn add_graph_file(
         &mut self,
         file_format: FileFormat,
         file_path: impl AsRef<Path>,
-    ) -> Result<&mut Self> {
-        let create_label_err =
-            || std::io::Error::new(ErrorKind::Other, "Failed to retrieve name of graph file!");
-
+    ) -> io::Result<&mut Self> {
         let file_path = file_path.as_ref().to_path_buf();
-        let file_path_closure = file_path.clone();
-        let graph_provider = move || G::try_read_graph(file_format, &file_path_closure);
+        let graph = G::try_read_graph(file_format, &file_path)?;
 
         let file_name = file_path
             .file_name()
-            .ok_or_else(create_label_err)?
+            .ok_or_else(other_io_error("Failed to retrieve name of graph file!"))?
             .to_str()
-            .ok_or_else(create_label_err)?;
+            .ok_or_else(other_io_error("Failed to retrieve name of graph file!"))?;
 
-        Ok(self.add_graph_provider(file_name, graph_provider))
-    }
-
-    /// Adds a function that provides (loads/creates/etc) a graph. The function will be called by
-    /// the benchmark and the graph is passed into the DFVS-algorithms.
-    pub fn add_graph_provider<F>(&mut self, label: impl Display, provider: F) -> &mut Self
-    where
-        F: Fn() -> Result<G> + 'static,
-    {
-        self.graph_providers
-            .push((label.to_string(), Box::new(provider)));
-        self
+        Ok(self.add_graph(file_name, graph))
     }
 
     pub fn add_algo<F>(&mut self, label: impl Display, algo: F) -> &mut Self
     where
-        F: Fn(G, &mut W) -> Vec<Node> + 'static,
+        F: Fn(G, &mut DesignPointBuffer) -> Vec<Node> + Send + Sync + 'static,
     {
-        self.algos.push((label.to_string(), Box::new(algo)));
+        self.algos.push((label.to_string(), Arc::new(algo)));
         self
     }
 
@@ -140,116 +123,200 @@ where
         self
     }
 
+    /// Sets the maximum amount of threads used. `0` will leave the decision up to [rayon].
+    ///
+    /// Default: [num_cpus::get_physical()]
+    pub fn num_threads(&mut self, value: usize) -> &mut Self {
+        self.num_threads = value;
+        self
+    }
+
+    /// Sets a directory where the result DFVS of each design point will be stored in a separate
+    /// file.
+    ///
+    /// Default: `None`
+    pub fn fvs_output_dir(&mut self, path: impl AsRef<Path>) -> &mut Self {
+        self.fvs_writer = Arc::new(Mutex::new(FvsFileWriter::new(path.as_ref().to_path_buf())));
+        self
+    }
+
+    /// Sets a writer that is used to write the result DFVS of each design point
+    ///
+    /// Default: [std::io::Sink]
+    pub fn fvs_writer<W: FvsWriter + Send + 'static>(&mut self, writer: W) -> &mut Self {
+        self.fvs_writer = Arc::new(Mutex::new(writer));
+        self
+    }
+
     /// Runs the benchmark using the passed in BenchWriter
-    pub fn run_with_writer(&self, writer: &mut W) -> Result<&Self> {
-        use std::io::Error;
-
-        let error_factory = |msg| Err(Error::new(ErrorKind::InvalidInput, msg));
+    pub fn run_with_writer<W: BenchWriter + Send>(&self, writer: W) -> io::Result<()> {
         if self.algos.is_empty() {
-            return error_factory("No algorithms provided for benchmarking!");
+            return other_io_error("No algorithms provided for benchmarking!");
         }
-        if self.graph_providers.is_empty() {
-            return error_factory("No graphs provided for benchmarking!");
+        if self.graphs.is_empty() {
+            return other_io_error("No graphs provided for benchmarking!");
         }
 
-        let mut design_point_i = 0;
-        let design_points_total = self.algos.len() * self.graph_providers.len() * self.iterations;
+        //TODO: Reduce graphs before running design points
+
+        // create design point vector
+        let writer = Arc::new(Mutex::new(writer));
+        let design_points = self
+            .graphs
+            .iter()
+            .cartesian_product(self.algos.iter())
+            .cartesian_product(0..self.iterations)
+            .map(|(((graph_label, graph), (algo_label, algo)), _)| {
+                (
+                    graph_label.as_str(),
+                    graph.clone(),
+                    algo_label.as_str(),
+                    algo.clone(),
+                    writer.clone(),
+                    self.fvs_writer.clone(),
+                )
+            })
+            .collect_vec();
+        let design_points_total = design_points.len();
+
+        // try setting the number of threads used by rayon
+        rayon::ThreadPoolBuilder::new()
+            .num_threads(self.num_threads)
+            .build_global()
+            .unwrap_or_else(|| warn!("Failed to set the number of threads used by rayon!"));
+
         info!(
-            "Running bench with {} design points...",
-            design_points_total
+            "Running benchmark with {} design points using {} threads...",
+            design_points_total,
+            rayon::current_num_threads()
         );
-        for (graph_i, (graph_label, graph_provider)) in self.graph_providers.iter().enumerate() {
-            debug!(
-                "graph '{}' ({}/{})...",
-                graph_label,
-                graph_i,
-                self.graph_providers.len()
-            );
-            debug!("Running graph provider...");
-            let input_graph = graph_provider()?;
-            trace!("input graph: {:?}", input_graph);
 
-            // TODO: Pass reduction rules in as 'graph-pre-processing-step' instead of using
-            //  apply_rules param
+        // copy fields of self to avoid moving self into threads
+        let strict = self.strict;
+        let reduce_graphs = self.reduce_graphs;
 
-            // reduce graph
-            let mut state = PreprocessorReduction::from(input_graph.clone());
-            if self.reduce_graphs {
-                state.apply_rules_exhaustively();
-                trace!("reduced graph: {:?}", state.graph());
-            }
-            let (reduced_graph, reduction_mapper) = state.graph().remove_disconnected_verts();
+        // run benchmark
+        let result = design_points
+            .into_par_iter()
+            .enumerate()
+            .map::<_, Result<(), io::Error>>(
+                |(i, (graph_label, input_graph, algo_label, algo, writer, fvs_writer))| {
+                    let mut metric_buffer = DesignPointBuffer::new();
+                    trace!("[id {}] input graph: {:?}", i, input_graph);
 
-            // run all algorithms with the graph
-            for (algo_label, algo) in self.algos.iter() {
-                // benchmark each algorithm/graph pair 'iterations' amount of times
-                for _ in 0..self.iterations {
-                    design_point_i += 1;
-                    let mut total_fvs = state.fvs().to_vec();
-                    let mut input_graph = input_graph.clone();
-                    let reduced_graph = reduced_graph.clone();
-                    writer.write("id", design_point_i)?;
-                    debug!("design point {}/{}...", design_point_i, design_points_total);
+                    // TODO: Pass reduction rules in as 'graph-pre-processing-step' instead of using
+                    //  apply_rules param
+
+                    // reduce graph
+                    let mut reduct_state = PreprocessorReduction::from(G::clone(&input_graph));
+                    if reduce_graphs {
+                        reduct_state.apply_rules_exhaustively();
+                        trace!("[id {}] reduced graph: {:?}", i, reduct_state.graph());
+                    }
+                    let (reduct_graph, reduct_mapper) =
+                        reduct_state.graph().remove_disconnected_verts();
+                    let mut total_fvs = reduct_state.fvs().to_vec();
+
+                    // split graph into strongly connected components
+                    let sccs = reduct_graph
+                        .strongly_connected_components_no_singletons()
+                        .into_iter()
+                        .map(|scc| {
+                            reduct_graph
+                                .vertex_induced(&BitSet::new_all_unset_but(reduct_graph.len(), scc))
+                        })
+                        .collect_vec();
+
+                    if log_enabled!(Level::Trace) {
+                        for (scc_i, scc) in sccs.iter().enumerate() {
+                            trace!("[id {}] scc {}: {:?}", i, scc_i, scc);
+                        }
+                    }
 
                     // write graph related metrics
-                    writer.write("graph", graph_label)?;
-                    writer.write("n", input_graph.len())?;
-                    writer.write("m", input_graph.number_of_edges())?;
-                    writer.write("n_reduced", reduced_graph.len())?;
-                    writer.write("m_reduced", reduced_graph.number_of_edges())?;
+                    metric_buffer.write("id", i);
+                    metric_buffer.write("graph", graph_label);
+                    metric_buffer.write("n", input_graph.len());
+                    metric_buffer.write("m", input_graph.number_of_edges());
+                    metric_buffer.write("n_reduced", reduct_graph.len());
+                    metric_buffer.write("m_reduced", reduct_graph.number_of_edges());
+                    metric_buffer.write("scc_amount", sccs.len());
 
-                    // run single algorithm
+                    // run algorithm for every strongly connected component
                     let start = Instant::now();
-                    let algo_fvs: Vec<Node> = algo(reduced_graph, writer);
+                    let algo_results = sccs
+                        .into_iter()
+                        .map(|(scc, scc_mapper)| (algo(scc, &mut metric_buffer), scc_mapper))
+                        .collect_vec(); // collect needed to eagerly evaluate for benchmarking purposes
                     let elapsed_time = start.elapsed().as_secs_f64();
 
+                    // combine fvs of strongly connected components and remap node names
+                    let algo_fvs = algo_results
+                        .into_iter()
+                        .flat_map(|(fvs, scc_mapper)| scc_mapper.get_old_ids(fvs.into_iter()))
+                        .map(|node| reduct_mapper.old_id_of(node).unwrap_or(node))
+                        .collect_vec();
+
                     // add algo fvs to the reduction fvs
-                    let remapped_algo_fvs = algo_fvs
-                        .iter()
-                        .map(|id| reduction_mapper.old_id_of(*id).unwrap_or(*id));
-                    total_fvs.extend(remapped_algo_fvs);
+                    total_fvs.extend(algo_fvs.iter().copied());
 
                     // write algorithm related metrics
-                    writer.write("algo", algo_label)?;
-                    writer.write("fvs_reduction", state.fvs().len())?;
-                    writer.write("fvs_algo", algo_fvs.len())?;
-                    writer.write("fvs_total", total_fvs.len())?;
-                    writer.write("elapsed_sec_algo", elapsed_time)?;
+                    metric_buffer.write("algo", algo_label);
+                    metric_buffer.write("fvs_reduction", reduct_state.fvs().len());
+                    metric_buffer.write("fvs_algo", algo_fvs.len());
+                    metric_buffer.write("fvs_total", total_fvs.len());
+                    metric_buffer.write("elapsed_sec_algo", elapsed_time);
 
                     // apply fvs to graph (to print resulting graph & check if graph is acyclic)
-                    input_graph.remove_edges_of_nodes(total_fvs.iter());
-                    trace!("fvs_reduction: {:?}", state.fvs());
-                    trace!("fvs_algo: {:?}", algo_fvs);
-                    trace!("fvs_total: {:?}", total_fvs);
-                    trace!("resulting_graph: {:?}", input_graph);
+                    let mut result_graph = G::clone(&input_graph);
+                    result_graph.remove_edges_of_nodes(total_fvs.iter());
+                    trace!("[id {}] fvs_reduction: {:?}", i, reduct_state.fvs());
+                    trace!("[id {}] fvs_algo: {:?}", i, algo_fvs);
+                    trace!("[id {}] fvs_total: {:?}", i, total_fvs);
+                    trace!("[id {}] resulting_graph: {:?}", i, result_graph);
 
                     // check if result is acyclic
-                    let is_acyclic = input_graph.is_acyclic();
-                    writer.write("is_result_acyclic", is_acyclic)?;
-                    if self.strict && !is_acyclic {
-                        writer.end_design_point()?;
-                        writer.end_graph_section()?;
-                        return Err(Error::new(
-                            ErrorKind::Other,
-                            format!(
-                                "Result of design point {} (algorithm '{}') was not acyclic!",
-                                design_point_i, algo_label
-                            ),
+                    let is_acyclic = result_graph.is_acyclic();
+                    metric_buffer.write("is_result_acyclic", is_acyclic);
+                    if strict && !is_acyclic {
+                        return other_io_error(format!(
+                            "Result of design point {} (algorithm '{}') was not acyclic!",
+                            i, algo_label
                         ));
                     }
 
-                    writer.end_design_point()?;
-                }
-            }
-            writer.end_graph_section()?;
+                    // write metrics
+                    match writer.lock() {
+                        Ok(mut writer) => {
+                            for (column, value) in metric_buffer.flush() {
+                                writer.write(column, value)?;
+                            }
+                            writer.end_design_point()?;
+                        }
+                        Err(error) => return other_io_error(error.to_string()),
+                    }
+
+                    // write fvs
+                    match fvs_writer.lock() {
+                        Ok(mut fvs_writer) => fvs_writer.write(graph_label, &total_fvs)?,
+                        Err(error) => return other_io_error(error.to_string()),
+                    }
+
+                    Ok(())
+                },
+            )
+            .collect();
+
+        match writer.lock() {
+            Ok(mut writer) => writer.end_bench()?,
+            Err(error) => return other_io_error(error.to_string()),
         }
 
-        info!("Bench finished");
-        Ok(self)
+        result
     }
 }
 
-impl<G, W> Default for FvsBench<G, W>
+impl<G> Default for FvsBench<G>
 where
     G: GraphOrder
         + AdjacencyListIn
@@ -259,15 +326,15 @@ where
         + GraphRead
         + Debug
         + Clone
-        + 'static,
-    W: BenchWriter,
+        + Send
+        + Sync,
 {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<G> FvsBench<G, DualWriter>
+impl<G> FvsBench<G>
 where
     G: GraphOrder
         + AdjacencyListIn
@@ -277,16 +344,17 @@ where
         + GraphRead
         + Debug
         + Clone
-        + 'static,
+        + Send
+        + Sync,
 {
     /// Runs the benchmark using a DualWriter that writes bench results to standard output as well
     /// as to a csv file
-    pub fn run(&self, csv_path: impl AsRef<Path>) -> Result<&Self> {
-        let mut writer = DualWriter::new(
+    pub fn run(&self, csv_path: impl AsRef<Path>) -> io::Result<()> {
+        let writer = DualWriter::new(
             KeyedWriter::new_std_out_writer(),
             KeyedCsvWriter::new(csv_path.as_ref().to_path_buf())?,
         );
-        self.run_with_writer(&mut writer)
+        self.run_with_writer(writer)
     }
 }
 
@@ -294,6 +362,7 @@ where
 mod tests_bench {
     use super::*;
     use crate::graph::adj_array::AdjArrayIn;
+    use std::io::sink;
 
     #[test]
     #[should_panic]
@@ -302,7 +371,7 @@ mod tests_bench {
             .iterations(0)
             .add_graph("self_loop", AdjArrayIn::from(&[(0, 0)]))
             .add_algo("do_nothing", |_, _| vec![])
-            .run_with_writer(&mut ())
+            .run_with_writer(sink())
             .unwrap();
     }
 
@@ -313,7 +382,7 @@ mod tests_bench {
             .add_algo("test_algo", |_, _| vec![0])
             .strict(true)
             .reduce_graphs(false)
-            .run_with_writer(&mut ())
+            .run_with_writer(sink())
             .unwrap();
     }
 
@@ -324,7 +393,7 @@ mod tests_bench {
             .add_algo("test_algo", |_, _| vec![])
             .strict(true)
             .reduce_graphs(false)
-            .run_with_writer(&mut ())
+            .run_with_writer(sink())
             .err()
             .unwrap()
             .kind();
@@ -336,24 +405,24 @@ mod tests_bench {
     fn test_zero_graphs_error() {
         let error_kind = FvsBench::new()
             .add_algo("test_algo", |_graph: AdjArrayIn, _| vec![])
-            .run_with_writer(&mut ())
+            .run_with_writer(sink())
             .err()
             .unwrap()
             .kind();
 
-        assert_eq!(error_kind, ErrorKind::InvalidInput);
+        assert_eq!(error_kind, ErrorKind::Other);
     }
 
     #[test]
     fn test_zero_algos_error() {
         let error_kind = FvsBench::new()
             .add_graph("test_graph", AdjArrayIn::from(&vec![(0, 0)]))
-            .run_with_writer(&mut ())
+            .run_with_writer(sink())
             .err()
             .unwrap()
             .kind();
 
-        assert_eq!(error_kind, ErrorKind::InvalidInput);
+        assert_eq!(error_kind, ErrorKind::Other);
     }
 }
 
@@ -362,11 +431,11 @@ mod tests_bench {
 mod tests_bench_with_tempfile {
     use super::*;
     use crate::graph::adj_array::AdjArrayIn;
-    use csv::Reader;
-    use itertools::Itertools;
-
     use crate::graph::io::PaceWrite;
+    use csv::Reader;
     use std::fs::File;
+    use std::io::Read;
+    use std::ops::Index;
 
     fn read_bench_output(file_path: impl AsRef<Path>) -> Vec<Vec<String>> {
         let mut reader = Reader::from_path(file_path).unwrap();
@@ -385,9 +454,10 @@ mod tests_bench_with_tempfile {
             .into_iter()
             .map(|record| {
                 let mut vec = record.iter().map(String::from).collect_vec();
-                vec[10] = "".to_string(); // remove unstable elapsed time entry
+                vec[11] = "".to_string(); // remove unstable elapsed time entry
                 vec
-            });
+            })
+            .sorted_by(|a, b| a.index(0).cmp(b.index(0)));
 
         let mut result = vec![headers];
         result.extend(records);
@@ -402,6 +472,7 @@ mod tests_bench_with_tempfile {
             "m",
             "n_reduced",
             "m_reduced",
+            "scc_amount",
             "algo",
             "fvs_reduction",
             "fvs_algo",
@@ -438,12 +509,13 @@ mod tests_bench_with_tempfile {
         let expected_output = vec![
             get_bench_column_headers(),
             vec![
-                "1",
+                "0",
                 "test_graph",
                 "4",
                 "7",
                 "3",
                 "6",
+                "1",
                 "test_algo",
                 "1",
                 "2",
@@ -456,7 +528,7 @@ mod tests_bench_with_tempfile {
     }
 
     #[test]
-    fn test_graph_provider() {
+    fn test_multiple_graphs() {
         let temp_dir = tempfile::TempDir::new().unwrap();
         let output_path = temp_dir.path().join("test_graph_provider.csv");
 
@@ -469,14 +541,15 @@ mod tests_bench_with_tempfile {
         FvsBench::new()
             .add_graph_file(FileFormat::Pace, graph_path)
             .unwrap()
-            .add_graph_provider("self_loops", || {
-                Ok(AdjArrayIn::from(&vec![(0, 0), (1, 1), (2, 2), (3, 3)]))
-            })
+            .add_graph(
+                "self_loops",
+                AdjArrayIn::from(&vec![(0, 0), (1, 1), (2, 2), (3, 3)]),
+            )
             .add_graph("tiny_graph", AdjArrayIn::from(&vec![(0, 0), (1, 2)]))
             .add_algo("do_nothing", |_graph: AdjArrayIn, _| vec![])
             .strict(false)
             .reduce_graphs(false)
-            .run_with_writer(&mut KeyedCsvWriter::new(output_path.clone()).unwrap())
+            .run(output_path.clone())
             .unwrap();
 
         let actual_output = read_bench_output(output_path);
@@ -484,12 +557,13 @@ mod tests_bench_with_tempfile {
         let expected_output = vec![
             get_bench_column_headers(),
             vec![
-                "1",
+                "0",
                 "test_graph_provider_graph",
                 "2",
                 "2",
                 "2",
                 "2",
+                "1",
                 "do_nothing",
                 "0",
                 "0",
@@ -498,12 +572,13 @@ mod tests_bench_with_tempfile {
                 "false",
             ],
             vec![
-                "2",
+                "1",
                 "self_loops",
                 "4",
                 "4",
                 "4",
                 "4",
+                "4",
                 "do_nothing",
                 "0",
                 "0",
@@ -512,12 +587,13 @@ mod tests_bench_with_tempfile {
                 "false",
             ],
             vec![
-                "3",
+                "2",
                 "tiny_graph",
                 "3",
                 "2",
                 "3",
                 "2",
+                "1",
                 "do_nothing",
                 "0",
                 "0",
@@ -543,16 +619,68 @@ mod tests_bench_with_tempfile {
         FvsBench::new()
             .add_graph_file(FileFormat::Pace, graph_path)
             .unwrap()
-            .add_graph_provider("5_n", || Ok(AdjArrayIn::new(5)))
+            .add_graph("5_n", AdjArrayIn::new(5))
             .add_graph("self_loop", AdjArrayIn::from(&[(0, 0)]))
             .add_algo("do_nothing", |_, _| vec![])
             .add_algo("test_algo", |_, _| vec![0])
             .strict(false)
             .iterations(3)
-            .run_with_writer(&mut KeyedCsvWriter::new(output_path.clone()).unwrap())
+            .run(output_path.clone())
             .unwrap();
 
         let output = read_bench_output(output_path);
         assert_eq!(output.len(), 19);
+    }
+
+    #[test]
+    fn test_fvs_file_writer() {
+        let fvs_dir_path = tempfile::TempDir::new().unwrap().into_path();
+
+        FvsBench::new()
+            .add_graph("4_n", AdjArrayIn::from(&[(0, 0), (1, 1), (2, 2), (3, 3)]))
+            .add_graph("one_node", AdjArrayIn::from(&[(0, 0)]))
+            .add_algo("do_nothing", |_, _| vec![])
+            .add_algo("test_algo", |g, _| (0..g.number_of_nodes()).collect_vec())
+            .reduce_graphs(false)
+            .fvs_output_dir(fvs_dir_path.clone())
+            .num_threads(1)
+            .run_with_writer(sink())
+            .unwrap();
+
+        let fvs_paths = fvs_dir_path
+            .read_dir()
+            .unwrap()
+            .map(|r| r.unwrap().path())
+            .sorted()
+            .collect_vec();
+
+        let fvs_file_names = fvs_paths
+            .iter()
+            .map(|path_buf| path_buf.file_name().unwrap())
+            .collect_vec();
+
+        assert_eq!(
+            fvs_file_names,
+            vec![
+                "4_n_k_0.fvs",
+                "4_n_k_4.fvs",
+                "one_node_k_0.fvs",
+                "one_node_k_1.fvs"
+            ]
+        );
+
+        let fvs_results = fvs_paths
+            .iter()
+            .map(|path_buf| {
+                let mut fvs = String::new();
+                File::open(path_buf)
+                    .unwrap()
+                    .read_to_string(&mut fvs)
+                    .unwrap();
+                fvs
+            })
+            .collect_vec();
+
+        assert_eq!(fvs_results, vec!["[]", "[0, 1, 2, 3]", "[]", "[0]"]);
     }
 }

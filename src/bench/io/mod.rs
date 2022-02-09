@@ -1,7 +1,10 @@
-use std::fs;
+use std::fmt::Display;
 use std::path::PathBuf;
+use std::{fs, io};
 
 pub mod bench_writer;
+pub mod design_point_buffer;
+pub mod fvs_writer;
 pub mod keyed_buffer;
 pub mod keyed_csv_writer;
 pub mod keyed_writer;
@@ -16,4 +19,8 @@ pub fn bench_dir() -> std::io::Result<PathBuf> {
     }
 
     Ok(PathBuf::from(BENCH_DIR_PATH))
+}
+
+pub fn other_io_error<T>(msg: impl Display) -> io::Result<T> {
+    Err(io::Error::new(io::ErrorKind::Other, msg.to_string()))
 }

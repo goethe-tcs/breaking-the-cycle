@@ -1,15 +1,15 @@
 use super::keyed_csv_writer::KeyedCsvWriter;
 use super::keyed_writer::KeyedWriter;
 use std::fmt::Display;
-use std::io::{Result, Stdout};
+use std::io::{self, Sink, Stdout};
 
-/// Used to write metrics that are collected in a bench
+/// Used to write metrics that are collected in a benchmark
 pub trait BenchWriter {
-    fn write(&mut self, column: impl Display, value: impl Display) -> Result<()>;
+    fn write(&mut self, column: impl Display, value: impl Display) -> io::Result<()>;
 
-    fn end_design_point(&mut self) -> Result<()>;
+    fn end_design_point(&mut self) -> io::Result<()>;
 
-    fn end_graph_section(&mut self) -> Result<()>;
+    fn end_bench(&mut self) -> io::Result<()>;
 }
 
 pub type DualWriter = DualBenchWriter<KeyedWriter<Stdout>, KeyedCsvWriter>;
@@ -30,32 +30,33 @@ impl<W1: BenchWriter, W2: BenchWriter> DualBenchWriter<W1, W2> {
 }
 
 impl<W1: BenchWriter, W2: BenchWriter> BenchWriter for DualBenchWriter<W1, W2> {
-    fn write(&mut self, column: impl Display, value: impl Display) -> Result<()> {
-        self.logger_1.write(&column, &value)?;
-        self.logger_2.write(column, value)
+    fn write(&mut self, column: impl Display, value: impl Display) -> io::Result<()> {
+        self.logger_1
+            .write(&column, &value)
+            .and(self.logger_2.write(&column, &value))
     }
 
-    fn end_design_point(&mut self) -> Result<()> {
-        self.logger_1.end_design_point()?;
-        self.logger_2.end_design_point()
+    fn end_design_point(&mut self) -> io::Result<()> {
+        self.logger_1
+            .end_design_point()
+            .and(self.logger_2.end_design_point())
     }
 
-    fn end_graph_section(&mut self) -> Result<()> {
-        self.logger_1.end_graph_section()?;
-        self.logger_2.end_graph_section()
+    fn end_bench(&mut self) -> io::Result<()> {
+        self.logger_1.end_bench().and(self.logger_2.end_bench())
     }
 }
 
-impl BenchWriter for () {
-    fn write(&mut self, _column: impl Display, _value: impl Display) -> Result<()> {
+impl BenchWriter for Sink {
+    fn write(&mut self, _column: impl Display, _value: impl Display) -> io::Result<()> {
         Ok(())
     }
 
-    fn end_design_point(&mut self) -> Result<()> {
+    fn end_design_point(&mut self) -> io::Result<()> {
         Ok(())
     }
 
-    fn end_graph_section(&mut self) -> Result<()> {
+    fn end_bench(&mut self) -> io::Result<()> {
         Ok(())
     }
 }

@@ -3,14 +3,14 @@ use super::keyed_buffer::KeyedBuffer;
 use itertools::Itertools;
 use std::fmt::Display;
 use std::fs::File;
-use std::io::{self, Result, Stdout, Write};
+use std::io::{self, Stdout, Write};
 use std::path::Path;
 
 pub struct KeyedWriter<W: Write + 'static> {
     line_buffer: KeyedBuffer,
     inner_writer: W,
     line_terminator: char,
-    entry_formatter: Box<dyn Fn(String, String) -> String>,
+    entry_formatter: Box<dyn Fn(String, String) -> String + Send>,
 }
 
 impl<W: Write + 'static> KeyedWriter<W> {
@@ -20,7 +20,7 @@ impl<W: Write + 'static> KeyedWriter<W> {
 
     pub fn new_with_formatter<F>(inner_writer: W, line_terminator: char, formatter: F) -> Self
     where
-        F: Fn(String, String) -> String + 'static,
+        F: Fn(String, String) -> String + Send + 'static,
     {
         Self {
             line_buffer: KeyedBuffer::new(),
@@ -38,7 +38,7 @@ impl<W: Write + 'static> KeyedWriter<W> {
         self.line_buffer.write(column, value);
     }
 
-    fn end_line(&mut self) -> Result<()> {
+    fn end_line(&mut self) -> io::Result<()> {
         let mut line = self
             .line_buffer
             .flush()
@@ -63,7 +63,7 @@ impl KeyedWriter<Stdout> {
 }
 
 impl KeyedWriter<File> {
-    pub fn from_path(path: impl AsRef<Path>) -> Result<Self> {
+    pub fn from_path(path: impl AsRef<Path>) -> io::Result<Self> {
         let file = File::create(path)?;
 
         Ok(Self::new(file, '\n'))
@@ -71,16 +71,16 @@ impl KeyedWriter<File> {
 }
 
 impl<W: Write + 'static> BenchWriter for KeyedWriter<W> {
-    fn write(&mut self, column: impl Display, value: impl Display) -> Result<()> {
+    fn write(&mut self, column: impl Display, value: impl Display) -> io::Result<()> {
         self.write(column, value);
         Ok(())
     }
 
-    fn end_design_point(&mut self) -> Result<()> {
+    fn end_design_point(&mut self) -> io::Result<()> {
         self.end_line()
     }
 
-    fn end_graph_section(&mut self) -> Result<()> {
+    fn end_bench(&mut self) -> io::Result<()> {
         Ok(())
     }
 }

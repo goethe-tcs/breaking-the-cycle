@@ -30,6 +30,22 @@ pub trait Getter {
     fn is_empty(&self) -> bool {
         self.len() == 0
     }
+
+    /// Applies [Self::old_id_of] to each iterator item. Uses the iterator item (new) as a fallback
+    /// if the mapping(old, new) doesn't exist.
+    fn get_old_ids(&self, new_ids: impl Iterator<Item = Node>) -> Vec<Node> {
+        new_ids
+            .map(|new| self.old_id_of(new).unwrap_or(new))
+            .collect_vec()
+    }
+
+    /// Applies [Self::new_id_of] to each iterator item. Uses the iterator item (old) as a fallback
+    /// if the mapping(old, new) doesn't exist.
+    fn get_new_ids(&self, old_ids: impl Iterator<Item = Node>) -> Vec<Node> {
+        old_ids
+            .map(|old| self.new_id_of(old).unwrap_or(old))
+            .collect_vec()
+    }
 }
 
 pub trait Compose {
