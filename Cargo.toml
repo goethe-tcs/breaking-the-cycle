@@ -59,4 +59,5 @@ test = false
 [[bin]]
 name = "bench-heuristics"
 path = "src/bin/bench-heuristics.rs"
+required-features = ["cli"]
 test = false
