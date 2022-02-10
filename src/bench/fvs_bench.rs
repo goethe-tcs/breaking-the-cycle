@@ -2,7 +2,7 @@ use itertools::Itertools;
 use log::{info, log_enabled, trace, warn, Level};
 use rayon::prelude::*;
 use std::fmt::{Debug, Display};
-use std::io::{self, sink, ErrorKind};
+use std::io::{self, sink};
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
@@ -82,9 +82,9 @@ where
 
         let file_name = file_path
             .file_name()
-            .ok_or_else(other_io_error("Failed to retrieve name of graph file!"))?
+            .ok_or_else(|| other_io_error("Failed to retrieve name of graph file!"))?
             .to_str()
-            .ok_or_else(other_io_error("Failed to retrieve name of graph file!"))?;
+            .ok_or_else(|| other_io_error("Failed to retrieve name of graph file!"))?;
 
         Ok(self.add_graph(file_name, graph))
     }
@@ -151,10 +151,10 @@ where
     /// Runs the benchmark using the passed in BenchWriter
     pub fn run_with_writer<W: BenchWriter + Send>(&self, writer: W) -> io::Result<()> {
         if self.algos.is_empty() {
-            return other_io_error("No algorithms provided for benchmarking!");
+            return Err(other_io_error("No algorithms provided for benchmarking!"));
         }
         if self.graphs.is_empty() {
-            return other_io_error("No graphs provided for benchmarking!");
+            return Err(other_io_error("No graphs provided for benchmarking!"));
         }
 
         //TODO: Reduce graphs before running design points
@@ -183,7 +183,7 @@ where
         rayon::ThreadPoolBuilder::new()
             .num_threads(self.num_threads)
             .build_global()
-            .unwrap_or_else(|| warn!("Failed to set the number of threads used by rayon!"));
+            .unwrap_or_else(|_| warn!("Failed to set the number of threads used by rayon!"));
 
         info!(
             "Running benchmark with {} design points using {} threads...",
@@ -279,10 +279,10 @@ where
                     let is_acyclic = result_graph.is_acyclic();
                     metric_buffer.write("is_result_acyclic", is_acyclic);
                     if strict && !is_acyclic {
-                        return other_io_error(format!(
+                        return Err(other_io_error(format!(
                             "Result of design point {} (algorithm '{}') was not acyclic!",
                             i, algo_label
-                        ));
+                        )));
                     }
 
                     // write metrics
@@ -293,13 +293,13 @@ where
                             }
                             writer.end_design_point()?;
                         }
-                        Err(error) => return other_io_error(error.to_string()),
+                        Err(error) => return Err(other_io_error(error.to_string())),
                     }
 
                     // write fvs
                     match fvs_writer.lock() {
                         Ok(mut fvs_writer) => fvs_writer.write(graph_label, &total_fvs)?,
-                        Err(error) => return other_io_error(error.to_string()),
+                        Err(error) => return Err(other_io_error(error.to_string())),
                     }
 
                     Ok(())
@@ -309,7 +309,7 @@ where
 
         match writer.lock() {
             Ok(mut writer) => writer.end_bench()?,
-            Err(error) => return other_io_error(error.to_string()),
+            Err(error) => return Err(other_io_error(error.to_string())),
         }
 
         result
@@ -362,7 +362,7 @@ where
 mod tests_bench {
     use super::*;
     use crate::graph::adj_array::AdjArrayIn;
-    use std::io::sink;
+    use std::io::{sink, ErrorKind};
 
     #[test]
     #[should_panic]

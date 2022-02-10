@@ -21,6 +21,6 @@ pub fn bench_dir() -> std::io::Result<PathBuf> {
     Ok(PathBuf::from(BENCH_DIR_PATH))
 }
 
-pub fn other_io_error<T>(msg: impl Display) -> io::Result<T> {
-    Err(io::Error::new(io::ErrorKind::Other, msg.to_string()))
+pub fn other_io_error(msg: impl Display) -> io::Error {
+    io::Error::new(io::ErrorKind::Other, msg.to_string())
 }
