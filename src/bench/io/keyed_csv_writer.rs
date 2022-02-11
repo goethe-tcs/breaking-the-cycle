@@ -3,7 +3,7 @@ use super::keyed_buffer::KeyedBuffer;
 use csv::{QuoteStyle, ReaderBuilder, Terminator, Writer, WriterBuilder};
 use std::fmt::Display;
 use std::fs::File;
-use std::io::Result;
+use std::io;
 use std::path::{Path, PathBuf};
 
 /// A wrapper around `csv::Writer<File>` that:
@@ -27,11 +27,11 @@ pub struct KeyedCsvWriter {
 
 impl KeyedCsvWriter {
     /// Creates a new writer that creates/overwrites a file at the given path.
-    pub fn new(file_path: PathBuf) -> Result<Self> {
+    pub fn new(file_path: PathBuf) -> io::Result<Self> {
         Self::from_builder(file_path, KeyedCsvWriterBuilder::default())
     }
 
-    pub fn from_builder(file_path: PathBuf, builder: KeyedCsvWriterBuilder) -> Result<Self> {
+    pub fn from_builder(file_path: PathBuf, builder: KeyedCsvWriterBuilder) -> io::Result<Self> {
         let writer_builder: WriterBuilder = builder.clone().into();
         let writer = writer_builder.from_path(file_path.as_path())?;
 
@@ -50,7 +50,7 @@ impl KeyedCsvWriter {
     }
 
     /// Ends the current line and writes it to the file
-    pub fn end_line(&mut self) -> Result<()> {
+    pub fn end_line(&mut self) -> io::Result<()> {
         // write header
         if self.is_first_line {
             self.is_first_line = false;
@@ -68,7 +68,7 @@ impl KeyedCsvWriter {
     /// Rewrites the whole file if columns where added after the first line was written. This will
     /// ensure that all column headers are included in the file and that incomplete lines have an
     /// empty entry for the new columns.
-    pub fn fix_columns(&mut self) -> Result<()> {
+    pub fn fix_columns(&mut self) -> io::Result<()> {
         let columns = self.line_buffer.get_columns();
 
         // create reader
@@ -112,16 +112,16 @@ impl KeyedCsvWriter {
 }
 
 impl BenchWriter for KeyedCsvWriter {
-    fn write(&mut self, column: impl Display, value: impl Display) -> Result<()> {
+    fn write(&mut self, column: impl Display, value: impl Display) -> io::Result<()> {
         self.write(column, value);
         Ok(())
     }
 
-    fn end_design_point(&mut self) -> Result<()> {
+    fn end_design_point(&mut self) -> io::Result<()> {
         self.end_line()
     }
 
-    fn end_graph_section(&mut self) -> Result<()> {
+    fn end_bench(&mut self) -> io::Result<()> {
         self.fix_columns()
     }
 }
