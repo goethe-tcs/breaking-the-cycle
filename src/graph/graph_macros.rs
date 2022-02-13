@@ -27,7 +27,7 @@ macro_rules! impl_helper_graph_debug {
             fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
                 let mut buf = Vec::new();
                 if self.try_write_dot(&mut buf).is_ok() {
-                    f.write_str(str::from_utf8(&buf).unwrap())?;
+                    f.write_str(str::from_utf8(&buf).unwrap().trim())?;
                 }
 
                 Ok(())

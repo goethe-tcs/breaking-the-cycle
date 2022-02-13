@@ -229,7 +229,7 @@ where
 
                     if log_enabled!(Level::Trace) {
                         for (scc_i, scc) in sccs.iter().enumerate() {
-                            trace!("[id {}] scc {}: {:?}", i, scc_i, scc);
+                            trace!("[id {}] scc {}:{:#?}", i, scc_i, scc);
                         }
                     }
 
