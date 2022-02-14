@@ -2,9 +2,12 @@
 #![feature(generic_associated_types)]
 #![feature(test)]
 #![feature(unchecked_math)]
+#![allow(incomplete_features)]
+#![feature(generic_const_exprs)]
 
 pub mod bench;
 pub mod bitset;
+pub mod exact;
 pub mod graph;
 pub mod heuristics;
 pub mod log;
