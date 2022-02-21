@@ -123,7 +123,7 @@ impl<'a, T: AdjacencyList> StronglyConnected<'a, T> {
         Tarjan's algorithm is typically described in a recursive fashion similarly to DFS
         with some extra steps. This design has two issues:
          1.) We cannot easily build an iterator from it
-         2.) For large graphs we get stack overflows.
+         2.) For large graphs we get stack overflows
 
         To overcome these issues, we use the explicit call stack `self.call_stack` that simulates
         recursive calls. On first visit of a node v it is assigned a "DFS rank"ish index and
@@ -166,7 +166,7 @@ impl<'a, T: AdjacencyList> StronglyConnected<'a, T> {
             let frame = self.call_stack.pop().unwrap();
             let state = self.states[v as usize];
 
-            self.states[frame.parent as usize].try_lower_link(state.low_links);
+            self.states[frame.parent as usize].try_lower_link(state.low_link);
 
             if state.is_root() {
                 if !self.include_singletons
@@ -206,17 +206,14 @@ impl<'a, T: AdjacencyList> StronglyConnected<'a, T> {
 impl<'a, T: AdjacencyList> Iterator for StronglyConnected<'a, T> {
     type Item = Vec<Node>;
 
-    /// Returns either a vector of node ids that form an SCC.
+    /// Returns either a vector of node ids that form an SCC or None if no further SCC was found
     fn next(&mut self) -> Option<Self::Item> {
         loop {
-            match self.search() {
-                Some(x) => {
-                    return Some(x);
-                }
-                None => {
-                    self.next_unvisited_node()?;
-                }
+            if let Some(x) = self.search() {
+                return Some(x);
             }
+
+            self.next_unvisited_node()?;
         }
     }
 }
@@ -238,24 +235,24 @@ struct NodeState {
     visited: bool,
     on_stack: bool,
     index: Node,
-    low_links: Node,
+    low_link: Node,
 }
 
 impl NodeState {
     fn visit(&mut self, u: Node) {
         debug_assert!(!self.visited);
         self.index = u;
-        self.low_links = u;
+        self.low_link = u;
         self.visited = true;
         self.on_stack = true;
     }
 
     fn try_lower_link(&mut self, l: Node) {
-        self.low_links = self.low_links.min(l);
+        self.low_link = self.low_link.min(l);
     }
 
     fn is_root(&self) -> bool {
-        self.index == self.low_links
+        self.index == self.low_link
     }
 }
 
