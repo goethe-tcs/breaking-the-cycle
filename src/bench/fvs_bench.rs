@@ -239,7 +239,7 @@ where
         rayon::ThreadPoolBuilder::new()
             .num_threads(self.num_threads)
             .build_global()
-            .unwrap_or_else(|_| warn!("Failed to set the number of threads used by rayon!"));
+            .unwrap_or_else(|e| warn!("Failed to set the number of threads used by rayon: {}", e));
 
         info!(
             "Running benchmark with {} design points using {} threads...",
@@ -274,6 +274,14 @@ where
                         reduct_state.graph().remove_disconnected_verts();
                     let mut total_fvs = reduct_state.fvs().to_vec();
 
+                    // write graph related metrics
+                    metric_buffer.write("id", i);
+                    metric_buffer.write("graph", graph_label);
+                    metric_buffer.write("n", input_graph.len());
+                    metric_buffer.write("m", input_graph.number_of_edges());
+                    metric_buffer.write("n_reduced", reduct_graph.len());
+                    metric_buffer.write("m_reduced", reduct_graph.number_of_edges());
+
                     //split graph into strongly connected components
                     let sccs = if split_into_sccs {
                         reduct_graph
@@ -287,23 +295,14 @@ where
                             })
                             .collect_vec()
                     } else {
-                        vec![(reduct_graph.clone(), NodeMapper::with_capacity(0))]
+                        vec![(reduct_graph, NodeMapper::with_capacity(0))]
                     };
-
+                    metric_buffer.write("scc_amount", sccs.len());
                     if log_enabled!(Level::Trace) {
                         for (scc_i, scc) in sccs.iter().enumerate() {
                             trace!("[id {}] scc {}:{:#?}", i, scc_i, scc);
                         }
                     }
-
-                    // write graph related metrics
-                    metric_buffer.write("id", i);
-                    metric_buffer.write("graph", graph_label);
-                    metric_buffer.write("n", input_graph.len());
-                    metric_buffer.write("m", input_graph.number_of_edges());
-                    metric_buffer.write("n_reduced", reduct_graph.len());
-                    metric_buffer.write("m_reduced", reduct_graph.number_of_edges());
-                    metric_buffer.write("scc_amount", sccs.len());
 
                     // run algorithm for every strongly connected component
                     let start = Instant::now();
