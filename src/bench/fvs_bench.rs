@@ -20,9 +20,55 @@ use crate::pre_processor_reduction::{PreprocessorReduction, ReductionState};
 
 /// Measures the computation time and solution size of multiple DFVS-algorithms against multiple
 /// graphs. Each algorithm is run for each graph at least once.
+///
+/// # Examples
+/// Basic usage:
+/// ```
+/// # use dfvs::heuristics::greedy::{greedy_dfvs, MaxDegreeSelector};
+/// # use dfvs::graph::io::FileFormat;
+/// # use rand::prelude::*;
+/// # use rand_pcg::Pcg64;
+/// # use dfvs::graph::adj_array::AdjArrayIn;
+/// # use dfvs::random_models::gnp::generate_gnp;
+/// use dfvs::bench::fvs_bench::FvsBench;
+///
+/// # #[cfg(feature = "tempfile")]
+/// fn main() -> std::io::Result<()> {
+///     let temp_dir = tempfile::TempDir::new().unwrap();
+///     let output_path = temp_dir.path().join("test_bench.csv");
+///
+///     let n = 20;
+///     let p = 0.01;
+///     let seed = 1;
+///     let mut rng = Pcg64::seed_from_u64(seed);
+///
+///     let mut bench = FvsBench::new();
+///
+///     bench.add_graph_file(FileFormat::Pace, "data/netrep/1/football.pace")?;
+///     bench.add_graph("my_random_graph", generate_gnp::<AdjArrayIn, _>(&mut rng, n, p));
+///
+///     bench.add_algo("my_algo", |graph, _writer| {
+///         greedy_dfvs::<MaxDegreeSelector<_>, _, _>(graph)
+///     });
+///
+///     bench
+///         .num_threads(1)
+///         .iterations(3)
+///         .strict(false)
+///         .reduce_graphs(true)
+///         .split_into_sccs(false)
+///         .strict(false)
+///         .run(output_path)?;
+///
+///     Ok(())
+/// }
+/// # #[cfg(not(feature = "tempfile"))]
+/// # fn main() -> std::io::Result<()> { Ok(())} //TODO: remove this workaround
+/// ```
 pub struct FvsBench<G> {
     strict: bool,
     reduce_graphs: bool,
+    split_into_sccs: bool,
     iterations: usize,
     num_threads: usize,
 
@@ -57,6 +103,7 @@ where
         Self {
             strict: false,
             reduce_graphs: true,
+            split_into_sccs: true,
             iterations: 1,
             num_threads: num_cpus::get_physical(),
 
@@ -103,6 +150,15 @@ where
     /// Default: `true`
     pub fn reduce_graphs(&mut self, value: bool) -> &mut Self {
         self.reduce_graphs = value;
+        self
+    }
+
+    /// Whether to split the input graphs into strongly connected components or not. SCC's of size
+    /// 1 without a self loop are discarded.
+    ///
+    /// Default: `true`
+    pub fn split_into_sccs(&mut self, value: bool) -> &mut Self {
+        self.split_into_sccs = value;
         self
     }
 
@@ -183,7 +239,7 @@ where
         rayon::ThreadPoolBuilder::new()
             .num_threads(self.num_threads)
             .build_global()
-            .unwrap_or_else(|_| warn!("Failed to set the number of threads used by rayon!"));
+            .unwrap_or_else(|e| warn!("Failed to set the number of threads used by rayon: {}", e));
 
         info!(
             "Running benchmark with {} design points using {} threads...",
@@ -194,6 +250,7 @@ where
         // copy fields of self to avoid moving self into threads
         let strict = self.strict;
         let reduce_graphs = self.reduce_graphs;
+        let split_into_sccs = self.split_into_sccs;
 
         // run benchmark
         let result = design_points
@@ -217,22 +274,6 @@ where
                         reduct_state.graph().remove_disconnected_verts();
                     let mut total_fvs = reduct_state.fvs().to_vec();
 
-                    // split graph into strongly connected components
-                    let sccs = reduct_graph
-                        .strongly_connected_components_no_singletons()
-                        .into_iter()
-                        .map(|scc| {
-                            reduct_graph
-                                .vertex_induced(&BitSet::new_all_unset_but(reduct_graph.len(), scc))
-                        })
-                        .collect_vec();
-
-                    if log_enabled!(Level::Trace) {
-                        for (scc_i, scc) in sccs.iter().enumerate() {
-                            trace!("[id {}] scc {}:{:#?}", i, scc_i, scc);
-                        }
-                    }
-
                     // write graph related metrics
                     metric_buffer.write("id", i);
                     metric_buffer.write("graph", graph_label);
@@ -240,7 +281,28 @@ where
                     metric_buffer.write("m", input_graph.number_of_edges());
                     metric_buffer.write("n_reduced", reduct_graph.len());
                     metric_buffer.write("m_reduced", reduct_graph.number_of_edges());
+
+                    //split graph into strongly connected components
+                    let sccs = if split_into_sccs {
+                        reduct_graph
+                            .strongly_connected_components_no_singletons()
+                            .into_iter()
+                            .map(|scc| {
+                                reduct_graph.vertex_induced(&BitSet::new_all_unset_but(
+                                    reduct_graph.len(),
+                                    scc,
+                                ))
+                            })
+                            .collect_vec()
+                    } else {
+                        vec![(reduct_graph, NodeMapper::with_capacity(0))]
+                    };
                     metric_buffer.write("scc_amount", sccs.len());
+                    if log_enabled!(Level::Trace) {
+                        for (scc_i, scc) in sccs.iter().enumerate() {
+                            trace!("[id {}] scc {}:{:#?}", i, scc_i, scc);
+                        }
+                    }
 
                     // run algorithm for every strongly connected component
                     let start = Instant::now();
@@ -502,6 +564,8 @@ mod tests_bench_with_tempfile {
                 ]),
             )
             .add_algo("test_algo", |_, _| vec![1, 2])
+            .reduce_graphs(true)
+            .split_into_sccs(false)
             .run(output_path.clone())
             .unwrap();
 
