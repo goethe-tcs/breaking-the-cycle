@@ -347,6 +347,31 @@ pub trait Traversal: AdjacencyList + Sized {
 
 impl<T: AdjacencyList + Sized> Traversal for T {}
 
+pub trait TestNodeOnCycle {
+    /// Returns true iff there exists a directed path from u to u itself, i.e. if u is part of a
+    /// non-trivial SCC
+    ///
+    /// # Example
+    /// ```
+    /// use dfvs::graph::{AdjListMatrix, TestNodeOnCycle};
+    /// // nodes 0,1,2 form a triangle; {3,4} are acyclic attachments on 1; 5 is an isolated loop
+    /// let mut graph = AdjListMatrix::from(&[(0, 1), (1, 2), (2, 0),  (1,3), (4,1), (5,5)]);
+    /// assert!(graph.is_node_on_cycle(0));
+    /// assert!(graph.is_node_on_cycle(1));
+    /// assert!(graph.is_node_on_cycle(2));
+    /// assert!(!graph.is_node_on_cycle(3));
+    /// assert!(!graph.is_node_on_cycle(4));
+    /// assert!(graph.is_node_on_cycle(5));
+    /// ```
+    fn is_node_on_cycle(&self, u: Node) -> bool;
+}
+
+impl<T: Traversal + AdjacencyTest> TestNodeOnCycle for T {
+    fn is_node_on_cycle(&self, u: Node) -> bool {
+        self.dfs(u).any(|v| self.has_edge(v, u))
+    }
+}
+
 #[cfg(test)]
 pub mod tests {
     use super::*;
@@ -484,5 +509,19 @@ pub mod tests {
         assert!(graph.is_acyclic());
         graph.add_edge(6, 2); // introduce cycle
         assert!(!graph.is_acyclic());
+    }
+
+    #[test]
+    fn node_on_cycle() {
+        let mut graph = AdjListMatrix::from(&[(0, 1), (1, 2), (2, 3), (3, 0), (3, 4), (4, 5)]);
+        assert!(graph.is_node_on_cycle(0));
+        assert!(graph.is_node_on_cycle(1));
+        assert!(graph.is_node_on_cycle(2));
+        assert!(graph.is_node_on_cycle(3));
+        assert!(!graph.is_node_on_cycle(4));
+        assert!(!graph.is_node_on_cycle(5));
+
+        graph.add_edge(5, 2);
+        assert!(graph.vertices().all(|u| graph.is_node_on_cycle(u)));
     }
 }
