@@ -352,7 +352,7 @@ pub mod tests {
     use super::*;
 
     #[test]
-    fn test_bfs_order() {
+    fn bfs_order() {
         //  / 2 --- \
         // 1         4 - 3
         //  \ 0 - 5 /
@@ -375,7 +375,7 @@ pub mod tests {
     }
 
     #[test]
-    fn test_bfs_with_predecessor() {
+    fn bfs_with_predecessor() {
         let graph = AdjListMatrix::from(&[(1, 2), (1, 0), (4, 3), (0, 5), (2, 4), (5, 4)]);
 
         let mut edges: Vec<_> = graph
@@ -397,14 +397,14 @@ pub mod tests {
     }
 
     #[test]
-    fn test_bfs_tree() {
+    fn bfs_tree() {
         let graph = AdjListMatrix::from(&[(1, 2), (1, 0), (4, 3), (0, 5), (2, 4), (5, 4)]);
         let tree = graph.bfs_with_predecessor(1).parent_array();
         assert_eq!(tree, vec![1, 1, 1, 4, 2, 0]);
     }
 
     #[test]
-    fn test_dfs_order() {
+    fn dfs_order() {
         //  / 2
         // 1         4 - 3
         //  \ 0 - 5 /
@@ -430,14 +430,14 @@ pub mod tests {
     }
 
     #[test]
-    fn test_dfs_tree() {
+    fn dfs_tree() {
         let graph = AdjListMatrix::from(&[(1, 2), (1, 0), (4, 3), (0, 5), (5, 4)]);
         let tree = graph.dfs_with_predecessor(1).parent_array();
         assert_eq!(tree, vec![1, 1, 1, 4, 5, 0]);
     }
 
     #[test]
-    fn test_dfs_with_predecessor() {
+    fn dfs_with_predecessor() {
         let graph = AdjListMatrix::from(&[(1, 2), (1, 0), (4, 3), (0, 5), (5, 4)]);
 
         let mut edges: Vec<_> = graph
@@ -459,7 +459,7 @@ pub mod tests {
     }
 
     #[test]
-    fn test_topology_rank() {
+    fn topology_rank() {
         let mut graph = AdjListMatrix::from(&[(2, 0), (1, 0), (0, 3), (0, 4), (0, 5), (3, 6)]);
 
         {
@@ -479,7 +479,7 @@ pub mod tests {
     }
 
     #[test]
-    fn test_is_acyclic() {
+    fn is_acyclic() {
         let mut graph = AdjListMatrix::from(&[(2, 0), (1, 0), (0, 3), (0, 4), (0, 5), (3, 6)]);
         assert!(graph.is_acyclic());
         graph.add_edge(6, 2); // introduce cycle
