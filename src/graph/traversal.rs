@@ -347,12 +347,37 @@ pub trait Traversal: AdjacencyList + Sized {
 
 impl<T: AdjacencyList + Sized> Traversal for T {}
 
+pub trait TestNodeOnCycle {
+    /// Returns true iff there exists a directed path from u to u itself, i.e. if u is part of a
+    /// non-trivial SCC
+    ///
+    /// # Example
+    /// ```
+    /// use dfvs::graph::{AdjListMatrix, TestNodeOnCycle};
+    /// // nodes 0,1,2 form a triangle; {3,4} are acyclic attachments on 1; 5 is an isolated loop
+    /// let mut graph = AdjListMatrix::from(&[(0, 1), (1, 2), (2, 0),  (1,3), (4,1), (5,5)]);
+    /// assert!(graph.is_node_on_cycle(0));
+    /// assert!(graph.is_node_on_cycle(1));
+    /// assert!(graph.is_node_on_cycle(2));
+    /// assert!(!graph.is_node_on_cycle(3));
+    /// assert!(!graph.is_node_on_cycle(4));
+    /// assert!(graph.is_node_on_cycle(5));
+    /// ```
+    fn is_node_on_cycle(&self, u: Node) -> bool;
+}
+
+impl<T: Traversal + AdjacencyTest> TestNodeOnCycle for T {
+    fn is_node_on_cycle(&self, u: Node) -> bool {
+        self.dfs(u).any(|v| self.has_edge(v, u))
+    }
+}
+
 #[cfg(test)]
 pub mod tests {
     use super::*;
 
     #[test]
-    fn test_bfs_order() {
+    fn bfs_order() {
         //  / 2 --- \
         // 1         4 - 3
         //  \ 0 - 5 /
@@ -375,7 +400,7 @@ pub mod tests {
     }
 
     #[test]
-    fn test_bfs_with_predecessor() {
+    fn bfs_with_predecessor() {
         let graph = AdjListMatrix::from(&[(1, 2), (1, 0), (4, 3), (0, 5), (2, 4), (5, 4)]);
 
         let mut edges: Vec<_> = graph
@@ -397,14 +422,14 @@ pub mod tests {
     }
 
     #[test]
-    fn test_bfs_tree() {
+    fn bfs_tree() {
         let graph = AdjListMatrix::from(&[(1, 2), (1, 0), (4, 3), (0, 5), (2, 4), (5, 4)]);
         let tree = graph.bfs_with_predecessor(1).parent_array();
         assert_eq!(tree, vec![1, 1, 1, 4, 2, 0]);
     }
 
     #[test]
-    fn test_dfs_order() {
+    fn dfs_order() {
         //  / 2
         // 1         4 - 3
         //  \ 0 - 5 /
@@ -430,14 +455,14 @@ pub mod tests {
     }
 
     #[test]
-    fn test_dfs_tree() {
+    fn dfs_tree() {
         let graph = AdjListMatrix::from(&[(1, 2), (1, 0), (4, 3), (0, 5), (5, 4)]);
         let tree = graph.dfs_with_predecessor(1).parent_array();
         assert_eq!(tree, vec![1, 1, 1, 4, 5, 0]);
     }
 
     #[test]
-    fn test_dfs_with_predecessor() {
+    fn dfs_with_predecessor() {
         let graph = AdjListMatrix::from(&[(1, 2), (1, 0), (4, 3), (0, 5), (5, 4)]);
 
         let mut edges: Vec<_> = graph
@@ -459,7 +484,7 @@ pub mod tests {
     }
 
     #[test]
-    fn test_topology_rank() {
+    fn topology_rank() {
         let mut graph = AdjListMatrix::from(&[(2, 0), (1, 0), (0, 3), (0, 4), (0, 5), (3, 6)]);
 
         {
@@ -479,10 +504,24 @@ pub mod tests {
     }
 
     #[test]
-    fn test_is_acyclic() {
+    fn is_acyclic() {
         let mut graph = AdjListMatrix::from(&[(2, 0), (1, 0), (0, 3), (0, 4), (0, 5), (3, 6)]);
         assert!(graph.is_acyclic());
         graph.add_edge(6, 2); // introduce cycle
         assert!(!graph.is_acyclic());
+    }
+
+    #[test]
+    fn node_on_cycle() {
+        let mut graph = AdjListMatrix::from(&[(0, 1), (1, 2), (2, 3), (3, 0), (3, 4), (4, 5)]);
+        assert!(graph.is_node_on_cycle(0));
+        assert!(graph.is_node_on_cycle(1));
+        assert!(graph.is_node_on_cycle(2));
+        assert!(graph.is_node_on_cycle(3));
+        assert!(!graph.is_node_on_cycle(4));
+        assert!(!graph.is_node_on_cycle(5));
+
+        graph.add_edge(5, 2);
+        assert!(graph.vertices().all(|u| graph.is_node_on_cycle(u)));
     }
 }
