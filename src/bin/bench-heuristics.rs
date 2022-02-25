@@ -7,7 +7,7 @@ use dfvs::graph::io::FileFormat;
 use dfvs::heuristics::greedy::{greedy_dfvs, MaxDegreeSelector};
 use dfvs::heuristics::local_search::rand_topo_strategy::RandomTopoStrategy;
 use dfvs::heuristics::local_search::sim_anneal::sim_anneal;
-use dfvs::log::build_pace_logger_for_level;
+use dfvs::log::build_pace_logger_for_verbosity;
 use dfvs::random_models::gnp::generate_gnp;
 use glob::glob;
 use log::{info, LevelFilter};
@@ -33,7 +33,7 @@ struct Opt {
 
     /// Verbose mode (-v, -vv, -vvv, etc.)
     #[structopt(short, long, parse(from_occurrences))]
-    verbose: u8,
+    verbose: usize,
 
     #[structopt(subcommand)]
     mode: Mode,
@@ -66,15 +66,7 @@ enum Mode {
 
 fn main() -> std::io::Result<()> {
     let opt: Opt = Opt::from_args();
-
-    let log_level = match opt.verbose {
-        0 => LevelFilter::Warn,
-        1 => LevelFilter::Info,
-        2 => LevelFilter::Debug,
-        3 => LevelFilter::Trace,
-        _ => panic!("Invalid verbosity level '{}'", opt.verbose),
-    };
-    build_pace_logger_for_level(log_level);
+    build_pace_logger_for_verbosity(LevelFilter::Warn, opt.verbose);
 
     let output = opt.output.unwrap_or_else(|| {
         bench_dir()

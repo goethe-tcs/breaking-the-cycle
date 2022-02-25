@@ -4,6 +4,7 @@
 #![feature(unchecked_math)]
 #![allow(incomplete_features)]
 #![feature(generic_const_exprs)]
+#![feature(custom_test_frameworks)]
 
 pub mod bench;
 pub mod bitset;
