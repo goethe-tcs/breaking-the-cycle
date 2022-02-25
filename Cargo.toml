@@ -21,6 +21,7 @@ fxhash = "0.2.1"
 keyed_priority_queue = "0.4.1"
 glob = "0.3.0"
 tempfile = { version= "3.2.0", optional = true }
+test-case = { version="1.2.3", optional = true}
 digest = { version = "0.10.0", optional = true }
 sha2 = { version = "0.10.0", optional = true }
 csv = "1.1.6"
@@ -68,4 +69,10 @@ test = false
 [[bin]]
 name = "bench-branch-and-bound"
 path = "src/bin/bench-branch-and-bound.rs"
+test = false
+
+[[bin]]
+name = "dfvs-preprocessing"
+path = "src/bin/dfvs-preprocessing.rs"
+required-features = ["cli", "pace-digest"]
 test = false
