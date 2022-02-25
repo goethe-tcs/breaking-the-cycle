@@ -12,7 +12,7 @@ pub trait IntegerIterators: PrimInt + Unsigned {
     /// assert_eq!(0b0000_0000_u32.iter_ones().collect_vec(), vec![]);
     /// assert_eq!(0b0000_0001_u32.iter_ones().collect_vec(), vec![0]);
     /// assert_eq!(0b0000_1010_u32.iter_ones().collect_vec(), vec![1, 3]);
-    /// ````
+    /// ```
     fn iter_ones(self) -> IntegerIterator<Self> {
         IntegerIterator::new(self)
     }
@@ -27,7 +27,7 @@ pub trait IntegerIterators: PrimInt + Unsigned {
     /// assert_eq!(0b1111_1111_u8.iter_zeros().collect_vec(), vec![]);
     /// assert_eq!(0b1111_1110_u8.iter_zeros().collect_vec(), vec![0]);
     /// assert_eq!(0b1011_1101_u8.iter_zeros().collect_vec(), vec![1, 6]);
-    /// ````
+    /// ```
     fn iter_zeros(self) -> IntegerIterator<Self> {
         IntegerIterator::new(!self)
     }
