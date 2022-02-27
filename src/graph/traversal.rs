@@ -15,7 +15,7 @@ pub trait TraversalState {
     }
 }
 
-pub trait SequencedItem {
+pub trait SequencedItem: Clone + Copy {
     fn new_with_predecessor(predecessor: Node, item: Node) -> Self;
     fn new_without_predecessor(item: Node) -> Self;
     fn item(&self) -> Node;
@@ -68,10 +68,14 @@ pub trait NodeSequencer<T> {
     fn init(u: T) -> Self;
     fn push(&mut self, item: T);
     fn pop(&mut self) -> Option<T>;
+    fn peek(&self) -> Option<T>;
     fn cardinality(&self) -> usize;
 }
 
-impl<T> NodeSequencer<T> for VecDeque<T> {
+impl<T> NodeSequencer<T> for VecDeque<T>
+where
+    T: Clone,
+{
     fn init(u: T) -> Self {
         Self::from(vec![u])
     }
@@ -81,12 +85,18 @@ impl<T> NodeSequencer<T> for VecDeque<T> {
     fn pop(&mut self) -> Option<T> {
         self.pop_front()
     }
+    fn peek(&self) -> Option<T> {
+        self.front().cloned()
+    }
     fn cardinality(&self) -> usize {
         self.len()
     }
 }
 
-impl<T> NodeSequencer<T> for Vec<T> {
+impl<T> NodeSequencer<T> for Vec<T>
+where
+    T: Clone,
+{
     fn init(u: T) -> Self {
         vec![u]
     }
@@ -95,6 +105,9 @@ impl<T> NodeSequencer<T> for Vec<T> {
     }
     fn pop(&mut self) -> Option<T> {
         self.pop()
+    }
+    fn peek(&self) -> Option<T> {
+        self.last().cloned()
     }
     fn cardinality(&self) -> usize {
         self.len()
@@ -185,6 +198,68 @@ impl<'a, G: AdjacencyList, S: NodeSequencer<I>, I: SequencedItem> TraversalSearc
                 true
             }
         }
+    }
+
+    /// Excludes a node from the search. It will be treated as if it was already visited,
+    /// i.e. no edges to or from that node will be taken. If the node was already visited,
+    /// this is a non-op.
+    ///
+    /// # Warning
+    /// Calling this method has no effect if the node is already on the stack. It is therefore highly
+    /// recommended to call this method directly after the constructor.
+    ///
+    /// # Example
+    /// ```
+    /// use dfvs::graph::*;
+    /// let graph = AdjListMatrix::from(&[(0,1), (1,2)]); // directed path 0 -> 1 -> 2
+    /// let dfs : Vec<_> = graph.dfs(0).exclude_node(1).collect(); // exclude 1
+    /// assert_eq!(dfs, vec![0]); // we can only visit 1
+    /// ```
+    pub fn exclude_node(&mut self, u: Node) -> &mut Self {
+        self.visited.set_bit(u as usize);
+        self
+    }
+
+    /// Exclude multiple nodes from traversal. It is functionally equivalent to repeatedly
+    /// calling [exclude_node].
+    ///
+    /// # Warning
+    /// Calling this method has no effect for nodes that are already on the stack. It is
+    /// therefore highly recommended to call this method directly after the constructor.
+    ///
+    /// # Example
+    /// ```
+    /// use dfvs::graph::*;
+    /// let graph = AdjListMatrix::from(&[(0,1), (0,2), (1,3), (2,3)]); // directed path 0 -> 1 -> 3 and 0 -> 2 -> 3
+    /// let dfs : Vec<_> = graph.dfs(0).exclude_nodes([1,2]).collect(); // exclude 1
+    /// assert_eq!(dfs, vec![0]); // we can only visit 1
+    /// ```
+    pub fn exclude_nodes(&mut self, us: impl IntoIterator<Item = Node>) -> &mut Self {
+        for u in us {
+            self.exclude_node(u);
+        }
+        self
+    }
+
+    /// Consumes the traversal search and returns true iff the requested node can be visited, i.e.
+    /// if there exists a directed path from the start node to u.
+    ///
+    /// # Warning
+    /// It is undefined behavior to call the method on a partially executed iterator.
+    ///
+    /// # Example
+    /// ```
+    /// use dfvs::graph::*;
+    /// let graph = AdjListMatrix::from(&[(0,1), (0,0)]);
+    /// assert!(graph.dfs(0).is_node_reachable(0));
+    /// assert!(graph.dfs(0).is_node_reachable(1));
+    /// assert!(!graph.dfs(1).is_node_reachable(0));
+    /// ```
+    pub fn is_node_reachable(mut self, u: Node) -> bool {
+        assert_eq!(self.sequencer.cardinality(), 1);
+        self.visited.unset_bit(u as usize);
+        self.next();
+        self.any(|v| v.item() == u)
     }
 }
 
@@ -343,34 +418,51 @@ pub trait Traversal: AdjacencyList + Sized {
     fn is_acyclic(&self) -> bool {
         self.topo_search().count() == self.len()
     }
-}
 
-impl<T: AdjacencyList + Sized> Traversal for T {}
-
-pub trait TestNodeOnCycle {
     /// Returns true iff there exists a directed path from u to u itself, i.e. if u is part of a
     /// non-trivial SCC
     ///
     /// # Example
     /// ```
-    /// use dfvs::graph::{AdjListMatrix, TestNodeOnCycle};
+    /// use dfvs::graph::{AdjListMatrix, Traversal};
     /// // nodes 0,1,2 form a triangle; {3,4} are acyclic attachments on 1; 5 is an isolated loop
-    /// let mut graph = AdjListMatrix::from(&[(0, 1), (1, 2), (2, 0),  (1,3), (4,1), (5,5)]);
-    /// assert!(graph.is_node_on_cycle(0));
-    /// assert!(graph.is_node_on_cycle(1));
-    /// assert!(graph.is_node_on_cycle(2));
+    /// let graph = AdjListMatrix::from(&[(0, 1), (1, 2), (2, 0),  (1,3), (4,1), (5,5)]);
+    /// assert!( graph.is_node_on_cycle(0));
+    /// assert!( graph.is_node_on_cycle(1));
+    /// assert!( graph.is_node_on_cycle(2));
     /// assert!(!graph.is_node_on_cycle(3));
     /// assert!(!graph.is_node_on_cycle(4));
-    /// assert!(graph.is_node_on_cycle(5));
+    /// assert!( graph.is_node_on_cycle(5));
     /// ```
-    fn is_node_on_cycle(&self, u: Node) -> bool;
-}
-
-impl<T: Traversal + AdjacencyTest> TestNodeOnCycle for T {
     fn is_node_on_cycle(&self, u: Node) -> bool {
-        self.dfs(u).any(|v| self.has_edge(v, u))
+        self.dfs(u).is_node_reachable(u)
+    }
+
+    /// Returns true iff there exists a directed path from u to u itself without using any nodes in
+    /// deleted. The method ignores a potential entry u in deleted, i.e. behaves as if it were not
+    /// in deleted.
+    ///
+    /// # Example
+    /// ```
+    /// use dfvs::graph::{Node, AdjListMatrix, Traversal};
+    /// // nodes 0,1,2 form a directed triangle
+    /// let graph = AdjListMatrix::from(&[(0, 1), (1, 2), (2, 0), (3, 3)]);
+    /// assert!( graph.is_node_on_cycle_after_deleting(0, [3 as Node   ])); // 3 is not related
+    /// assert!( graph.is_node_on_cycle_after_deleting(0, [0 as Node   ])); // u itself is ignored
+    /// assert!(!graph.is_node_on_cycle_after_deleting(0, [0 as Node, 1])); // 1 breaks the cycle
+    /// assert!(!graph.is_node_on_cycle_after_deleting(0, [1 as Node   ])); // 1 breaks the cycle
+    /// ```
+    fn is_node_on_cycle_after_deleting<I>(&self, u: Node, deleted: I) -> bool
+    where
+        I: IntoIterator<Item = Node>,
+    {
+        let mut dfs = self.dfs(u);
+        dfs.exclude_nodes(deleted);
+        dfs.is_node_reachable(u)
     }
 }
+
+impl<T: AdjacencyList + Sized> Traversal for T {}
 
 #[cfg(test)]
 pub mod tests {
