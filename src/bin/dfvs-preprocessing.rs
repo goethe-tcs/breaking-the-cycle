@@ -166,7 +166,7 @@ fn get_unique_scc_path(
     name_formatter: impl Fn(&str) -> String,
 ) -> PathBuf {
     let hash = scc.digest_sha256();
-    let mut hash_len = min_hash_size.unwrap_or_else(|| hash.len());
+    let mut hash_len = min_hash_size.unwrap_or(hash.len());
 
     loop {
         let scc_name = name_formatter(&hash[0..hash_len]);
