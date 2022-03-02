@@ -31,6 +31,11 @@ struct Opt {
     #[structopt(short, long, default_value = "1")]
     iterations: usize,
 
+    /// How many threads to use for benchmarking, default is the amount of physical cores of the
+    /// system
+    #[structopt(short = "p", long)]
+    num_threads: Option<usize>,
+
     /// Verbose mode (-v, -vv, -vvv, etc.)
     #[structopt(short, long, parse(from_occurrences))]
     verbose: usize,
@@ -106,6 +111,10 @@ fn main() -> std::io::Result<()> {
             }
         }
     };
+
+    if let Some(num_threads) = opt.num_threads {
+        bench.num_threads(num_threads);
+    }
 
     bench.add_algo("greedy", |graph: AdjArrayIn, _| {
         greedy_dfvs::<MaxDegreeSelector<_>, _, _>(graph)
