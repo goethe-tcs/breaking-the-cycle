@@ -210,6 +210,7 @@ impl EdmondsKarp {
         let t = *self.residual_network.target();
 
         let mut bfs = self.residual_network.bfs_with_predecessor(s);
+        bfs.stop_at(t);
         bfs.parent_array_into(self.predecessor.as_mut_slice());
         bfs.did_visit_node(t)
     }

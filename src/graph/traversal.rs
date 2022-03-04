@@ -120,6 +120,7 @@ pub struct TraversalSearch<'a, G: AdjacencyList, S: NodeSequencer<I>, I: Sequenc
     graph: &'a G,
     visited: BitSet,
     sequencer: S,
+    stop_at: Option<Node>,
     _item: PhantomData<I>,
 }
 
@@ -155,10 +156,14 @@ impl<'a, G: AdjacencyList, S: NodeSequencer<I>, I: SequencedItem> Iterator
         let popped = self.sequencer.pop()?;
         let u = popped.item();
 
-        for v in self.graph.out_neighbors(u) {
-            if !self.visited[v as usize] {
-                self.sequencer.push(I::new_with_predecessor(u, v));
-                self.visited.set_bit(v as usize);
+        if self.stop_at.map_or(false, |stopper| u == stopper) {
+            while self.sequencer.pop().is_some() {} // drop all
+        } else {
+            for v in self.graph.out_neighbors(u) {
+                if !self.visited[v as usize] {
+                    self.sequencer.push(I::new_with_predecessor(u, v));
+                    self.visited.set_bit(v as usize);
+                }
             }
         }
 
@@ -181,6 +186,7 @@ impl<'a, G: AdjacencyList, S: NodeSequencer<I>, I: SequencedItem> TraversalSearc
             graph,
             visited,
             sequencer: S::init(I::new_without_predecessor(start)),
+            stop_at: None,
             _item: PhantomData,
         }
     }
@@ -198,6 +204,21 @@ impl<'a, G: AdjacencyList, S: NodeSequencer<I>, I: SequencedItem> TraversalSearc
                 true
             }
         }
+    }
+
+    /// Sets a stopper node. If this node is reached, the iterator returns it and afterwards only None.
+    ///
+    /// # Example
+    /// ```
+    /// use dfvs::graph::*;
+    /// use itertools::Itertools;
+    /// let graph = AdjListMatrix::from(&[(0, 1), (1, 2), (2, 3)]);
+    /// let mut bfs = graph.bfs(0);
+    /// bfs.stop_at(1);
+    /// assert_eq!(bfs.collect_vec(), vec![0, 1]); // nodes 2 and 3 are not returned as we stop at 1
+    /// ```
+    pub fn stop_at(&mut self, stopper: Node) {
+        self.stop_at = Some(stopper);
     }
 
     /// Excludes a node from the search. It will be treated as if it was already visited,
@@ -467,6 +488,7 @@ impl<T: AdjacencyList + Sized> Traversal for T {}
 #[cfg(test)]
 pub mod tests {
     use super::*;
+    use itertools::Itertools;
 
     #[test]
     fn bfs_order() {
@@ -511,6 +533,16 @@ pub mod tests {
                 (Some(4), 3)
             ]
         );
+    }
+
+    #[test]
+    fn test_stopper() {
+        let graph = AdjListMatrix::from(&[(0, 1), (1, 2), (2, 3)]);
+        assert_eq!(graph.bfs(0).collect_vec(), vec![0, 1, 2, 3]);
+
+        let mut bfs = graph.bfs(0);
+        bfs.stop_at(1);
+        assert_eq!(bfs.collect_vec(), vec![0, 1]);
     }
 
     #[test]
