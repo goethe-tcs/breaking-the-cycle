@@ -1,5 +1,5 @@
 use dfvs::graph::adj_array::AdjArrayIn;
-use dfvs::graph::io::PaceRead;
+use dfvs::graph::io::MetisRead;
 use dfvs::graph::*;
 use dfvs::pre_processor_reduction::*;
 use glob::glob;
@@ -10,20 +10,20 @@ use std::time::Instant;
 fn main() -> std::io::Result<()> {
     dfvs::log::build_pace_logger();
 
-    for filename in glob("data/netrep/*/*").unwrap().filter_map(Result::ok) {
+    for filename in glob("data/pace/*/*").unwrap().filter_map(Result::ok) {
         // start timer
         let start = Instant::now();
 
         // read in file
         let file_in = File::open(filename.as_path())?;
         let buf_reader = BufReader::new(file_in);
-        let graph = AdjArrayIn::try_read_pace(buf_reader)?;
+        let graph = AdjArrayIn::try_read_metis(buf_reader)?;
         let n = graph.number_of_nodes();
         let m = graph.number_of_edges();
 
         // apply reduction rules
         let mut state = PreprocessorReduction::from(graph);
-        state.apply_rules_exhaustively();
+        state.apply_rules_exhaustively(true);
 
         // remove all disconnected vertices
         let out_graph = state.graph().remove_disconnected_verts().0;

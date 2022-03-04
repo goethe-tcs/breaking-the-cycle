@@ -4,9 +4,11 @@ use crate::graph::{AdjacencyList, GraphOrder, Node, Traversal, TraversalState, T
 pub struct EdmondsKarp {
     residual_network: ResidualBitMatrix,
     predecessor: Vec<Node>,
+    changes_on_bitmatrix: Vec<(Node, Node)>,
+    remember_changes: bool,
 }
 
-trait ResidualNetwork: SourceTarget + AdjacencyList + Label<Node> {
+pub trait ResidualNetwork: SourceTarget + AdjacencyList + Label<Node> {
     /// Reverses the edge (u, v) to (v, u).
     fn reverse(&mut self, u: Node, v: Node);
 
@@ -27,6 +29,14 @@ trait ResidualNetwork: SourceTarget + AdjacencyList + Label<Node> {
     /// same as vertex disjoint, but s is handled the same as all other vertices, except that
     /// s_in and s_out are not connected. Then, s_out is the source and s_in is the target.
     fn petals<G: GraphOrder + AdjacencyList>(graph: &G, s: Node) -> Self;
+
+    /// can be useful if one wants to reuse a capacity many times.
+    /// creating a new capacity could be expensive.
+    fn from_capacity_and_labels(capacity: Vec<BitSet>, labels: Vec<Node>, s: Node, t: Node)
+        -> Self;
+
+    /// While petals get calculated, the capacity changes its bits. undo_changes reverts all these changes.
+    fn undo_changes<I: IntoIterator<Item = (Node, Node)>>(&mut self, changes_on_bitmatrix: I);
 }
 
 pub struct ResidualBitMatrix {
@@ -38,7 +48,7 @@ pub struct ResidualBitMatrix {
     labels: Vec<Node>,
 }
 
-trait Label<T> {
+pub trait Label<T> {
     fn label(&self, u: Node) -> &T;
 }
 
@@ -48,7 +58,7 @@ impl Label<Node> for ResidualBitMatrix {
     }
 }
 
-trait SourceTarget {
+pub trait SourceTarget {
     fn source(&self) -> &Node;
     fn target(&self) -> &Node;
     fn source_mut(&mut self) -> &mut Node;
@@ -105,7 +115,7 @@ impl ResidualNetwork for ResidualBitMatrix {
     fn reverse(&mut self, u: Node, v: Node) {
         let u = u as usize;
         let v = v as usize;
-        debug_assert!(self.capacity[u][v]);
+        assert!(self.capacity[u][v]);
         self.capacity[u].unset_bit(v);
         self.capacity[v].set_bit(u);
     }
@@ -194,6 +204,32 @@ impl ResidualNetwork for ResidualBitMatrix {
             labels,
         }
     }
+
+    fn from_capacity_and_labels(
+        capacity: Vec<BitSet>,
+        labels: Vec<Node>,
+        s: Node,
+        t: Node,
+    ) -> Self {
+        Self {
+            s,
+            t,
+            n: capacity.len(),
+            m: capacity.iter().map(|v| v.cardinality()).sum(),
+            capacity,
+            labels,
+        }
+    }
+
+    fn undo_changes<I: IntoIterator<Item = (Node, Node)>>(&mut self, changes: I) {
+        changes.into_iter().for_each(|(u, v)| self.reverse(v, u));
+    }
+}
+
+impl ResidualBitMatrix {
+    pub fn take(self) -> (Vec<BitSet>, Vec<Node>) {
+        (self.capacity, self.labels)
+    }
 }
 
 impl EdmondsKarp {
@@ -202,6 +238,8 @@ impl EdmondsKarp {
         Self {
             residual_network,
             predecessor: vec![0; n],
+            changes_on_bitmatrix: vec![],
+            remember_changes: false,
         }
     }
 
@@ -220,11 +258,43 @@ impl EdmondsKarp {
         self.count()
     }
 
+    /// Finds the number of edge discoint paths from s to t, but stops counting at a given k.
+    pub fn count_num_disjoint_upto(&mut self, k: usize) -> usize {
+        self.take(k).count()
+    }
+
     /// Outputs all edge disjoint paths from s to t. The paths are vertex disjoint in the original graph
     /// when the network has been constructed for said restriction.
     /// Each path is represented as a vector of vertices
     pub fn disjoint_paths(&mut self) -> Vec<Vec<Node>> {
         self.collect()
+    }
+
+    /// Sets/Unsets remember_changes to true/false. If its true, the changes, that are made on
+    /// the capacity, are remembered. With that it is possible to undo these changes later.
+    pub fn set_remember_changes(&mut self, remember_changes: bool) {
+        self.remember_changes = remember_changes;
+    }
+
+    /// reverts each edge in capacity, that got changed while petals were calculated.
+    pub fn undo_changes(&mut self) {
+        self.residual_network
+            .undo_changes(self.changes_on_bitmatrix.iter().rev().copied());
+    }
+
+    /// gives access to the capacity, so it can for example be reused for a new ResidualBitMatrix.
+    pub fn take(self) -> (Vec<BitSet>, Vec<Node>) {
+        self.residual_network.take()
+    }
+}
+
+pub trait RememberChanges {
+    fn remember_changes(&mut self, u: Node, v: Node);
+}
+
+impl RememberChanges for EdmondsKarp {
+    fn remember_changes(&mut self, u: Node, v: Node) {
+        self.changes_on_bitmatrix.push((u, v));
     }
 }
 
@@ -247,8 +317,14 @@ impl Iterator for EdmondsKarp {
                 path.push(u);
             }
             self.residual_network.reverse(u, v);
+
+            if self.remember_changes {
+                self.remember_changes(u, v);
+            }
+
             v = u;
         }
+
         Some(
             path.iter()
                 .map(|v| *self.residual_network.label(*v))
@@ -280,7 +356,7 @@ mod tests {
     ];
 
     #[test]
-    fn edmonds_carp() {
+    fn edmonds_karp() {
         let mut g = AdjListMatrix::new(8);
         g.add_edges(&EDGES);
         let edges_reverse: Vec<_> = EDGES.iter().map(|(u, v)| (*v, *u)).collect();
@@ -291,7 +367,7 @@ mod tests {
     }
 
     #[test]
-    fn edmonds_carp_vertex_disjoint() {
+    fn edmonds_karp_vertex_disjoint() {
         let mut g = AdjListMatrix::new(8);
         g.add_edges(&EDGES);
         let mut ec = EdmondsKarp::new(ResidualBitMatrix::vertex_disjoint(&g, 0, 7));
@@ -300,7 +376,7 @@ mod tests {
     }
 
     #[test]
-    fn edmonds_carp_petals() {
+    fn edmonds_karp_petals() {
         let mut g = AdjListMatrix::new(8);
         g.add_edges(&EDGES);
         g.add_edge(3, 7);
@@ -311,11 +387,69 @@ mod tests {
     }
 
     #[test]
-    fn edmonds_carp_no_co_arcs() {
+    fn edmonds_karp_no_co_arcs() {
         let mut g = AdjListMatrix::new(8);
         g.add_edges(&EDGES);
         let mut ec = EdmondsKarp::new(ResidualBitMatrix::edge_disjoint(&g, 0, 7));
         let mf = ec.num_disjoint();
         assert_eq!(mf, 2);
+    }
+
+    #[test]
+    fn undo_changes() {
+        let mut g = AdjListMatrix::new(8);
+        g.add_edges(&EDGES);
+        let ec_before = EdmondsKarp::new(ResidualBitMatrix::petals(&g, 3));
+        let mut ec_after = EdmondsKarp::new(ResidualBitMatrix::petals(&g, 3));
+        ec_after.set_remember_changes(true);
+        ec_after.disjoint_paths();
+        ec_after.undo_changes();
+
+        let capacity_before = ec_before.residual_network.capacity;
+        let capacity_after = ec_after.residual_network.capacity;
+
+        for out_nodes in 0..capacity_after.len() {
+            for out_node in 0..capacity_after[out_nodes].len() {
+                let node_before = capacity_before[out_nodes][out_node];
+                let node_after = capacity_after[out_nodes][out_node];
+                assert_eq!(node_before, node_after);
+            }
+        }
+    }
+
+    #[test]
+    fn count_num_disjoint_upto() {
+        fn min(a: u32, b: u32) -> u32 {
+            if a < b {
+                return a;
+            }
+            return b;
+        }
+        // for node 3
+        let patels_after_edge_added: [((Node, Node), u32); 13] = [
+            ((0, 3), 0),
+            ((3, 2), 0),
+            ((2, 1), 0),
+            ((1, 0), 1),
+            ((3, 5), 1),
+            ((5, 4), 1),
+            ((4, 2), 1),
+            ((4, 3), 2),
+            ((4, 7), 2),
+            ((7, 6), 2),
+            ((6, 1), 2),
+            ((6, 3), 2),
+            ((3, 7), 3),
+        ];
+        let mut g = AdjListMatrix::new(8);
+        for edge in patels_after_edge_added {
+            g.add_edge(edge.0 .0, edge.0 .1);
+            for k in 0..3 {
+                let mut ec = EdmondsKarp::new(ResidualBitMatrix::petals(&g, 3));
+                let guess = ec.count_num_disjoint_upto(k) as Node;
+                let actual = min(k as Node, edge.1);
+                assert_eq!(guess, actual);
+            }
+        }
     }
 }
