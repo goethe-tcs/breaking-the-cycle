@@ -267,7 +267,7 @@ where
                     // reduce graph
                     let mut reduct_state = PreprocessorReduction::from(G::clone(&input_graph));
                     if reduce_graphs {
-                        reduct_state.apply_rules_exhaustively();
+                        reduct_state.apply_rules_exhaustively(false);
                         trace!("[id {}] reduced graph: {:?}", i, reduct_state.graph());
                     }
                     let (reduct_graph, reduct_mapper) =

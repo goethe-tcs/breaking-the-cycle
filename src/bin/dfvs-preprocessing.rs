@@ -105,7 +105,7 @@ fn process_file(opt: &Opt, graph_path: &Path) -> std::io::Result<()> {
 
     trace!("Reducing graph {:?}", graph_path);
     let mut reduct_state = PreprocessorReduction::from(graph);
-    reduct_state.apply_rules_exhaustively();
+    reduct_state.apply_rules_exhaustively(false);
     let reduced_graph = reduct_state.graph().remove_disconnected_verts().0;
 
     let output_dir = opt

@@ -1,3 +1,5 @@
+use crate::bitset::BitSet;
+use crate::graph::network_flow::{EdmondsKarp, ResidualBitMatrix, ResidualNetwork};
 use crate::graph::*;
 
 pub trait ReductionState<G> {
@@ -43,8 +45,9 @@ impl<G: GraphNew + GraphEdgeEditing + AdjacencyList + AdjacencyTest + AdjacencyL
 {
     // added AdjacencyListIn so we can use self.graph.out_degree()
     /// applies rule 1-4 exhaustively
-    pub fn apply_rules_exhaustively(&mut self) {
-        apply_rules_exhaustively(&mut self.graph, &mut self.in_fvs)
+    /// rule 5 is optional, because it runs slow
+    pub fn apply_rules_exhaustively(&mut self, with_rule_5: bool) {
+        apply_rules_exhaustively(&mut self.graph, &mut self.in_fvs, with_rule_5)
     }
 
     pub fn apply_rule_1(&mut self) -> bool {
@@ -58,31 +61,39 @@ impl<G: GraphNew + GraphEdgeEditing + AdjacencyList + AdjacencyTest + AdjacencyL
     pub fn apply_rule_4(&mut self) -> bool {
         apply_rule_4(&mut self.graph, &mut self.in_fvs)
     }
+    pub fn apply_rule_5(&mut self) -> bool {
+        apply_rule_5(&mut self.graph)
+    }
 }
 
-/// applies rule 1-4 exhaustively
+/// applies rule 1-4 + 5 exhaustively
+/// each reduction rule returns true, if it performed a reduction. false otherwise.
+/// reduction rule 5 is much slower, than rule 1-4.
+/// can take a minute if graph has about 10.000 nodes.
 pub fn apply_rules_exhaustively<
     G: GraphNew + GraphEdgeEditing + AdjacencyList + AdjacencyTest + AdjacencyListIn,
 >(
     graph: &mut G,
     fvs: &mut Vec<Node>,
+    with_expensive_rules: bool,
 ) {
     apply_rule_1(graph, fvs);
     apply_rule_3(graph);
     loop {
         let rule_4 = apply_rule_4(graph, fvs);
         let rule_3 = apply_rule_3(graph);
-        if !rule_4 && !rule_3 {
+        if !(rule_3 || rule_4) {
             break;
         }
+    }
+    if with_expensive_rules {
+        apply_rule_5(graph);
     }
 }
 
 // TODO: implement more rules
 
 /// rule 1 - self-loop
-///
-/// returns true if rule got applied at least once, false if not at all
 pub fn apply_rule_1<
     G: GraphNew + GraphEdgeEditing + AdjacencyList + AdjacencyTest + AdjacencyListIn,
 >(
@@ -101,8 +112,6 @@ pub fn apply_rule_1<
 }
 
 /// rule 3 sink/source nodes
-///
-/// returns true if rule got applied at least once, false if not at all
 pub fn apply_rule_3<
     G: GraphNew + GraphEdgeEditing + AdjacencyList + AdjacencyTest + AdjacencyListIn,
 >(
@@ -160,11 +169,108 @@ pub fn apply_rule_4<
     applied
 }
 
+/// Converts a graph into a Vector of BitSets. But every node v of the graph is split into two nodes.
+/// One node has the ingoing edges of v and one has the outgoing edges of v.
+/// Also adds an edge from the node with ingoing edges to the node with outgoing edges.
+pub fn create_capacity_for_many_petals<
+    G: GraphNew + GraphEdgeEditing + AdjacencyList + AdjacencyTest + AdjacencyListIn,
+>(
+    graph: &mut G,
+) -> Vec<BitSet> {
+    let graph_len_double = graph.len() * 2;
+    let mut capacity = vec![BitSet::new(graph_len_double); graph_len_double];
+    for node in graph.vertices_range() {
+        capacity[node as usize].set_bit(node as usize + graph.len());
+        for out_node in graph.out_neighbors(node) {
+            capacity[node as usize + graph.len()].set_bit(out_node as usize);
+        }
+    }
+    capacity
+}
+
+/// Updates capacity and graph.
+fn perform_petal_reduction<
+    G: GraphNew + GraphEdgeEditing + AdjacencyList + AdjacencyTest + AdjacencyListIn,
+>(
+    graph: &mut G,
+    node: Node,
+    capacity: &mut [BitSet],
+) {
+    // removing edges from capacity
+    capacity[(node + graph.len() as Node) as usize].unset_all();
+    capacity[node as usize].unset_bit((node + (graph.len() as Node)) as usize);
+    for bit_vector in capacity.iter_mut() {
+        bit_vector.unset_bit(node as usize);
+    }
+
+    // must be collected before edges at node get removed.
+    let in_neighbors: Vec<_> = graph.in_neighbors(node).collect();
+    let out_neighbors: Vec<_> = graph.out_neighbors(node).collect();
+
+    // removing edges from capacity graph
+    graph.remove_edges_at_node(node);
+
+    // add all possible edges for (in_neighbors, out_neighbors)
+    for in_neighbor in in_neighbors {
+        for &out_neighbor in &out_neighbors {
+            let edge_from = (in_neighbor as usize) + graph.len();
+            let edge_to = out_neighbor as usize;
+            capacity[edge_from].set_bit(edge_to); // adds new edge to capacity
+
+            graph.try_add_edge(in_neighbor, out_neighbor); // adds new edge to graph
+        }
+    }
+}
+
+/// Checks for each node u on a given graph, if u has exactly one petal.
+/// If so, the graph gets reduced. That means, the node u with petal=1 gets deleted and all possible
+/// Edges (in_neighbors(u), out_neighbour(u)) are added to the graph.
+pub fn apply_rule_5<
+    G: GraphNew + GraphEdgeEditing + AdjacencyList + AdjacencyTest + AdjacencyListIn,
+>(
+    graph: &mut G,
+) -> bool {
+    let mut applied = false;
+
+    let mut capacity = create_capacity_for_many_petals(graph); // this capacity is used to calculate petals for every node of graph
+    let mut labels: Vec<Node> = graph // same with labels
+        .vertices_range()
+        .chain(graph.vertices_range())
+        .collect();
+
+    // check for each node of graph, if the reduction can be applied. If yes -> reduce
+    for node in graph.vertices_range() {
+        // prepare the capacity to run num_disjoint()
+        capacity[node as usize].unset_bit(node as usize + graph.len());
+        let petal_bit_matrix = ResidualBitMatrix::from_capacity_and_labels(
+            capacity,
+            labels,
+            node + graph.len() as Node,
+            node,
+        );
+
+        let mut ec = EdmondsKarp::new(petal_bit_matrix);
+        ec.set_remember_changes(true);
+        let petal_count = ec.count_num_disjoint_upto(2);
+        ec.undo_changes();
+        (capacity, labels) = ec.take(); // needed because capacity and labels is moved when petal_bit_matrix is created
+
+        // actual reduction of graph (if petal_count = 1)
+        if petal_count == 1 {
+            applied = true;
+            perform_petal_reduction(graph, node as Node, &mut capacity);
+            continue;
+        }
+
+        capacity[node as usize].set_bit(node as usize + graph.len());
+    }
+    applied
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
     use crate::graph::adj_array::AdjArrayIn;
-
     fn create_test_pre_processor() -> PreprocessorReduction<AdjArrayIn> {
         let graph = AdjArrayIn::from(&[
             (0, 1),
@@ -267,12 +373,115 @@ mod test {
         assert_eq!(test_pre_process.in_fvs.len(), 0);
         assert_eq!(test_pre_process.graph.number_of_edges(), 10);
     }
+
     #[test]
     fn test_use_rules_exhaustively() {
         let mut test_pre_process = create_test_pre_processor_2();
-        test_pre_process.apply_rules_exhaustively();
+        test_pre_process.apply_rules_exhaustively(false);
         assert!(!test_pre_process.apply_rule_1());
         assert!(!test_pre_process.apply_rule_3());
         assert!(!test_pre_process.apply_rule_4());
+    }
+
+    fn create_circle(graph_size: usize) -> AdjArrayIn {
+        let mut graph = AdjArrayIn::new(graph_size);
+        for i in 0..graph_size - 1 {
+            graph.add_edge(i as Node, (i + 1) as Node);
+        }
+        graph.add_edge((graph_size - 1) as Node, 0);
+        graph
+    }
+
+    #[test]
+    fn test_create_capacity_for_many_petals() {
+        let tested_graph_len = 8;
+        let one_less = (tested_graph_len - 1) as usize;
+        let mut graph = create_circle(tested_graph_len);
+
+        let capacity = create_capacity_for_many_petals(&mut graph);
+        assert_eq!(capacity.len(), graph.len() * 2);
+        let mut expected_edges = vec![];
+        for node in 0..graph.len() - 1 {
+            expected_edges.push((node, node + graph.len()));
+            expected_edges.push((node + graph.len(), node + 1));
+        }
+
+        expected_edges.push((one_less, one_less + graph.len()));
+        expected_edges.push((one_less + graph.len(), 0));
+
+        for from_node in 0..capacity.len() {
+            for to_node in 0..capacity.len() {
+                if expected_edges.contains(&(from_node, to_node)) {
+                    assert!(capacity[from_node][to_node]);
+                } else {
+                    assert!(!capacity[from_node][to_node]);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_perform_petal_reduction() {
+        let tested_graph_len = 4;
+        let mut graph = create_circle(tested_graph_len);
+        let mut capacity = create_capacity_for_many_petals(&mut graph);
+        perform_petal_reduction(&mut graph, 0, &mut capacity);
+        let expected_edges_capacity = vec![(1, 5), (2, 6), (3, 7), (7, 1), (5, 2), (6, 3)];
+
+        let expected_edges_graph = vec![(1, 2), (2, 3), (3, 1)];
+
+        assert_eq!(0, graph.in_degree(0) + graph.out_degree(0));
+        for from_node in 0..capacity.len() {
+            for to_node in 0..capacity.len() {
+                if expected_edges_capacity.contains(&(from_node, to_node)) {
+                    assert!(capacity[from_node][to_node]);
+                } else {
+                    assert!(!capacity[from_node][to_node]);
+                }
+            }
+        }
+        for from_node in 0..graph.len() {
+            for to_node in 0..graph.len() {
+                if expected_edges_graph.contains(&(from_node, to_node)) {
+                    assert!(graph.has_edge(from_node as Node, to_node as Node));
+                } else {
+                    assert!(!graph.has_edge(from_node as Node, to_node as Node));
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn apply_rule_5() {
+        let tested_graph_len = 4;
+        let graph = create_circle(tested_graph_len);
+
+        let mut test_pre_process = PreprocessorReduction {
+            graph,
+            in_fvs: vec![],
+        };
+
+        test_pre_process.apply_rule_5();
+
+        let expected_edges_graph = vec![(3, 3)];
+
+        assert_eq!(
+            0,
+            test_pre_process.graph.in_degree(0) + test_pre_process.graph.out_degree(0)
+        );
+
+        for from_node in 0..test_pre_process.graph.len() {
+            for to_node in 0..test_pre_process.graph.len() {
+                if expected_edges_graph.contains(&(from_node, to_node)) {
+                    assert!(test_pre_process
+                        .graph
+                        .has_edge(from_node as Node, to_node as Node));
+                } else {
+                    assert!(!test_pre_process
+                        .graph
+                        .has_edge(from_node as Node, to_node as Node));
+                }
+            }
+        }
     }
 }
