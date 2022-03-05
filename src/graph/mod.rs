@@ -107,7 +107,7 @@ pub trait AdjacencyList: GraphOrder + Sized {
     }
 
     /// Returns a vector over all edges in the graph in increasing order.
-    /// If the sequence is only scanned once, [edges_iter] should preferred.
+    /// If the sequence is only scanned once, [`AdjacencyList::edges_iter`] should preferred.
     fn edges_vec(&self) -> Vec<Edge> {
         self.edges_iter().collect()
     }

@@ -221,7 +221,7 @@ impl<'a, G: AdjacencyList, S: NodeSequencer<I>, I: SequencedItem> TraversalSearc
     }
 
     /// Exclude multiple nodes from traversal. It is functionally equivalent to repeatedly
-    /// calling [exclude_node].
+    /// calling [`TraversalSearch::exclude_node`].
     ///
     /// # Warning
     /// Calling this method has no effect for nodes that are already on the stack. It is
@@ -358,9 +358,9 @@ pub trait TraversalTree<'a, G: 'a + AdjacencyList>:
     WithGraphRef<G> + Iterator<Item = PredecessorOfNode> + Sized
 {
     /// Consumes the underlying graph traversal iterator and records the implied tree structure
-    /// into an parent-array, i.e. [result\[i\]] stores the predecessor of node [i]. It is the
-    /// calling code's responsibility to ensure that the slice [tree] is sufficiently large to
-    /// store all reachable nodes (i.e. in general of size at least [graph.len()]).
+    /// into an parent-array, i.e. `result[i]` stores the predecessor of node `i`. It is the
+    /// calling code's responsibility to ensure that the slice `tree` is sufficiently large to
+    /// store all reachable nodes (i.e. in general of size at least `graph.len()`).
     fn parent_array_into(&mut self, tree: &mut [Node]) {
         for pred_with_item in self.by_ref() {
             if let Some(p) = pred_with_item.predecessor() {
