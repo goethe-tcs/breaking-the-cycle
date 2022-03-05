@@ -9,7 +9,7 @@ pub trait Setter: Sized {
 
     /// Creates a mapper where the largest node that can be handled is n-1.
     /// Each mapping is of form x <-> x for all x.
-    /// Subsequent calls to [map_node_to] are forbidden.
+    /// Subsequent calls to [`Setter::map_node_to`] are forbidden.
     fn identity(n: Node) -> Self;
 
     /// Stores a mapping old <-> new
@@ -31,7 +31,7 @@ pub trait Getter {
         self.len() == 0
     }
 
-    /// Applies [Self::old_id_of] to each iterator item. Uses the iterator item (new) as a fallback
+    /// Applies [`Getter::old_id_of`] to each iterator item. Uses the iterator item (new) as a fallback
     /// if the mapping(old, new) doesn't exist.
     fn get_old_ids(&self, new_ids: impl Iterator<Item = Node>) -> Vec<Node> {
         new_ids
@@ -39,7 +39,7 @@ pub trait Getter {
             .collect_vec()
     }
 
-    /// Applies [Self::new_id_of] to each iterator item. Uses the iterator item (old) as a fallback
+    /// Applies [`Getter::new_id_of`] to each iterator item. Uses the iterator item (old) as a fallback
     /// if the mapping(old, new) doesn't exist.
     fn get_new_ids(&self, old_ids: impl Iterator<Item = Node>) -> Vec<Node> {
         old_ids

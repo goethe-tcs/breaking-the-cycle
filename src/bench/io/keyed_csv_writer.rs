@@ -186,8 +186,8 @@ impl KeyedCsvWriterBuilder {
 }
 
 impl Default for KeyedCsvWriterBuilder {
-    /// Creates a new builder with default values which were copied from here:
-    /// https://github.com/BurntSushi/rust-csv/blob/40ea4c49d7467d2b607a6396424f8e0e101adae1/csv-core/src/writer.rs#L20
+    /// Creates a new builder with default values which were copied from
+    /// <https://github.com/BurntSushi/rust-csv/blob/40ea4c49d7467d2b607a6396424f8e0e101adae1/csv-core/src/writer.rs#L20>
     fn default() -> Self {
         Self {
             quote: b'"',

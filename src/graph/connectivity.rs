@@ -23,7 +23,7 @@ pub trait Connectivity: AdjacencyList + Traversal + Sized {
     }
 
     /// Returns the strongly connected components of the graph as a Vec<Vec<Node>>
-    /// In contrast to [strongly_connected_components], this methods includes SCCs of size 1
+    /// In contrast to [`Connectivity::strongly_connected_components`], this methods includes SCCs of size 1
     /// if and only if the node has a self-loop
     ///
     /// # Example

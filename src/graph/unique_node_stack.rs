@@ -14,8 +14,8 @@ impl UniqueNodeStack {
         }
     }
 
-    /// Returns the element that would be popped if [pop] were called but does not alter
-    /// the data structure
+    /// Returns the element that would be popped if [`UniqueNodeStack::pop`] were called but does
+    /// not alter the data structure
     pub fn peek(&self) -> Option<Node> {
         Some(*self.stack.last()?)
     }

@@ -69,3 +69,12 @@ pages:
   only:
     - master
 
+documentation:
+  image: gitlab.ae.cs.uni-frankfurt.de:5001/ae-ci/aeffm-rust-nightly
+  stage: deploy
+  variables:
+    RUSTDOCFLAGS: "-D warnings"
+  script:
+    - cargo doc --no-deps
+  except:
+    - master
