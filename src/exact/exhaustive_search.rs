@@ -14,7 +14,7 @@ pub fn exhaustive_search<G>(
     graph: &G,
     lower_bound: Option<Node>,
     upper_bound: Option<Node>,
-) -> Vec<Node>
+) -> Option<Vec<Node>>
 where
     G: Clone + AdjacencyList + GraphEdgeEditing,
 {
@@ -25,34 +25,42 @@ where
 
     let smallest_solution = all_possible_solutions
         .take_while(|&x| upper_bound.map_or(true, |up| x.popcnt() <= up.into()))
-        .find(|&solution_mask| {
-            let mut graph = graph.clone();
-            for node_to_delete in solution_mask.iter_ones() {
-                graph.remove_edges_at_node(node_to_delete);
-            }
+        .find(|&sol| is_valid_dfvs(graph, sol.iter_ones()))?;
 
-            graph.is_acyclic()
-        })
-        .unwrap();
-
-    smallest_solution
-        .iter_ones()
-        .map(|u| u as Node)
-        .collect_vec()
+    Some(
+        smallest_solution
+            .iter_ones()
+            .map(|u| u as Node)
+            .collect_vec(),
+    )
 }
 
 /// Executes `exhaustive_search` with bounds set to verify optimality of a known solution as fast as possible.
-pub fn exhaustive_search_verify_optimality<G>(graph: &G, size_of_known_solution: Node) -> bool
+pub fn exhaustive_search_verify_optimality<G>(graph: &G, candidate: &[Node]) -> bool
 where
     G: Clone + AdjacencyList + GraphEdgeEditing,
 {
-    let lower = if size_of_known_solution > 0 {
-        size_of_known_solution - 1
-    } else {
-        0
-    };
-    exhaustive_search(graph, Some(lower), Some(size_of_known_solution + 1)).len()
-        == size_of_known_solution as usize
+    let smaller_solution_exists = !candidate.is_empty()
+        && exhaustive_search(
+            graph,
+            Some(candidate.len() as Node - 1),
+            Some(candidate.len() as Node - 1),
+        )
+        .is_some();
+
+    !smaller_solution_exists && is_valid_dfvs(graph, candidate.iter().copied())
+}
+
+fn is_valid_dfvs<G, I>(graph: &G, candidate: I) -> bool
+where
+    G: Clone + AdjacencyList + GraphEdgeEditing,
+    I: IntoIterator<Item = Node>,
+{
+    let mut graph = graph.clone();
+    for u in candidate {
+        graph.remove_edges_at_node(u);
+    }
+    graph.is_acyclic()
 }
 
 #[cfg(test)]
@@ -63,22 +71,35 @@ mod tests {
     #[test]
     fn exhaustive_search_loops() {
         let graph = AdjArrayIn::from(&[(0, 0), (2, 2)]);
-        assert_eq!(exhaustive_search(&graph, None, None), vec![0, 2]);
-        assert_eq!(exhaustive_search(&graph, Some(1), None), vec![0, 2]);
-        assert_eq!(exhaustive_search(&graph, Some(2), None), vec![0, 2]);
-        assert_eq!(exhaustive_search(&graph, Some(3), None), vec![0, 1, 2]);
+        assert_eq!(exhaustive_search(&graph, None, None), Some(vec![0, 2]));
+        assert_eq!(exhaustive_search(&graph, Some(1), None), Some(vec![0, 2]));
+        assert_eq!(exhaustive_search(&graph, Some(2), None), Some(vec![0, 2]));
+        assert_eq!(
+            exhaustive_search(&graph, Some(3), None),
+            Some(vec![0, 1, 2])
+        );
     }
 
     #[test]
     fn exhaustive_search_verify_opt() {
         assert!(exhaustive_search_verify_optimality(
             &AdjArrayIn::from(&[(0, 0), (2, 2)]),
-            2
+            &[0, 2]
         ));
 
         assert!(!exhaustive_search_verify_optimality(
             &AdjArrayIn::from(&[(0, 0), (2, 2)]),
-            3
+            &[]
+        ));
+
+        assert!(!exhaustive_search_verify_optimality(
+            &AdjArrayIn::from(&[(0, 0), (2, 2)]),
+            &[0, 1]
+        ));
+
+        assert!(!exhaustive_search_verify_optimality(
+            &AdjArrayIn::from(&[(0, 0), (2, 2)]),
+            &[0, 1, 2]
         ));
     }
 }

@@ -1,6 +1,7 @@
 /// Iterator to enumerate all integers with a given number of bits set
 pub struct IntSubsetsOfSize {
     value: u64,
+    num_bits_set: u32,
     max_value: u64,
 }
 
@@ -23,13 +24,26 @@ impl IntSubsetsOfSize {
 
         Self {
             value: (1 << num_set) - 1,
+            num_bits_set: num_set,
             max_value: 1 << num_bits,
         }
+    }
+
+    /// Returns the number of bits set
+    pub fn num_bits_set(&self) -> u32 {
+        self.num_bits_set
     }
 }
 
 /// An iterator wrapping [`IntSubsetsOfSize`] that increases the number of bits set each time,
 /// the inner iterator ends.
+pub struct AllIntSubsets {
+    num_bits: u32,
+    k: u32,
+    max_k: u32,
+    iter: IntSubsetsOfSize,
+}
+
 impl AllIntSubsets {
     /// Creates an iterator to enumerate over all integers with `num_bits` bits (<= 64) starting
     /// with the smallest integer with `k` bits set. It then enumerates all integers with `k` bits
@@ -46,6 +60,7 @@ impl AllIntSubsets {
         Self {
             num_bits,
             k,
+            max_k: num_bits,
             iter: IntSubsetsOfSize::new(k, num_bits),
         }
     }
@@ -53,6 +68,20 @@ impl AllIntSubsets {
     /// Shorthand to [`AllIntSubsets::start_with_bits_set(0, num_bits)`]
     pub fn new(num_bits: u32) -> Self {
         Self::start_with_bits_set(0, num_bits)
+    }
+
+    /// Returns the number of bits set currently set. This number may increase as the iterator
+    /// is advanced.
+    pub fn num_bits_set(&self) -> u32 {
+        self.iter.num_bits_set()
+    }
+
+    /// Sets an (inclusive) upper limit on the number of bits set. It is illegal to set a lower than
+    /// [`AllIntSubsets::num_bits_set()`].
+    pub fn set_max_bits_set(&mut self, n: u32) {
+        assert!(n >= self.num_bits_set());
+        assert!(n <= self.num_bits);
+        self.max_k = n;
     }
 }
 
@@ -66,24 +95,19 @@ impl Iterator for IntSubsetsOfSize {
 
         let result = Some(self.value);
 
-        let ffs = self.value.trailing_zeros() + 1;
-        let val = self.value | self.value.overflowing_sub(1).0;
-        let minus_neg = 0u64.overflowing_sub(!val).0;
-        self.value = val.overflowing_add(1).0
-            | (!val & minus_neg)
-                .overflowing_sub(1)
-                .0
-                .overflowing_shr(ffs)
-                .0;
+        // Use Gosper's Hack to generate the next larger number with the same number of bits set
+        self.value = {
+            let ffs = self.value.trailing_zeros() + 1;
+            let val = self.value | self.value.overflowing_sub(1).0;
+            let minus_neg = 0u64.overflowing_sub(!val).0;
+            val.overflowing_add(1).0
+                | ((!val & minus_neg).overflowing_sub(1).0)
+                    .overflowing_shr(ffs)
+                    .0
+        };
 
         result
     }
-}
-
-pub struct AllIntSubsets {
-    num_bits: u32,
-    k: u32,
-    iter: IntSubsetsOfSize,
 }
 
 impl Iterator for AllIntSubsets {
@@ -94,7 +118,7 @@ impl Iterator for AllIntSubsets {
             Some(x)
         } else {
             self.k += 1;
-            if self.k <= self.num_bits {
+            if self.k <= self.max_k {
                 self.iter = IntSubsetsOfSize::new(self.k, self.num_bits);
                 self.next()
             } else {
@@ -133,5 +157,12 @@ mod tests {
                 0b1100, 0b0111, 0b1011, 0b1101, 0b1110, 0b1111
             ]
         );
+    }
+
+    #[test]
+    fn set_max_bits_set() {
+        let mut iter = AllIntSubsets::new(3);
+        iter.set_max_bits_set(2);
+        assert_eq!(iter.collect_vec(), vec![0, 1, 2, 4, 3, 5, 6]);
     }
 }
