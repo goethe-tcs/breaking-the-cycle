@@ -1,20 +1,31 @@
 use env_logger::Builder;
 use log::LevelFilter;
 use std::io::Write;
+use std::sync::Arc;
+use std::time::Instant;
 
 pub fn build_pace_logger_for_level(level: LevelFilter) {
+    let start_time = Arc::new(Instant::now());
+
     let mut builder = Builder::from_default_env();
     builder
-        .format(|buf, record| writeln!(buf, "c {} - {}", record.level(), record.args()))
+        .format(move |buf, record| {
+            let elapsed = start_time.elapsed().as_millis();
+            writeln!(
+                buf,
+                "c {:>6}.{:<03} [{}] - {}",
+                elapsed / 1000,
+                elapsed % 1000,
+                record.level(),
+                record.args()
+            )
+        })
         .filter(None, level)
         .init();
 }
 
 pub fn build_pace_logger() {
-    let mut builder = Builder::from_default_env();
-    builder
-        .format(|buf, record| writeln!(buf, "c {} - {}", record.level(), record.args()))
-        .init();
+    build_pace_logger_for_level(LevelFilter::Error);
 }
 
 pub fn build_pace_logger_for_verbosity(default_level: LevelFilter, verbosity: usize) {

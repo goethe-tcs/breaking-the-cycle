@@ -10,13 +10,116 @@ pub use pace::{PaceRead, PaceWrite};
 
 pub mod dot {
     use super::*;
+    use fxhash::FxHashSet;
+    use itertools::Itertools;
+    use std::collections::HashSet;
+    use std::iter::FromIterator;
 
     pub trait DotWrite {
+        /// Write out graph as DOT file where nodes included in the iterator are highlighted
+        fn try_write_dot_with_solution<W: Write, D: IntoIterator<Item = Node>>(
+            &self,
+            writer: W,
+            dfvs: D,
+        ) -> std::io::Result<()>;
+
         /// produces a minimalistic DOT representation of the graph
-        fn try_write_dot<T: Write>(&self, writer: T) -> Result<(), std::io::Error>;
+        fn try_write_dot<W: Write>(&self, writer: W) -> Result<(), std::io::Error>;
+    }
+
+    const ATTRIB_NODE_IN_DFVS: &str = "[color=red]";
+    const ATTRIB_EDGE_UNDIR: &str = "[dir=n,color=\"#0000ff\",penwidth=2]";
+    const ATTRIB_EDGE_UNDIR_DEL: &str = "[dir=n,color=\"#a0a0ff\",penwidth=2]";
+    const ATTRIB_EDGE_DIR: &str = "";
+    const ATTRIB_EDGE_DIR_DEL: &str = "[color=\"#a0a0a0\"]";
+
+    fn format_node(u: Node) -> String {
+        u.to_string()
     }
 
     impl<G: AdjacencyList> DotWrite for G {
+        fn try_write_dot_with_solution<W: Write, D: IntoIterator<Item = Node>>(
+            &self,
+            mut writer: W,
+            dfvs: D,
+        ) -> std::io::Result<()> {
+            let dfvs: HashSet<Node> = dfvs.into_iter().collect();
+
+            let undirected_edges = {
+                let forward: FxHashSet<Edge> =
+                    FxHashSet::from_iter(self.edges_iter().filter(|(u, v)| u < v));
+
+                FxHashSet::from_iter(self.edges_iter().filter_map(|(u, v)| {
+                    if u > v && forward.contains(&(v, u)) {
+                        Some((v, u))
+                    } else {
+                        None
+                    }
+                }))
+            };
+
+            let mut statements = Vec::with_capacity(2 + 4 * self.len());
+            statements.push(format!(
+                "stats [label=\"n = {}\\nm = {}\\nk = {}\",labeljust=l,rank=min,penwidth=0]",
+                self.number_of_nodes(),
+                self.number_of_edges(),
+                dfvs.len()
+            ));
+
+            // export nodes in DFVS
+            {
+                let mut vec = dfvs.iter().copied().collect_vec();
+                vec.sort_unstable();
+                statements.push(
+                    vec.iter().copied().map(format_node).join(",") + " " + ATTRIB_NODE_IN_DFVS,
+                );
+            }
+
+            for u in self.vertices().filter(|&u| self.out_degree(u) > 0) {
+                let is_deleted = dfvs.contains(&u);
+
+                let mut neighbors = [
+                    vec![], // 0: undir
+                    vec![], // 1: undir+del
+                    vec![], // 2: dir
+                    vec![], // 3: dir + delt
+                ];
+
+                // identify the edge type of all outgoing edges
+                for v in self.out_neighbors(u) {
+                    let is_undir = undirected_edges.contains(&(u.min(v), u.max(v)));
+                    let is_deleted = is_deleted || dfvs.contains(&v);
+
+                    if is_undir && u > v {
+                        continue;
+                    }
+
+                    neighbors[2 * (is_undir as usize) + (is_deleted as usize)].push(v);
+                }
+
+                let mut print_neighbors = |vec: &mut Vec<Node>, attrib: &str| {
+                    if vec.is_empty() {
+                        return;
+                    };
+                    vec.sort_unstable();
+
+                    statements.push(format!(
+                        "{} -> {{{}}} {}",
+                        format_node(u),
+                        vec.iter().copied().map(format_node).join(" "),
+                        attrib
+                    ));
+                };
+
+                print_neighbors(&mut neighbors[0], ATTRIB_EDGE_UNDIR);
+                print_neighbors(&mut neighbors[1], ATTRIB_EDGE_UNDIR_DEL);
+                print_neighbors(&mut neighbors[2], ATTRIB_EDGE_DIR);
+                print_neighbors(&mut neighbors[3], ATTRIB_EDGE_DIR_DEL);
+            }
+
+            writeln!(writer, "digraph {{\n {};\n}}", statements.join(";\n "))
+        }
+
         fn try_write_dot<T: Write>(&self, mut writer: T) -> Result<(), std::io::Error> {
             let n = self.number_of_nodes();
             let m = self.number_of_edges();
