@@ -1,6 +1,9 @@
 use crate::bitset::BitSet;
 use crate::graph::network_flow::{EdmondsKarp, ResidualBitMatrix, ResidualNetwork};
 use crate::graph::*;
+use fxhash::FxHashSet;
+use itertools::Itertools;
+use std::iter::FromIterator;
 
 pub trait ReductionState<G> {
     fn graph(&self) -> &G;
@@ -61,8 +64,13 @@ impl<G: GraphNew + GraphEdgeEditing + AdjacencyList + AdjacencyTest + AdjacencyL
     pub fn apply_rule_4(&mut self) -> bool {
         apply_rule_4(&mut self.graph, &mut self.in_fvs)
     }
+
     pub fn apply_rule_5(&mut self) -> bool {
         apply_rule_5(&mut self.graph)
+    }
+
+    pub fn apply_di_cliques_reduction(&mut self) -> bool {
+        apply_di_cliques_reduction(&mut self.graph, &mut self.in_fvs)
     }
 }
 
@@ -78,11 +86,11 @@ pub fn apply_rules_exhaustively<
     with_expensive_rules: bool,
 ) {
     apply_rule_1(graph, fvs);
-    apply_rule_3(graph);
     loop {
-        let rule_4 = apply_rule_4(graph, fvs);
         let rule_3 = apply_rule_3(graph);
-        if !(rule_3 || rule_4) {
+        let rule_4 = apply_rule_4(graph, fvs);
+        let rule_di_cliques = apply_di_cliques_reduction(graph, fvs);
+        if !(rule_3 || rule_4 || rule_di_cliques) {
             break;
         }
     }
@@ -91,9 +99,9 @@ pub fn apply_rules_exhaustively<
     }
 }
 
-// TODO: implement more rules
-
 /// rule 1 - self-loop
+///
+/// returns true if rule got applied at least once, false if not at all
 pub fn apply_rule_1<
     G: GraphNew + GraphEdgeEditing + AdjacencyList + AdjacencyTest + AdjacencyListIn,
 >(
@@ -112,6 +120,8 @@ pub fn apply_rule_1<
 }
 
 /// rule 3 sink/source nodes
+///
+/// returns true if rule got applied at least once, false if not at all
 pub fn apply_rule_3<
     G: GraphNew + GraphEdgeEditing + AdjacencyList + AdjacencyTest + AdjacencyListIn,
 >(
@@ -267,10 +277,67 @@ pub fn apply_rule_5<
     applied
 }
 
+/// Safe Di-Cliques Reduction, requires self loops to be deleted
+///
+/// returns true if rule got applied at least once, false if not at all
+pub fn apply_di_cliques_reduction<
+    G: GraphNew + GraphEdgeEditing + AdjacencyList + AdjacencyTest + AdjacencyListIn,
+>(
+    graph: &mut G,
+    fvs: &mut Vec<Node>,
+) -> bool {
+    let mut applied = false;
+    for u in graph.vertices_range() {
+        if graph.out_degree(u) == 0 || graph.in_degree(u) == 0 {
+            continue;
+        }
+        // creating an intersection of node u's neighborhood (nodes with 2 clique to u)
+        let intersection = {
+            if graph.out_degree(u) < graph.in_degree(u) {
+                let set = FxHashSet::from_iter(graph.out_neighbors(u));
+                graph
+                    .in_neighbors(u)
+                    .filter(|v| set.contains(v))
+                    .collect_vec()
+            } else {
+                let set = FxHashSet::from_iter(graph.in_neighbors(u));
+                graph
+                    .out_neighbors(u)
+                    .filter(|v| set.contains(v))
+                    .collect_vec()
+            }
+        };
+        // check whether u is in more than one clique. We can skip u if it is
+        if intersection.is_empty()
+            || intersection
+                .iter()
+                .cartesian_product(intersection.iter())
+                .any(|(&x, &y)| x != y && !graph.has_edge(x, y))
+        {
+            continue;
+        }
+        // if u is only in 1 clique we check here if we can safely delete all nodes but u from that
+        // clique. Either u has only out- or in-going edges or there is no circle back to u
+        // outside of the clique. This last point is checked via breadth first search
+        if graph.in_degree(u) as usize == intersection.len()
+            || graph.out_degree(u) as usize == intersection.len()
+            || !graph.is_node_on_cycle_after_deleting(u, intersection.clone())
+        {
+            for node in intersection {
+                fvs.push(node);
+                graph.remove_edges_at_node(node);
+                applied = true;
+            }
+        }
+    }
+    applied
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
     use crate::graph::adj_array::AdjArrayIn;
+
     fn create_test_pre_processor() -> PreprocessorReduction<AdjArrayIn> {
         let graph = AdjArrayIn::from(&[
             (0, 1),
@@ -483,5 +550,45 @@ mod test {
                 }
             }
         }
+    }
+    #[test]
+    fn test_di_cliques_reduction() {
+        let graph = AdjArrayIn::from(&[
+            (0, 1),
+            (0, 3),
+            (0, 6),
+            (1, 3),
+            (1, 4),
+            (1, 6),
+            (2, 4),
+            (2, 5),
+            (3, 1),
+            (3, 4),
+            (4, 0),
+            (4, 1),
+            (4, 2),
+            (4, 3),
+            (4, 5),
+            (4, 6),
+            (5, 2),
+            (5, 4),
+            (5, 6),
+            (6, 0),
+            (6, 3),
+            (6, 4),
+            (6, 7),
+            (6, 8),
+            (7, 6),
+            (7, 8),
+            (8, 6),
+            (8, 7),
+        ]);
+
+        let mut test_pre_process = PreprocessorReduction {
+            graph,
+            in_fvs: vec![],
+        };
+        test_pre_process.apply_di_cliques_reduction();
+        assert_eq!(test_pre_process.fvs(), vec![4, 5, 1, 6, 8]);
     }
 }

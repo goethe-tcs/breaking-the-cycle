@@ -3,12 +3,13 @@ use dfvs::graph::io::MetisRead;
 use dfvs::graph::*;
 use dfvs::pre_processor_reduction::*;
 use glob::glob;
+use log::LevelFilter;
 use std::fs::File;
 use std::io::BufReader;
 use std::time::Instant;
 
 fn main() -> std::io::Result<()> {
-    dfvs::log::build_pace_logger();
+    dfvs::log::build_pace_logger_for_level(LevelFilter::Info);
 
     for filename in glob("data/pace/*/*").unwrap().filter_map(Result::ok) {
         // start timer
@@ -23,7 +24,7 @@ fn main() -> std::io::Result<()> {
 
         // apply reduction rules
         let mut state = PreprocessorReduction::from(graph);
-        state.apply_rules_exhaustively(true);
+        state.apply_rules_exhaustively(false);
 
         // remove all disconnected vertices
         let out_graph = state.graph().remove_disconnected_verts().0;
