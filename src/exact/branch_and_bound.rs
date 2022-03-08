@@ -1,9 +1,47 @@
+use crate::algorithm::{IterativeAlgorithm, TerminatingIterativeAlgorithm};
 use crate::graph::*;
 use crate::utils::int_iterator::IntegerIterators;
 use bitintr::{Pdep, Pext};
 use num::cast::AsPrimitive;
 use num::{FromPrimitive, Integer, PrimInt};
 use std::ops::{BitOrAssign, Range, ShlAssign};
+
+pub struct BranchAndBound<'a, G> {
+    graph: &'a G,
+    solution: Option<Vec<Node>>,
+}
+
+impl<'a, G> BranchAndBound<'a, G>
+where
+    G: 'a + AdjacencyList,
+{
+    pub fn new(graph: &'a G) -> Self {
+        Self {
+            graph,
+            solution: None,
+        }
+    }
+}
+
+impl<'a, G> IterativeAlgorithm for BranchAndBound<'a, G>
+where
+    G: 'a + AdjacencyList,
+{
+    fn execute_step(&mut self) {
+        self.solution = branch_and_bound(self.graph, None);
+        assert!(self.solution.is_some());
+    }
+
+    fn is_completed(&self) -> bool {
+        self.solution.is_some()
+    }
+
+    fn best_known_solution(&mut self) -> Option<&[Node]> {
+        self.solution.as_deref()
+    }
+}
+
+impl<'a, G> TerminatingIterativeAlgorithm for BranchAndBound<'a, G> where G: 'a + AdjacencyList {}
 
 /// Return the smallest dfvs with up to `upper_bound` nodes (inclusive).
 pub fn branch_and_bound<G: AdjacencyList>(
