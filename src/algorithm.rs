@@ -65,7 +65,7 @@ pub trait IterativeAlgorithm {
     }
 
     /// Execute the algorithm and keeps calling [`IterativeAlgorithm::execute_step`] until the
-    /// [`predicate`] becomes false, a termination signal was received, or [`IterativeAlgorithm::is_completed`]
+    /// `predicate` becomes false, a termination signal was received, or [`IterativeAlgorithm::is_completed`]
     /// becomes true. The function `predicate` is evaluated after each iteration, i.e. a step is
     /// carried out even if the predicate always returns false.
     fn run_while<F: Fn(&mut Self) -> bool>(&mut self, predicate: F) {
