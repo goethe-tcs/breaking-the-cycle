@@ -563,7 +563,7 @@ mod tests_bench_with_tempfile {
                     (3, 2),
                 ]),
             )
-            .add_algo("test_algo", |_, _| vec![1, 2])
+            .add_algo("test_algo", |_, _| vec![])
             .reduce_graphs(true)
             .split_into_sccs(false)
             .run(output_path.clone())
@@ -577,12 +577,12 @@ mod tests_bench_with_tempfile {
                 "test_graph",
                 "4",
                 "7",
-                "3",
-                "6",
+                "0",
+                "0",
                 "1",
                 "test_algo",
-                "1",
-                "2",
+                "3",
+                "0",
                 "3",
                 "",
                 "true",

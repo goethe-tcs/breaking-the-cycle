@@ -58,6 +58,7 @@ pub trait Compose {
 pub trait Inverse {
     /// Returns a new mapper where for each mapping (a, b) of the original, there exists
     /// a mapping (b, a) in the new mapper
+    #[must_use]
     fn inverse(&self) -> Self;
 }
 

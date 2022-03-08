@@ -477,9 +477,9 @@ pub trait Traversal: AdjacencyList + Sized {
     where
         I: IntoIterator<Item = Node>,
     {
-        let mut dfs = self.dfs(u);
-        dfs.exclude_nodes(deleted);
-        dfs.is_node_reachable(u)
+        let mut bfs = self.bfs(u);
+        bfs.exclude_nodes(deleted);
+        bfs.is_node_reachable(u)
     }
 }
 
