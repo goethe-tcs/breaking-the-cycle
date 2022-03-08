@@ -6,6 +6,7 @@
 #![feature(generic_const_exprs)]
 #![feature(custom_test_frameworks)]
 
+pub mod algorithm;
 pub mod bench;
 pub mod bitset;
 pub mod exact;
