@@ -1,6 +1,7 @@
 use super::*;
 use fxhash::FxHashMap;
 use itertools::Itertools;
+use std::cmp::Ordering;
 use std::fmt;
 
 pub trait Setter: Sized {
@@ -14,6 +15,57 @@ pub trait Setter: Sized {
 
     /// Stores a mapping old <-> new
     fn map_node_to(&mut self, old: Node, new: Node);
+
+    /// Constructs a mapper from a Node-slice `new_ids` where `new_ids[i]` stores the new id of the
+    /// old node `i`.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use dfvs::graph::{NodeMapper, Setter, Getter};
+    /// let mapper = NodeMapper::from_rank(&[2, 0, 1]);
+    /// assert_eq!(mapper.new_id_of(0), Some(2));
+    /// assert_eq!(mapper.new_id_of(1), Some(0));
+    /// assert_eq!(mapper.new_id_of(2), Some(1));
+    /// ```
+    fn from_rank(new_ids: &[Node]) -> Self {
+        let cap = new_ids
+            .iter()
+            .copied()
+            .max()
+            .unwrap_or(0)
+            .max(new_ids.len() as Node);
+        let mut res = Self::with_capacity(cap + 1);
+        for (old, &new) in new_ids.iter().enumerate() {
+            res.map_node_to(old as Node, new);
+        }
+        res
+    }
+
+    /// Constructs a mapper from a sequence of tuples (old, new).
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use dfvs::graph::{NodeMapper, Setter, Getter};
+    /// let mapper = NodeMapper::from_sequence(&[(0,2), (2, 1)]);
+    /// assert_eq!(mapper.new_id_of(0), Some(2));
+    /// assert_eq!(mapper.new_id_of(1), None);
+    /// assert_eq!(mapper.new_id_of(2), Some(1));
+    /// ```
+    fn from_sequence(seq: &[(Node, Node)]) -> Self {
+        if seq.is_empty() {
+            return Self::with_capacity(0);
+        }
+
+        let cap = seq.iter().map(|&(o, n)| o.max(n)).max().unwrap();
+
+        let mut res = Self::with_capacity(cap + 1);
+        for &(old, new) in seq {
+            res.map_node_to(old as Node, new);
+        }
+        res
+    }
 }
 
 pub trait Getter {
@@ -45,6 +97,56 @@ pub trait Getter {
         old_ids
             .map(|old| self.new_id_of(old).unwrap_or(old))
             .collect_vec()
+    }
+
+    /// Create a 'copy' of type `GO` from the input graph where all nodes are relabelled according to this mapper.
+    /// Any node u (and its incident edges) is dropped if there [`Getter::new_id_of`] returns None.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use dfvs::graph::*;
+    /// let input = AdjArray::from(&[(0,1), (1,2), (2, 2)]);
+    /// let mut map = NodeMapper::with_capacity(3);
+    /// // node 0 gets dropped, 1 becomes 3 and 2 becomes 1
+    /// map.map_node_to(1, 3);
+    /// map.map_node_to(2, 1);
+    /// let output : AdjArray = map.relabelled_graph_as(&input);
+    /// assert_eq!(output.edges_vec(), vec![(1, 1), (3, 1)]);
+    /// ```
+    fn relabelled_graph_as<GI, GO>(&self, input: &GI) -> GO
+    where
+        GI: GraphOrder + AdjacencyList,
+        GO: GraphNew + GraphEdgeEditing,
+    {
+        let max_node = input
+            .vertices()
+            .flat_map(|u| self.new_id_of(u).map(|x| x + 1))
+            .max()
+            .unwrap_or(0);
+
+        if max_node == 0 {
+            return GO::new(0);
+        }
+
+        let mut output = GO::new(max_node as usize);
+        for old_u in input.vertices() {
+            if let Some(new_u) = self.new_id_of(old_u) {
+                for new_v in input.out_neighbors(old_u).flat_map(|u| self.new_id_of(u)) {
+                    output.try_add_edge(new_u, new_v);
+                }
+            }
+        }
+
+        output
+    }
+
+    /// Short-hand for [`Getter::relabelled_graph_as`] where the output type matches the input type.
+    fn relabelled_graph<G>(&self, input: &G) -> G
+    where
+        G: AdjacencyList + GraphNew + GraphEdgeEditing,
+    {
+        self.relabelled_graph_as::<G, G>(input)
     }
 }
 
@@ -180,6 +282,130 @@ impl fmt::Debug for NodeMapper {
     }
 }
 
+/// The [`RankingForwardMapper`] is less powerful than [`NodeMapper`] (e.g. it is lacking a
+/// [`Setter`] interface and cannot deal with missing mappings) but is much more efficient for
+/// the cases where it is applicable.
+#[derive(Clone)]
+pub struct RankingForwardMapper {
+    new_ids: Vec<Node>,
+}
+
+impl RankingForwardMapper {
+    /// Functionally equivalent to [`Setter::from_rank`], but takes and consume a vector.
+    /// In other words, a [`RankingForwardMapper`] is constructed from the vector `new_ids`,
+    /// where `new_ids[i]` stores the new id of the old node `i`.
+    ///
+    /// # Example
+    /// ```
+    /// use dfvs::graph::node_mapper::{RankingForwardMapper, Getter};
+    /// let mapper = RankingForwardMapper::from_vec(vec![4,0,1]);
+    /// assert_eq!(mapper.new_id_of(0), Some(4));
+    /// assert_eq!(mapper.new_id_of(1), Some(0));
+    /// assert_eq!(mapper.new_id_of(2), Some(1));
+    /// ```
+    pub fn from_vec(new_ids: Vec<Node>) -> Self {
+        Self { new_ids }
+    }
+
+    /// Ranks all nodes in `graph` according to the provided comparator `compare` and constructs
+    /// a RankingForwardMapper from it.
+    ///
+    /// # Example
+    /// ```
+    /// use dfvs::graph::{AdjacencyList, AdjArray};
+    /// use dfvs::graph::node_mapper::{RankingForwardMapper, Getter};
+    /// let graph = AdjArray::from(&[(0, 1), (0,2), (0,3), (1,2), (1,3), (2,3)]);
+    /// let mapper = RankingForwardMapper::from_graph_sort_by(&graph, |a, b|
+    ///   graph.out_degree(a).cmp(&graph.out_degree(b))
+    /// );
+    /// assert_eq!(mapper.new_id_of(3), Some(0));
+    /// assert_eq!(mapper.new_id_of(2), Some(1));
+    /// assert_eq!(mapper.new_id_of(1), Some(2));
+    /// assert_eq!(mapper.new_id_of(0), Some(3));
+    /// ```
+    pub fn from_graph_sort_by<G, F>(graph: &G, mut compare: F) -> Self
+    where
+        G: GraphOrder,
+        F: FnMut(Node, Node) -> Ordering,
+    {
+        let mut vertices: Vec<Node> = graph.vertices_range().collect();
+        vertices.sort_by(|&a, &b| compare(a, b));
+        Self::from_vec(vertices)
+    }
+
+    /// Ranks all nodes in `graph` according to the provided `key` function increasingly and constructs
+    /// a RankingForwardMapper from it.
+    ///
+    /// # Example
+    /// ```
+    /// use dfvs::graph::{AdjacencyList, AdjArray};
+    /// use dfvs::graph::node_mapper::{RankingForwardMapper, Getter};
+    /// let graph = AdjArray::from(&[(0, 1), (0,2), (0,3), (1,2), (1,3), (2,3)]);
+    /// let mapper = RankingForwardMapper::from_graph_sort_by_key(&graph, |u| graph.out_degree(u));
+    /// assert_eq!(mapper.new_id_of(3), Some(0));
+    /// assert_eq!(mapper.new_id_of(2), Some(1));
+    /// assert_eq!(mapper.new_id_of(1), Some(2));
+    /// assert_eq!(mapper.new_id_of(0), Some(3));
+    /// ```
+    pub fn from_graph_sort_by_key<G, F, K>(graph: &G, mut key: F) -> Self
+    where
+        G: GraphOrder,
+        F: FnMut(Node) -> K,
+        K: Ord,
+    {
+        Self::from_graph_sort_by(graph, |a, b| key(a).cmp(&key(b)))
+    }
+
+    /// Ranks all nodes in `graph` according to the provided `key` function increasingly and constructs
+    /// a RankingForwardMapper from it.
+    ///
+    /// # Example
+    /// ```
+    /// use dfvs::graph::{AdjacencyList, AdjArray};
+    /// use dfvs::graph::node_mapper::{RankingForwardMapper, Getter};
+    /// let graph = AdjArray::from(&[(0, 1), (0,2), (0,3), (1,2), (1,3), (2,3)]);
+    /// let mapper = RankingForwardMapper::from_graph_sort_by_key_reverse(&graph, |u| graph.out_degree(u));
+    /// assert_eq!(mapper.new_id_of(3), Some(3));
+    /// assert_eq!(mapper.new_id_of(2), Some(2));
+    /// assert_eq!(mapper.new_id_of(1), Some(1));
+    /// assert_eq!(mapper.new_id_of(0), Some(0));
+    /// ```
+    pub fn from_graph_sort_by_key_reverse<G, F, K>(graph: &G, mut key: F) -> Self
+    where
+        G: GraphOrder,
+        F: FnMut(Node) -> K,
+        K: Ord,
+    {
+        Self::from_graph_sort_by(graph, |a, b| key(b).cmp(&key(a)))
+    }
+}
+
+impl Getter for RankingForwardMapper {
+    fn new_id_of(&self, old: Node) -> Option<Node> {
+        if (old as usize) < self.new_ids.len() {
+            Some(self.new_ids[old as usize])
+        } else {
+            None
+        }
+    }
+
+    /// If the mapping (old, new) exists, returns Some(old), otherwise None.
+    ///
+    /// # Warning
+    /// This implementation is provided for compatibility reasons but takes linear time.
+    /// If this method is required, consider using a `NodeMapper` instance instead.
+    fn old_id_of(&self, new: Node) -> Option<Node> {
+        self.new_ids
+            .iter()
+            .find_position(|&&x| x == new)
+            .map(|(i, _)| i as Node)
+    }
+
+    fn len(&self) -> Node {
+        self.new_ids.len() as Node
+    }
+}
+
 #[cfg(test)]
 pub mod tests {
     use super::*;
@@ -297,5 +523,44 @@ pub mod tests {
         let mut map = NodeMapper::with_capacity(10);
         map.map_node_to(1, 3);
         map.map_node_to(2, 3);
+    }
+
+    #[test]
+    fn relabelling() {
+        // keep all
+        {
+            let graph = AdjArray::from(&[(0, 1), (1, 2)]);
+            let mut map = NodeMapper::with_capacity(10);
+            map.map_node_to(0, 2);
+            map.map_node_to(1, 1);
+            map.map_node_to(2, 0);
+            let graph = map.relabelled_graph(&graph);
+
+            assert_eq!(graph.edges_vec(), vec![(1, 0), (2, 1)]);
+            assert_eq!(graph.len(), 3);
+        }
+
+        // drop 1
+        {
+            let graph = AdjArray::from(&[(0, 1), (1, 2)]);
+            let mut map = NodeMapper::with_capacity(10);
+            map.map_node_to(0, 1);
+            map.map_node_to(2, 0);
+            let graph = map.relabelled_graph(&graph);
+
+            assert_eq!(graph.edges_vec(), vec![]);
+            assert_eq!(graph.len(), 2);
+        }
+
+        // loop at node 0 (previous bug)
+        {
+            let graph = AdjArray::from(&[(1, 1)]);
+            let mut map = NodeMapper::with_capacity(10);
+            map.map_node_to(1, 0);
+            let graph = map.relabelled_graph(&graph);
+
+            assert_eq!(graph.edges_vec(), vec![(0, 0)]);
+            assert_eq!(graph.len(), 1);
+        }
     }
 }

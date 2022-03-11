@@ -18,7 +18,7 @@ pub type Edge = (Node, Node);
 pub use adj_array::AdjArray;
 pub use adj_list_matrix::AdjListMatrix;
 pub use connectivity::Connectivity;
-pub use node_mapper::{Compose, Getter, Inverse, NodeMapper, Setter};
+pub use node_mapper::{Compose, Getter, Inverse, NodeMapper, RankingForwardMapper, Setter};
 pub use subgraph::*;
 pub use traversal::*;
 pub use unique_node_stack::UniqueNodeStack;
