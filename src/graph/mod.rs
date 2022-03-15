@@ -15,9 +15,10 @@ pub mod unique_node_stack;
 pub type Node = u32;
 pub type Edge = (Node, Node);
 
-pub use adj_array::AdjArray;
-pub use adj_list_matrix::AdjListMatrix;
+pub use adj_array::{AdjArray, AdjArrayIn};
+pub use adj_list_matrix::{AdjListMatrix, AdjListMatrixIn};
 pub use connectivity::Connectivity;
+pub use io::*;
 pub use node_mapper::{Compose, Getter, Inverse, NodeMapper, RankingForwardMapper, Setter};
 pub use subgraph::*;
 pub use traversal::*;
