@@ -13,6 +13,7 @@ use std::convert::TryFrom;
 pub(super) fn branch_and_bound_impl_start<G: BBGraph + Any>(
     graph: &G,
     upper_limit_excl: Node,
+    stats: &mut BBStats,
 ) -> Option<Solution>
 where
     [(); G::CAPACITY]:,
@@ -25,19 +26,20 @@ where
             return None;
         }
 
-        let mut solution = branch_and_bound_impl_sccs(&graph, upper_limit_excl - num_loops)?;
+        let mut solution = branch_and_bound_impl_sccs(&graph, upper_limit_excl - num_loops, stats)?;
         solution.shift_from_subgraph(noloops_mask.as_());
         solution.insert_new_nodes(loops_mask.as_());
 
         Some(solution)
     } else {
-        branch_and_bound_impl_sccs(graph, upper_limit_excl)
+        branch_and_bound_impl_sccs(graph, upper_limit_excl, stats)
     }
 }
 
 fn branch_and_bound_impl_sccs<G: BBGraph + Any>(
     graph: &G,
     mut upper_limit_excl: Node,
+    stats: &mut BBStats,
 ) -> Option<Solution>
 where
     [(); G::CAPACITY]:,
@@ -63,7 +65,7 @@ where
     // shortcut if the transitive closure is fully connected; then we do not have to search SCCs
     // and can even avoid repeated computation of the transitive closure
     if transitive_closure.has_all_edges() {
-        return branch_and_bound_impl(graph, upper_limit_excl);
+        return branch_and_bound_impl(graph, upper_limit_excl, stats);
     }
 
     let sccs: ArrayVec<G::NodeMask, { G::CAPACITY }> = transitive_closure
@@ -80,7 +82,7 @@ where
     for scc in sccs {
         let scc_graph = graph.subgraph(scc);
 
-        let mut scc_solution = branch_and_bound_impl(&scc_graph, upper_limit_excl + 1)?;
+        let mut scc_solution = branch_and_bound_impl(&scc_graph, upper_limit_excl + 1, stats)?;
         scc_solution.shift_from_subgraph(scc.as_());
 
         upper_limit_excl -= scc_solution.cardinality() - 1;
@@ -90,11 +92,16 @@ where
     Some(solution)
 }
 
-fn branch_and_bound_impl<G: BBGraph + Any>(graph: &G, upper_limit_excl: Node) -> Option<Solution>
+fn branch_and_bound_impl<G: BBGraph + Any>(
+    graph: &G,
+    upper_limit_excl: Node,
+    stats: &mut BBStats,
+) -> Option<Solution>
 where
     [(); G::CAPACITY]:,
 {
     debug_assert!(!graph.has_node_with_loop());
+    stats.entered_at(graph.len());
 
     // at this point we cannot be sure that the graph is not acyclic
     if upper_limit_excl == 0 {
@@ -112,16 +119,18 @@ where
             };
         }
     } else if G::CAPACITY > 8 && graph.len() <= 8 {
-        return branch_and_bound_impl(&Graph8::from_bbgraph(graph), upper_limit_excl);
+        return branch_and_bound_impl(&Graph8::from_bbgraph(graph), upper_limit_excl, stats);
     } else if G::CAPACITY > 16 && graph.len() <= 16 {
         return branch_and_bound_impl(
             &GenericIntGraph::<u16, 16>::from_bbgraph(graph),
             upper_limit_excl,
+            stats,
         );
     } else if G::CAPACITY > 32 && graph.len() <= 32 {
         return branch_and_bound_impl(
             &GenericIntGraph::<u32, 32>::from_bbgraph(graph),
             upper_limit_excl,
+            stats,
         );
     }
 
@@ -129,7 +138,7 @@ where
         let subgraph = graph.remove_first_node();
         let subgraph_mask = graph.nodes_mask() - G::NodeMask::one();
 
-        branch_and_bound_impl_sccs(&subgraph, upper_limit_excl - 1).map(|mut sol| {
+        branch_and_bound_impl_sccs(&subgraph, upper_limit_excl - 1, stats).map(|mut sol| {
             sol.shift_from_subgraph(subgraph_mask.as_())
                 .insert_new_node(0);
             sol
@@ -152,7 +161,8 @@ where
             // plus the self-loops from contracting.
             None
         } else {
-            let sol = branch_and_bound_impl(&subgraph, upper_limit_excl - loops_mask.count_ones());
+            let sol =
+                branch_and_bound_impl(&subgraph, upper_limit_excl - loops_mask.count_ones(), stats);
             if let Some(mut sol) = sol {
                 sol.shift_from_subgraph((noloops_mask << 1).as_())
                     .insert_new_nodes((loops_mask << 1).as_());

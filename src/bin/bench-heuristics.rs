@@ -1,6 +1,6 @@
 extern crate core;
 
-use dfvs::bench::fvs_bench::FvsBench;
+use dfvs::bench::fvs_bench::{FvsBench, InnerIterations, Iterations};
 use dfvs::bench::io::bench_dir;
 use dfvs::graph::adj_array::AdjArrayIn;
 use dfvs::graph::io::FileFormat;
@@ -116,11 +116,11 @@ fn main() -> std::io::Result<()> {
         bench.num_threads(num_threads);
     }
 
-    bench.add_algo("greedy", |graph: AdjArrayIn, _| {
+    bench.add_algo("greedy", |graph: AdjArrayIn, _, _, _| {
         greedy_dfvs::<MaxDegreeSelector<_>, _, _>(graph)
     });
 
-    bench.add_algo("sim_anneal", |graph: AdjArrayIn, _| {
+    bench.add_algo("sim_anneal", |graph: AdjArrayIn, _, _, _| {
         let mut strategy_rng = Pcg64::seed_from_u64(0);
         let mut sim_anneal_rng = Pcg64::seed_from_u64(1);
         let mut move_strategy = RandomTopoStrategy::new(&mut strategy_rng, 7);
@@ -135,6 +135,9 @@ fn main() -> std::io::Result<()> {
         )
     });
 
-    bench.strict(false).iterations(opt.iterations).run(output)?;
+    bench
+        .strict(false)
+        .iterations(Iterations::new(opt.iterations, InnerIterations::Fixed(1)))
+        .run(output)?;
     Ok(())
 }
