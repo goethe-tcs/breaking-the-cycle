@@ -7,6 +7,7 @@ use num::PrimInt;
 
 mod bb_core;
 mod bb_graph;
+pub mod bb_stats;
 mod generic_int_graph;
 mod graph4;
 mod graph8;
@@ -21,6 +22,7 @@ use graph8::*;
 use scc_iterator::*;
 use solution::*;
 
+use crate::exact::branch_and_bound::bb_stats::BBStats;
 pub use graph4::build_lookup_table;
 
 pub struct BranchAndBound<'a, G> {
@@ -65,20 +67,28 @@ pub fn branch_and_bound<G: AdjacencyList>(
     graph: &G,
     upper_bound: Option<Node>,
 ) -> Option<Vec<Node>> {
+    branch_and_bound_stats(graph, upper_bound, &mut BBStats::new())
+}
+
+pub fn branch_and_bound_stats<G: AdjacencyList>(
+    graph: &G,
+    upper_bound: Option<Node>,
+    stats: &mut BBStats,
+) -> Option<Vec<Node>> {
     let upper_bound = upper_bound.unwrap_or_else(|| graph.number_of_nodes()) + 1;
 
     let solution = if graph.len() > 32 {
         let graph = GenericIntGraph::<u64, 64>::from(graph);
-        branch_and_bound_impl_start(&graph, upper_bound)
+        branch_and_bound_impl_start(&graph, upper_bound, stats)
     } else if graph.len() > 16 {
         let graph = GenericIntGraph::<u32, 32>::from(graph);
-        branch_and_bound_impl_start(&graph, upper_bound)
+        branch_and_bound_impl_start(&graph, upper_bound, stats)
     } else if graph.len() > 8 {
         let graph = GenericIntGraph::<u16, 16>::from(graph);
-        branch_and_bound_impl_start(&graph, upper_bound)
+        branch_and_bound_impl_start(&graph, upper_bound, stats)
     } else {
         let graph = Graph8::from(graph);
-        branch_and_bound_impl_start(&graph, upper_bound)
+        branch_and_bound_impl_start(&graph, upper_bound, stats)
     }?;
 
     Some(solution.included())
@@ -110,7 +120,7 @@ mod tests {
         {
             // graph has loop at 0 -> solution {0}
             assert_eq!(
-                branch_and_bound(&AdjListMatrix::from(&[(0, 1), (0, 0)]), None).unwrap(),
+                branch_and_bound(&AdjListMatrix::from(&[(0, 1), (0, 0)]), None,).unwrap(),
                 vec![0]
             );
         }
@@ -118,7 +128,7 @@ mod tests {
         {
             // graph has loop at 0 -> solution {0}
             assert_eq!(
-                branch_and_bound(&AdjListMatrix::from(&[(0, 1), (0, 0)]), None).unwrap(),
+                branch_and_bound(&AdjListMatrix::from(&[(0, 1), (0, 0)]), None,).unwrap(),
                 vec![0]
             );
         }

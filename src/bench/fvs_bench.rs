@@ -34,7 +34,8 @@ use crate::pre_processor_reduction::{PreprocessorReduction, ReductionState};
 ///
 /// # #[cfg(feature = "tempfile")]
 /// fn main() -> std::io::Result<()> {
-///     let temp_dir = tempfile::TempDir::new().unwrap();
+///     use dfvs::bench::fvs_bench::{InnerIterations, Iterations};
+/// let temp_dir = tempfile::TempDir::new().unwrap();
 ///     let output_path = temp_dir.path().join("test_bench.csv");
 ///
 ///     let n = 20;
@@ -47,13 +48,13 @@ use crate::pre_processor_reduction::{PreprocessorReduction, ReductionState};
 ///     bench.add_graph_file(FileFormat::Pace, "data/netrep/1/football.pace")?;
 ///     bench.add_graph("my_random_graph", generate_gnp::<AdjArrayIn, _>(&mut rng, n, p));
 ///
-///     bench.add_algo("my_algo", |graph, _writer| {
+///     bench.add_algo("my_algo", |graph, _writer, _iteration, _num_iterations| {
 ///         greedy_dfvs::<MaxDegreeSelector<_>, _, _>(graph)
 ///     });
 ///
 ///     bench
 ///         .num_threads(1)
-///         .iterations(3)
+///         .iterations(Iterations::new(1, InnerIterations::Fixed(1)))
 ///         .strict(false)
 ///         .reduce_graphs(true)
 ///         .split_into_sccs(false)
@@ -69,7 +70,7 @@ pub struct FvsBench<G> {
     strict: bool,
     reduce_graphs: bool,
     split_into_sccs: bool,
-    iterations: usize,
+    iterations: Iterations,
     num_threads: usize,
 
     /// Input graphs with a label
@@ -81,10 +82,47 @@ pub struct FvsBench<G> {
     /// Writes the result DFVS of all design points
     fvs_writer: Arc<Mutex<dyn FvsWriter + Send>>,
 }
+
 type LabeledGraph<G> = (String, Arc<G>);
 
-type FvsAlgo<G> = Arc<dyn Fn(G, &mut DesignPointBuffer) -> Vec<Node> + Send + Sync>;
+type FvsAlgo<G> =
+    Arc<dyn Fn(G, &mut DesignPointBuffer, Iteration, NumIterations) -> Vec<Node> + Send + Sync>;
 type LabeledFvsAlgo<G> = (String, FvsAlgo<G>);
+
+type Iteration = usize;
+type NumIterations = usize;
+type MinSeconds = std::time::Duration;
+type MinIterations = usize;
+
+#[derive(Copy, Clone, Debug)]
+pub enum InnerIterations {
+    Fixed(NumIterations),
+    Adaptive(MinSeconds, MinIterations),
+}
+
+#[derive(Copy, Clone, Debug)]
+pub struct Iterations {
+    design_point_iterations: usize,
+    inner_iterations: InnerIterations,
+}
+
+impl Iterations {
+    pub fn new(design_point_iterations: usize, inner_iterations: InnerIterations) -> Self {
+        Self {
+            design_point_iterations,
+            inner_iterations,
+        }
+    }
+}
+
+impl Default for Iterations {
+    fn default() -> Self {
+        Self {
+            design_point_iterations: 1,
+            inner_iterations: InnerIterations::Fixed(1),
+        }
+    }
+}
 
 impl<G> FvsBench<G>
 where
@@ -104,7 +142,7 @@ where
             strict: false,
             reduce_graphs: true,
             split_into_sccs: true,
-            iterations: 1,
+            iterations: Iterations::default(),
             num_threads: num_cpus::get_physical(),
 
             graphs: vec![],
@@ -138,7 +176,10 @@ where
 
     pub fn add_algo<F>(&mut self, label: impl Display, algo: F) -> &mut Self
     where
-        F: Fn(G, &mut DesignPointBuffer) -> Vec<Node> + Send + Sync + 'static,
+        F: Fn(G, &mut DesignPointBuffer, Iteration, NumIterations) -> Vec<Node>
+            + Send
+            + Sync
+            + 'static,
     {
         self.algos.push((label.to_string(), Arc::new(algo)));
         self
@@ -173,9 +214,27 @@ where
     /// Sets how often each algorithm is run per graph.
     ///
     /// Default: `1`
-    pub fn iterations(&mut self, value: usize) -> &mut Self {
-        assert_ne!(value, 0, "Iterations must be greater than zero!");
-        self.iterations = value;
+    pub fn iterations(&mut self, iterations: Iterations) -> &mut Self {
+        assert!(
+            iterations.design_point_iterations > 0,
+            "Iterations must be greater than zero!"
+        );
+        match iterations.inner_iterations {
+            InnerIterations::Fixed(iters) => {
+                assert!(iters > 0, "Iterations must be greater than zero!")
+            }
+            InnerIterations::Adaptive(min_seconds, min_iters) => {
+                assert!(
+                    min_seconds.as_secs_f64() > 0.0,
+                    "Minimum number of seconds must be greater than zero!"
+                );
+                assert!(
+                    min_iters > 0,
+                    "Minimum number of iterations must be greater than zero!"
+                );
+            }
+        }
+        self.iterations = iterations;
         self
     }
 
@@ -221,7 +280,7 @@ where
             .graphs
             .iter()
             .cartesian_product(self.algos.iter())
-            .cartesian_product(0..self.iterations)
+            .cartesian_product(0..self.iterations.design_point_iterations)
             .map(|(((graph_label, graph), (algo_label, algo)), _)| {
                 (
                     graph_label.as_str(),
@@ -251,6 +310,7 @@ where
         let strict = self.strict;
         let reduce_graphs = self.reduce_graphs;
         let split_into_sccs = self.split_into_sccs;
+        let iterations = self.iterations;
 
         // run benchmark
         let result = design_points
@@ -304,13 +364,34 @@ where
                         }
                     }
 
-                    // run algorithm for every strongly connected component
-                    let start = Instant::now();
-                    let algo_results = sccs
-                        .into_iter()
-                        .map(|(scc, scc_mapper)| (algo(scc, &mut metric_buffer), scc_mapper))
-                        .collect_vec(); // collect needed to eagerly evaluate for benchmarking purposes
-                    let elapsed_time = start.elapsed().as_secs_f64();
+                    let inner_iterations =
+                        Self::num_inner_iterations(iterations, sccs.clone(), algo.clone());
+
+                    let repeated_sccs = if inner_iterations > 1 {
+                        std::iter::repeat_with(|| sccs.clone())
+                            .take(inner_iterations as usize)
+                            .collect_vec()
+                    } else {
+                        vec![sccs]
+                    };
+
+                    let (elapsed_time, algo_results) = {
+                        let start = Instant::now();
+                        let mut solution = None;
+                        for (i, sccs) in repeated_sccs.into_iter().enumerate() {
+                            solution = Some(
+                                sccs.into_iter()
+                                    .map(|(scc, scc_mapper)| {
+                                        (
+                                            algo(scc, &mut metric_buffer, i, inner_iterations),
+                                            scc_mapper,
+                                        )
+                                    })
+                                    .collect_vec(),
+                            ); // collect needed to eagerly evaluate for benchmarking purposes
+                        }
+                        (start.elapsed().as_secs_f64(), solution.unwrap())
+                    };
 
                     // combine fvs of strongly connected components and remap node names
                     let algo_fvs = algo_results
@@ -327,7 +408,8 @@ where
                     metric_buffer.write("fvs_reduction", reduct_state.fvs().len());
                     metric_buffer.write("fvs_algo", algo_fvs.len());
                     metric_buffer.write("fvs_total", total_fvs.len());
-                    metric_buffer.write("elapsed_sec_algo", elapsed_time);
+                    metric_buffer.write("inner_iterations", inner_iterations);
+                    metric_buffer.write("elapsed_sec_algo", elapsed_time / inner_iterations as f64);
 
                     // apply fvs to graph (to print resulting graph & check if graph is acyclic)
                     let mut result_graph = G::clone(&input_graph);
@@ -376,6 +458,37 @@ where
 
         result
     }
+
+    /// Runs the benchmark using a DualWriter that writes bench results to standard output as well
+    /// as to a csv file
+    pub fn run(&self, csv_path: impl AsRef<Path>) -> io::Result<()> {
+        let writer = DualWriter::new(
+            KeyedWriter::new_std_out_writer(),
+            KeyedCsvWriter::new(csv_path.as_ref().to_path_buf())?,
+        );
+        self.run_with_writer(writer)
+    }
+
+    fn num_inner_iterations(
+        iterations: Iterations,
+        sccs: Vec<(G, NodeMapper)>,
+        algo: FvsAlgo<G>,
+    ) -> usize {
+        match iterations.inner_iterations {
+            InnerIterations::Fixed(iters) => iters,
+            InnerIterations::Adaptive(min_seconds, min_iters) => {
+                let mut buf = DesignPointBuffer::new();
+
+                let start = Instant::now();
+                sccs.into_iter().for_each(|(scc, _)| {
+                    algo(scc, &mut buf, 0, 0);
+                });
+                let iterations_per_min_seconds =
+                    (min_seconds.as_secs_f64() / start.elapsed().as_secs_f64()).round() as usize;
+                iterations_per_min_seconds.max(min_iters)
+            }
+        }
+    }
 }
 
 impl<G> Default for FvsBench<G>
@@ -396,30 +509,6 @@ where
     }
 }
 
-impl<G> FvsBench<G>
-where
-    G: GraphOrder
-        + AdjacencyListIn
-        + AdjacencyTest
-        + GraphEdgeEditing
-        + GraphNew
-        + GraphRead
-        + Debug
-        + Clone
-        + Send
-        + Sync,
-{
-    /// Runs the benchmark using a DualWriter that writes bench results to standard output as well
-    /// as to a csv file
-    pub fn run(&self, csv_path: impl AsRef<Path>) -> io::Result<()> {
-        let writer = DualWriter::new(
-            KeyedWriter::new_std_out_writer(),
-            KeyedCsvWriter::new(csv_path.as_ref().to_path_buf())?,
-        );
-        self.run_with_writer(writer)
-    }
-}
-
 #[cfg(test)]
 mod tests_bench {
     use super::*;
@@ -430,9 +519,9 @@ mod tests_bench {
     #[should_panic]
     fn test_zero_iterations_panic() {
         FvsBench::new()
-            .iterations(0)
+            .iterations(Iterations::new(0, InnerIterations::Fixed(0)))
             .add_graph("self_loop", AdjArrayIn::from(&[(0, 0)]))
-            .add_algo("do_nothing", |_, _| vec![])
+            .add_algo("do_nothing", |_, _, _, _| vec![])
             .run_with_writer(sink())
             .unwrap();
     }
@@ -441,7 +530,7 @@ mod tests_bench {
     fn test_strict_no_error() {
         FvsBench::default()
             .add_graph("test_graph", AdjArrayIn::from(&vec![(0, 0)]))
-            .add_algo("test_algo", |_, _| vec![0])
+            .add_algo("test_algo", |_, _, _, _| vec![0])
             .strict(true)
             .reduce_graphs(false)
             .run_with_writer(sink())
@@ -452,7 +541,7 @@ mod tests_bench {
     fn test_strict_error() {
         let error_kind = FvsBench::default()
             .add_graph("test_graph", AdjArrayIn::from(&vec![(0, 0)]))
-            .add_algo("test_algo", |_, _| vec![])
+            .add_algo("test_algo", |_, _, _, _| vec![])
             .strict(true)
             .reduce_graphs(false)
             .run_with_writer(sink())
@@ -466,7 +555,7 @@ mod tests_bench {
     #[test]
     fn test_zero_graphs_error() {
         let error_kind = FvsBench::new()
-            .add_algo("test_algo", |_graph: AdjArrayIn, _| vec![])
+            .add_algo("test_algo", |_graph: AdjArrayIn, _, _, _| vec![])
             .run_with_writer(sink())
             .err()
             .unwrap()
@@ -516,7 +605,7 @@ mod tests_bench_with_tempfile {
             .into_iter()
             .map(|record| {
                 let mut vec = record.iter().map(String::from).collect_vec();
-                vec[11] = "".to_string(); // remove unstable elapsed time entry
+                vec[12] = "".to_string(); // remove unstable elapsed time entry
                 vec
             })
             .sorted_by(|a, b| a.index(0).cmp(b.index(0)));
@@ -539,6 +628,7 @@ mod tests_bench_with_tempfile {
             "fvs_reduction",
             "fvs_algo",
             "fvs_total",
+            "inner_iterations",
             "elapsed_sec_algo",
             "is_result_acyclic",
         ]
@@ -563,7 +653,7 @@ mod tests_bench_with_tempfile {
                     (3, 2),
                 ]),
             )
-            .add_algo("test_algo", |_, _| vec![])
+            .add_algo("test_algo", |_, _, _, _| vec![])
             .reduce_graphs(true)
             .split_into_sccs(false)
             .run(output_path.clone())
@@ -584,6 +674,7 @@ mod tests_bench_with_tempfile {
                 "3",
                 "0",
                 "3",
+                "1",
                 "",
                 "true",
             ],
@@ -610,7 +701,7 @@ mod tests_bench_with_tempfile {
                 AdjArrayIn::from(&vec![(0, 0), (1, 1), (2, 2), (3, 3)]),
             )
             .add_graph("tiny_graph", AdjArrayIn::from(&vec![(0, 0), (1, 2)]))
-            .add_algo("do_nothing", |_graph: AdjArrayIn, _| vec![])
+            .add_algo("do_nothing", |_graph: AdjArrayIn, _, _, _| vec![])
             .strict(false)
             .reduce_graphs(false)
             .run(output_path.clone())
@@ -632,6 +723,7 @@ mod tests_bench_with_tempfile {
                 "0",
                 "0",
                 "0",
+                "1",
                 "",
                 "false",
             ],
@@ -647,6 +739,7 @@ mod tests_bench_with_tempfile {
                 "0",
                 "0",
                 "0",
+                "1",
                 "",
                 "false",
             ],
@@ -662,6 +755,7 @@ mod tests_bench_with_tempfile {
                 "0",
                 "0",
                 "0",
+                "1",
                 "",
                 "false",
             ],
@@ -685,15 +779,138 @@ mod tests_bench_with_tempfile {
             .unwrap()
             .add_graph("5_n", AdjArrayIn::new(5))
             .add_graph("self_loop", AdjArrayIn::from(&[(0, 0)]))
-            .add_algo("do_nothing", |_, _| vec![])
-            .add_algo("test_algo", |_, _| vec![0])
+            .add_algo("do_nothing", |_, _, _, _| vec![])
+            .add_algo("test_algo", |_, _, _, _| vec![0])
             .strict(false)
-            .iterations(3)
+            .iterations(Iterations::new(3, InnerIterations::Fixed(1)))
             .run(output_path.clone())
             .unwrap();
 
         let output = read_bench_output(output_path);
         assert_eq!(output.len(), 19);
+    }
+
+    #[test]
+    fn test_bench_inner_iterations_count() {
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let output_path = temp_dir.path().join("test_bench_design_point_count.csv");
+
+        let graph_path = temp_dir.path().join("test_bench_design_point_count_graph");
+        let graph_file = File::create(graph_path.clone()).unwrap();
+        AdjArrayIn::from(&[(0, 0), (0, 1)])
+            .try_write_pace(graph_file)
+            .unwrap();
+
+        FvsBench::new()
+            .add_graph_file(FileFormat::Pace, graph_path)
+            .unwrap()
+            .add_graph("5_n", AdjArrayIn::new(5))
+            .add_graph("self_loop", AdjArrayIn::from(&[(0, 0)]))
+            .add_algo("do_nothing", |g, buffer, iteration, total_iterations| {
+                assert_eq!(total_iterations, 42);
+                assert!(iteration < total_iterations);
+                buffer.write(
+                    format!("iteration_{}_of_{}", iteration, total_iterations),
+                    "",
+                );
+                (0..g.number_of_nodes()).collect_vec()
+            })
+            .strict(false)
+            .iterations(Iterations::new(3, InnerIterations::Fixed(42)))
+            .split_into_sccs(false)
+            .run(output_path.clone())
+            .unwrap();
+
+        let output = read_bench_output(output_path);
+        assert_eq!(output.len(), 10);
+        for i in 0..10 {
+            assert_eq!(output[i].len(), get_bench_column_headers().len() + 42);
+        }
+    }
+
+    #[test]
+    fn test_bench_adaptive_iterations_min_iters() {
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let output_path = temp_dir.path().join("test_bench_design_point_count.csv");
+
+        let graph_path = temp_dir.path().join("test_bench_design_point_count_graph");
+        let graph_file = File::create(graph_path.clone()).unwrap();
+        AdjArrayIn::from(&[(0, 0), (0, 1)])
+            .try_write_pace(graph_file)
+            .unwrap();
+
+        FvsBench::new()
+            .add_graph_file(FileFormat::Pace, graph_path)
+            .unwrap()
+            .add_algo(
+                "do_nothing",
+                |g: AdjArrayIn, buffer, iteration, total_iterations| {
+                    std::thread::sleep(std::time::Duration::new(0, 10_000_000));
+                    buffer.write(
+                        format!("iteration_{}_of_{}", iteration, total_iterations),
+                        "",
+                    );
+                    (0..g.number_of_nodes()).collect_vec()
+                },
+            )
+            .strict(false)
+            .iterations(Iterations::new(
+                3,
+                InnerIterations::Adaptive(std::time::Duration::new(0, 1_000_000), 3),
+            ))
+            .split_into_sccs(false)
+            .run(output_path.clone())
+            .unwrap();
+
+        let output = read_bench_output(output_path);
+        assert_eq!(output.len(), 4);
+        for i in 0..4 {
+            // Algo takes ca. 10 ms, min iterations is 3, min seconds is 1 ms, so number of
+            // iterations should be 3 from the adaptive iterations calculation.
+            assert_eq!(output[i].len(), get_bench_column_headers().len() + 3);
+        }
+    }
+
+    #[test]
+    fn test_bench_adaptive_iterations_min_seconds() {
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let output_path = temp_dir.path().join("test_bench_design_point_count.csv");
+
+        let graph_path = temp_dir.path().join("test_bench_design_point_count_graph");
+        let graph_file = File::create(graph_path.clone()).unwrap();
+        AdjArrayIn::from(&[(0, 0), (0, 1)])
+            .try_write_pace(graph_file)
+            .unwrap();
+
+        FvsBench::new()
+            .add_graph_file(FileFormat::Pace, graph_path)
+            .unwrap()
+            .add_algo(
+                "do_nothing",
+                |g: AdjArrayIn, buffer, iteration, total_iterations| {
+                    buffer.write(
+                        format!("iteration_{}_of_{}", iteration, total_iterations),
+                        "",
+                    );
+                    (0..g.number_of_nodes()).collect_vec()
+                },
+            )
+            .strict(false)
+            .iterations(Iterations::new(
+                3,
+                InnerIterations::Adaptive(std::time::Duration::new(0, 500_000_000), 1),
+            ))
+            .split_into_sccs(false)
+            .run(output_path.clone())
+            .unwrap();
+
+        let output = read_bench_output(output_path);
+        assert_eq!(output.len(), 4);
+        for i in 1..4 {
+            // Algo does nothing except write to a buffer, min iterations is 1, min seconds is 500 ms, so number of
+            // iterations should be at least 10
+            assert!(output[i].len() >= 10);
+        }
     }
 
     #[test]
@@ -703,8 +920,10 @@ mod tests_bench_with_tempfile {
         FvsBench::new()
             .add_graph("4_n", AdjArrayIn::from(&[(0, 0), (1, 1), (2, 2), (3, 3)]))
             .add_graph("one_node", AdjArrayIn::from(&[(0, 0)]))
-            .add_algo("do_nothing", |_, _| vec![])
-            .add_algo("test_algo", |g, _| (0..g.number_of_nodes()).collect_vec())
+            .add_algo("do_nothing", |_, _, _, _| vec![])
+            .add_algo("test_algo", |g, _, _, _| {
+                (0..g.number_of_nodes()).collect_vec()
+            })
             .reduce_graphs(false)
             .fvs_output_dir(fvs_dir_path.clone())
             .num_threads(1)
@@ -729,7 +948,7 @@ mod tests_bench_with_tempfile {
                 "4_n_k_0.fvs",
                 "4_n_k_4.fvs",
                 "one_node_k_0.fvs",
-                "one_node_k_1.fvs"
+                "one_node_k_1.fvs",
             ]
         );
 

@@ -114,17 +114,17 @@ impl Iterator for AllIntSubsets {
     type Item = u64;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if let Some(x) = self.iter.next() {
-            Some(x)
-        } else {
+        let result = self.iter.next();
+
+        if result.is_none() {
             self.k += 1;
             if self.k <= self.max_k {
                 self.iter = IntSubsetsOfSize::new(self.k, self.num_bits);
-                self.next()
-            } else {
-                None
+                return self.next();
             }
         }
+
+        result
     }
 }
 

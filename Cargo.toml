@@ -35,6 +35,7 @@ arrayvec = "0.7.2"
 pace-digest = ["digest", "sha2"]
 cli = ["structopt"]
 signal-handling = ["ctrlc"]
+bb-stats = []
 
 [profile.release]
 debug = true
@@ -71,6 +72,7 @@ test = false
 [[bin]]
 name = "bench-branch-and-bound"
 path = "src/bin/bench-branch-and-bound.rs"
+required-features = ["cli", "bb-stats"]
 test = false
 
 [[bin]]
