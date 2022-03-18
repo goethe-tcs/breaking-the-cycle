@@ -30,12 +30,12 @@ impl<W: Write + 'static> KeyedWriter<W> {
         }
     }
 
-    pub fn default_formatter(column: String, value: String) -> String {
-        format!(" {}: {:>12} |", column, value)
+    pub fn default_formatter(key: String, value: String) -> String {
+        format!(" {}: {:>12} |", key, value)
     }
 
-    fn write(&mut self, column: impl Display, value: impl Display) {
-        self.line_buffer.write(column, value);
+    fn write(&mut self, key: impl Display, value: impl Display) {
+        self.line_buffer.write(key, value);
     }
 
     fn end_line(&mut self) -> io::Result<()> {
@@ -43,7 +43,7 @@ impl<W: Write + 'static> KeyedWriter<W> {
             .line_buffer
             .flush()
             .into_iter()
-            .zip(self.line_buffer.get_columns())
+            .zip(self.line_buffer.get_keys())
             .map(|(val, col)| (*self.entry_formatter)(col.clone(), val))
             .join("");
 
@@ -71,8 +71,8 @@ impl KeyedWriter<File> {
 }
 
 impl<W: Write + 'static> BenchWriter for KeyedWriter<W> {
-    fn write(&mut self, column: impl Display, value: impl Display) -> io::Result<()> {
-        self.write(column, value);
+    fn write(&mut self, key: impl Display, value: impl Display) -> io::Result<()> {
+        self.write(key, value);
         Ok(())
     }
 

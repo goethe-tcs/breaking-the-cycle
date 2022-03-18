@@ -1,5 +1,5 @@
 #[cfg(feature = "bb-stats")]
-use crate::bench::io::design_point_buffer::DesignPointBuffer;
+use crate::bench::io::keyed_buffer::KeyedBuffer;
 
 #[derive(Clone, Debug)]
 #[cfg_attr(not(feature = "bb-stats"), derive(Default))]
@@ -36,7 +36,7 @@ impl BBStats {
         self.entered_at[n] += 1;
     }
 
-    pub fn write_to_buffer(&self, buffer: &mut DesignPointBuffer) {
+    pub fn write_to_buffer(&self, buffer: &mut KeyedBuffer) {
         let mut prev_size_group = 0;
         let mut size_group = 8;
 

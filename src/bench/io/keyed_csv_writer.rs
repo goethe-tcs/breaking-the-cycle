@@ -45,8 +45,8 @@ impl KeyedCsvWriter {
     }
 
     /// Write one entry into the line buffer, new columns are added automatically.
-    pub fn write(&mut self, column: impl Display, value: impl Display) {
-        self.line_buffer.write(column, value);
+    pub fn write(&mut self, key: impl Display, value: impl Display) {
+        self.line_buffer.write(key, value);
     }
 
     /// Ends the current line and writes it to the file
@@ -54,7 +54,7 @@ impl KeyedCsvWriter {
         // write header
         if self.is_first_line {
             self.is_first_line = false;
-            self.writer.write_record(self.line_buffer.get_columns())?;
+            self.writer.write_record(self.line_buffer.get_keys())?;
         }
 
         // write line
@@ -69,7 +69,7 @@ impl KeyedCsvWriter {
     /// ensure that all column headers are included in the file and that incomplete lines have an
     /// empty entry for the new columns.
     pub fn fix_columns(&mut self) -> io::Result<()> {
-        let columns = self.line_buffer.get_columns();
+        let columns = self.line_buffer.get_keys();
 
         // create reader
         let mut builder: ReaderBuilder = self.builder.clone().into();
@@ -112,8 +112,8 @@ impl KeyedCsvWriter {
 }
 
 impl BenchWriter for KeyedCsvWriter {
-    fn write(&mut self, column: impl Display, value: impl Display) -> io::Result<()> {
-        self.write(column, value);
+    fn write(&mut self, key: impl Display, value: impl Display) -> io::Result<()> {
+        self.write(key, value);
         Ok(())
     }
 

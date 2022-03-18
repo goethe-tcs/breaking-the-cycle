@@ -10,8 +10,8 @@ use std::time::Instant;
 use super::io::keyed_csv_writer::KeyedCsvWriter;
 use super::io::keyed_writer::KeyedWriter;
 use crate::bench::io::bench_writer::{BenchWriter, DualWriter};
-use crate::bench::io::design_point_buffer::DesignPointBuffer;
 use crate::bench::io::fvs_writer::{FvsFileWriter, FvsWriter};
+use crate::bench::io::keyed_buffer::KeyedBuffer;
 use crate::bench::io::other_io_error;
 use crate::bitset::BitSet;
 use crate::graph::io::{FileFormat, GraphRead};
@@ -86,7 +86,7 @@ pub struct FvsBench<G> {
 type LabeledGraph<G> = (String, Arc<G>);
 
 type FvsAlgo<G> =
-    Arc<dyn Fn(G, &mut DesignPointBuffer, Iteration, NumIterations) -> Vec<Node> + Send + Sync>;
+    Arc<dyn Fn(G, &mut KeyedBuffer, Iteration, NumIterations) -> Vec<Node> + Send + Sync>;
 type LabeledFvsAlgo<G> = (String, FvsAlgo<G>);
 
 type Iteration = usize;
@@ -176,10 +176,7 @@ where
 
     pub fn add_algo<F>(&mut self, label: impl Display, algo: F) -> &mut Self
     where
-        F: Fn(G, &mut DesignPointBuffer, Iteration, NumIterations) -> Vec<Node>
-            + Send
-            + Sync
-            + 'static,
+        F: Fn(G, &mut KeyedBuffer, Iteration, NumIterations) -> Vec<Node> + Send + Sync + 'static,
     {
         self.algos.push((label.to_string(), Arc::new(algo)));
         self
@@ -318,7 +315,7 @@ where
             .enumerate()
             .map::<_, Result<(), io::Error>>(
                 |(i, (graph_label, input_graph, algo_label, algo, writer, fvs_writer))| {
-                    let mut metric_buffer = DesignPointBuffer::new();
+                    let mut metric_buffer = KeyedBuffer::new();
                     trace!("[id {}] input graph: {:?}", i, input_graph);
 
                     // TODO: Pass reduction rules in as 'graph-pre-processing-step' instead of using
@@ -432,9 +429,7 @@ where
                     // write metrics
                     match writer.lock() {
                         Ok(mut writer) => {
-                            for (column, value) in metric_buffer.flush() {
-                                writer.write(column, value)?;
-                            }
+                            writer.add_buffer_content(&mut metric_buffer)?;
                             writer.end_design_point()?;
                         }
                         Err(error) => return Err(other_io_error(error.to_string())),
@@ -477,7 +472,7 @@ where
         match iterations.inner_iterations {
             InnerIterations::Fixed(iters) => iters,
             InnerIterations::Adaptive(min_seconds, min_iters) => {
-                let mut buf = DesignPointBuffer::new();
+                let mut buf = KeyedBuffer::new();
 
                 let start = Instant::now();
                 sccs.into_iter().for_each(|(scc, _)| {

@@ -3,7 +3,6 @@ use std::path::PathBuf;
 use std::{fs, io};
 
 pub mod bench_writer;
-pub mod design_point_buffer;
 pub mod fvs_writer;
 pub mod keyed_buffer;
 pub mod keyed_csv_writer;
