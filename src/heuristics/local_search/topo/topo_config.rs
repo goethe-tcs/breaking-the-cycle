@@ -20,6 +20,8 @@ where
     G: TopoGraph,
     Self: Sized,
 {
+    fn new(graph: &'a G) -> Self;
+
     /// **Assumes that `topo_order` is in topological order! Use [Self::set_state_from_fvs] if this
     /// is not the case.**
     ///
@@ -46,6 +48,15 @@ where
 
     /// Returns a slice that contains all nodes of the graph that are not in the configuration
     fn fvs(&self) -> &[Node];
+
+    fn new_with_fvs<I>(graph: &'a G, fvs: I) -> Self
+    where
+        I: IntoIterator<Item = Node> + Clone,
+    {
+        let mut result = Self::new(graph);
+        result.set_state_from_fvs(fvs);
+        result
+    }
 
     /// Clears the current topological order, creates a subgraph of the [Self::graph()] using the
     /// inverse of the fvs and creates a topological order for its nodes. Then updates its state

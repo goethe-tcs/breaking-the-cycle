@@ -13,19 +13,6 @@ macro_rules! priorities {
     };
 }
 
-macro_rules! impl_helper_topo_new_with_fvs {
-    () => {
-        pub fn new_with_fvs<I>(graph: &'a G, fvs: I) -> Self
-        where
-            I: IntoIterator<Item = Node> + Clone,
-        {
-            let mut result = Self::new(graph);
-            result.set_state_from_fvs(fvs);
-            result
-        }
-    };
-}
-
 macro_rules! topo_config_base_tests {
     ($factory_func:ident) => {
         use crate::graph::adj_array::AdjArrayIn;
@@ -168,7 +155,6 @@ macro_rules! topo_config_base_tests {
     };
 }
 
-pub(in crate::heuristics::local_search) use impl_helper_topo_new_with_fvs;
 pub(in crate::heuristics::local_search) use keys;
 pub(in crate::heuristics::local_search) use priorities;
 pub(in crate::heuristics::local_search) use topo_config_base_tests;

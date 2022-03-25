@@ -13,11 +13,11 @@ pub struct SetTopoConfig<'a, G> {
     fvs: HashSetVec<Node>,
 }
 
-impl<'a, G> SetTopoConfig<'a, G>
+impl<'a, G> TopoConfig<'a, G> for SetTopoConfig<'a, G>
 where
     G: TopoGraph,
 {
-    pub fn new(graph: &'a G) -> Self {
+    fn new(graph: &'a G) -> Self {
         Self {
             topo_order: NodeIndexSet::new(graph.len()),
             fvs: HashSetVec::from_graph(graph),
@@ -25,13 +25,6 @@ where
         }
     }
 
-    impl_helper_topo_new_with_fvs!();
-}
-
-impl<'a, G> TopoConfig<'a, G> for SetTopoConfig<'a, G>
-where
-    G: TopoGraph,
-{
     fn set_state<I>(&mut self, topo_order: I, fvs: I)
     where
         I: IntoIterator<Item = Node>,

@@ -12,11 +12,11 @@ pub struct VecTopoConfig<'a, G> {
     fvs: HashSetVec<Node>,
 }
 
-impl<'a, G> VecTopoConfig<'a, G>
+impl<'a, G> TopoConfig<'a, G> for VecTopoConfig<'a, G>
 where
     G: TopoGraph,
 {
-    pub fn new(graph: &'a G) -> Self {
+    fn new(graph: &'a G) -> Self {
         Self {
             topo_order: Vec::with_capacity(graph.len()),
             fvs: HashSetVec::from_graph(graph),
@@ -24,13 +24,6 @@ where
         }
     }
 
-    impl_helper_topo_new_with_fvs!();
-}
-
-impl<'a, G> TopoConfig<'a, G> for VecTopoConfig<'a, G>
-where
-    G: TopoGraph,
-{
     fn set_state<I>(&mut self, topo_order: I, fvs: I)
     where
         I: IntoIterator<Item = Node>,
