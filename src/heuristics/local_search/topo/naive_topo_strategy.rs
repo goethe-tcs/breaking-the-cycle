@@ -40,6 +40,7 @@ mod tests_rand_strategy {
     use super::super::vec_topo_config::VecTopoConfig;
     use super::*;
     use crate::algorithm::TerminatingIterativeAlgorithm;
+    use crate::bench::fvs_bench::test_utils::test_algo_with_pace_graphs;
     use crate::graph::adj_array::AdjArrayIn;
     use crate::graph::Traversal;
     use crate::heuristics::local_search::sim_anneal::SimAnneal;
@@ -62,5 +63,20 @@ mod tests_rand_strategy {
 
         let reduced_graph = apply_fvs_to_graph(&graph, fvs);
         assert!(reduced_graph.is_acyclic());
+    }
+
+    #[test]
+    fn test_with_graphs() {
+        test_algo_with_pace_graphs("NaiveTopoStrategy", |graph, _, _, _| {
+            let mut strategy_rng = Pcg64::seed_from_u64(0);
+            let mut sim_anneal_rng = Pcg64::seed_from_u64(1);
+            let topo_config = VecTopoConfig::new(&graph);
+            let strategy = NaiveTopoStrategy::new(&mut strategy_rng);
+            let local_search = TopoLocalSearch::new(topo_config, strategy);
+            let mut sim_anneal =
+                SimAnneal::new(local_search, 20, 20, 1.0, 0.9, &mut sim_anneal_rng);
+            sim_anneal.run_to_completion().unwrap()
+        })
+        .unwrap();
     }
 }

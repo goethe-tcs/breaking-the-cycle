@@ -40,7 +40,7 @@ where
         topo_move
     }
 
-    pub fn perform_move(&mut self, topo_move: TopoMove) {
+    pub fn perform_move(&mut self, mut topo_move: TopoMove) {
         let mut topo_config = self
             .topo_config
             .take()
@@ -50,7 +50,7 @@ where
             .take()
             .expect("perform_move called recursively!");
 
-        strategy.on_before_perform_move(&topo_config, &topo_move);
+        strategy.on_before_perform_move(&topo_config, &mut topo_move);
         topo_config.perform_move(topo_move);
 
         self.topo_config = Some(topo_config);

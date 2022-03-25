@@ -123,13 +123,12 @@ fn main() -> std::io::Result<()> {
         greedy_dfvs::<MaxDegreeSelector<_>, _, _>(graph)
     });
 
-    bench.add_algo("sim_anneal", |graph: AdjArrayIn, writer, _, _| {
+    bench.add_algo("random", |graph: AdjArrayIn, writer, _, _| {
         let mut strategy_rng = Pcg64::seed_from_u64(0);
         let mut sim_anneal_rng = Pcg64::seed_from_u64(1);
-        let local_search = TopoLocalSearch::new(
-            VecTopoConfig::new(&graph),
-            RandomTopoStrategy::new(&mut strategy_rng, 7),
-        );
+        let topo_config = VecTopoConfig::new(&graph);
+        let strategy = RandomTopoStrategy::new(&mut strategy_rng, 7);
+        let local_search = TopoLocalSearch::new(topo_config, strategy);
         let mut sim_anneal = SimAnneal::new(local_search, 20, 20, 1.0, 0.9, &mut sim_anneal_rng);
 
         let fvs = sim_anneal.run_to_completion().unwrap();

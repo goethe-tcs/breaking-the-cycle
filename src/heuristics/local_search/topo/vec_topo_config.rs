@@ -40,15 +40,13 @@ where
     }
 
     fn perform_move(&mut self, topo_move: TopoMove) {
-        debug_assert!(self.fvs().contains(&topo_move.node));
+        debug_assert!(self.fvs().contains(&topo_move.node()));
 
-        let node = topo_move.node;
-        let mut position = topo_move.position;
-        let mut incompatible_neighbors = topo_move.incompatible_neighbors;
+        let (node, mut position, _, mut conflicts) = topo_move.consume(self);
 
         // sort neighbors descending by index so that we can easily remove the neighbors
-        incompatible_neighbors.sort_unstable_by(|(_, i_1), (_, i_2)| i_2.cmp(i_1));
-        for (neighbor, index_of_neighbor) in incompatible_neighbors {
+        conflicts.sort_unstable_by(|(_, i_1), (_, i_2)| i_2.cmp(i_1));
+        for (neighbor, index_of_neighbor) in conflicts.clone() {
             debug_assert!(!self.fvs.contains(&neighbor));
 
             self.topo_order.remove(index_of_neighbor);

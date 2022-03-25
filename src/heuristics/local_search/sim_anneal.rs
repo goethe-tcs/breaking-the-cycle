@@ -108,7 +108,7 @@ where
             return;
         }
         let next_move = next_move.unwrap();
-        let delta = next_move.incompatible_neighbors.len() as isize - 1;
+        let delta = next_move.performance();
         self.evals_this_stage += 1;
         self.move_evals_total += 1;
 
@@ -151,6 +151,7 @@ where
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::bench::fvs_bench::test_utils::test_algo_with_pace_graphs;
     use crate::graph::adj_array::AdjArrayIn;
     use crate::graph::{GraphNew, Traversal};
     use crate::heuristics::local_search::topo::rand_topo_strategy::RandomTopoStrategy;
@@ -175,6 +176,21 @@ mod test {
 
         let reduced_graph = apply_fvs_to_graph(&graph, fvs);
         assert!(reduced_graph.is_acyclic());
+    }
+
+    #[test]
+    fn test_with_graphs() {
+        test_algo_with_pace_graphs("Simulated Annealing", |graph, _, _, _| {
+            let mut strategy_rng = Pcg64::seed_from_u64(0);
+            let mut sim_anneal_rng = Pcg64::seed_from_u64(1);
+            let topo_config = VecTopoConfig::new(&graph);
+            let strategy = RandomTopoStrategy::new(&mut strategy_rng, 7);
+            let local_search = TopoLocalSearch::new(topo_config, strategy);
+            let mut sim_anneal =
+                SimAnneal::new(local_search, 20, 20, 1.0, 0.9, &mut sim_anneal_rng);
+            sim_anneal.run_to_completion().unwrap()
+        })
+        .unwrap();
     }
 
     #[test]

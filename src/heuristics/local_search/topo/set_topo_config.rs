@@ -44,17 +44,15 @@ where
     }
 
     fn perform_move(&mut self, topo_move: TopoMove) {
-        debug_assert!(self.fvs().contains(&topo_move.node));
+        debug_assert!(self.fvs().contains(&topo_move.node()));
 
-        let node = topo_move.node;
-        let mut position = topo_move.position;
-        let mut incompatible_neighbors = topo_move.incompatible_neighbors;
+        let (node, mut position, _, mut conflicts) = topo_move.consume(self);
 
         // sort neighbors descending by index so that we can easily remove the neighbors
-        incompatible_neighbors.sort_unstable_by(|(_, i_1), (_, i_2)| i_2.cmp(i_1));
+        conflicts.sort_unstable_by(|(_, i_1), (_, i_2)| i_2.cmp(i_1));
         self.topo_order
-            .shift_remove_bulk(incompatible_neighbors.iter().map(|(u, _)| u));
-        for (neighbor, index_of_neighbor) in incompatible_neighbors {
+            .shift_remove_bulk(conflicts.iter().map(|(u, _)| u));
+        for (neighbor, index_of_neighbor) in conflicts {
             debug_assert!(!self.fvs.contains(&neighbor));
 
             self.fvs.insert(neighbor);
@@ -91,7 +89,7 @@ where
 }
 
 #[cfg(test)]
-mod tests_vec_topo_config {
+mod tests_set_topo_config {
     use super::super::macros::topo_config_base_tests;
     use super::*;
 
