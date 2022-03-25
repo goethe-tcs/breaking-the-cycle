@@ -57,7 +57,6 @@ mod test {
     use crate::graph::adj_array::AdjArrayIn;
     use crate::graph::Traversal;
     use crate::heuristics::local_search::sim_anneal::SimAnneal;
-    use crate::heuristics::local_search::topo::naive_topo_strategy::NaiveTopoStrategy;
     use crate::heuristics::utils::apply_fvs_to_graph;
     use rand::SeedableRng;
     use rand_pcg::Pcg64;

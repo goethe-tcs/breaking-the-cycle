@@ -1,4 +1,3 @@
-use super::macros::impl_helper_topo_new_with_fvs;
 use super::topo_config::{TopoConfig, TopoGraph, TopoMove};
 use crate::graph::Node;
 use crate::heuristics::utils::node_index_set::NodeIndexSet;

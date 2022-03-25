@@ -8,6 +8,7 @@ use dfvs::graph::io::FileFormat;
 use dfvs::heuristics::greedy::{greedy_dfvs, MaxDegreeSelector};
 use dfvs::heuristics::local_search::sim_anneal::SimAnneal;
 use dfvs::heuristics::local_search::topo::rand_topo_strategy::RandomTopoStrategy;
+use dfvs::heuristics::local_search::topo::topo_config::TopoConfig;
 use dfvs::heuristics::local_search::topo::topo_local_search::TopoLocalSearch;
 use dfvs::heuristics::local_search::topo::vec_topo_config::VecTopoConfig;
 use dfvs::log::build_pace_logger_for_verbosity;
@@ -123,7 +124,7 @@ fn main() -> std::io::Result<()> {
         greedy_dfvs::<MaxDegreeSelector<_>, _, _>(graph)
     });
 
-    bench.add_algo("random", |graph: AdjArrayIn, writer, _, _| {
+    bench.add_algo("sim_anneal", |graph: AdjArrayIn, writer, _, _| {
         let mut strategy_rng = Pcg64::seed_from_u64(0);
         let mut sim_anneal_rng = Pcg64::seed_from_u64(1);
         let topo_config = VecTopoConfig::new(&graph);
