@@ -269,6 +269,8 @@ where
             return Err(other_io_error("No graphs provided for benchmarking!"));
         }
 
+        let bench_start = Instant::now();
+
         //TODO: Reduce graphs before running design points
 
         // create design point vector
@@ -451,6 +453,10 @@ where
             Err(error) => return Err(other_io_error(error.to_string())),
         }
 
+        info!(
+            "Benchmark finished in {} seconds",
+            bench_start.elapsed().as_secs_f64()
+        );
         result
     }
 
