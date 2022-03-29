@@ -9,7 +9,7 @@ use dfvs::graph::matrix::AdjMatrixIn;
 use dfvs::graph::{GraphEdgeEditing, GraphOrder};
 use dfvs::log::build_pace_logger_for_verbosity;
 use dfvs::random_models::gnp::generate_gnp;
-use glob::glob;
+use dfvs::utils::expand_globs;
 use log::{info, LevelFilter};
 use rand::prelude::*;
 use rand_pcg::Pcg64;
@@ -72,14 +72,7 @@ fn main() -> std::io::Result<()> {
     let mut bench = FvsBench::<AdjMatrixIn>::new();
 
     info!("Reading graphs...");
-    let files = opt.input.iter().flat_map(|glob_pattern| {
-        glob(glob_pattern)
-            .unwrap_or_else(|_| panic!("Failed to read input {}", glob_pattern))
-            .collect::<Result<Vec<_>, _>>()
-            .unwrap_or_else(|_| panic!("Failed to read input {}", glob_pattern))
-    });
-
-    for file in files {
+    for file in expand_globs(opt.input.iter()) {
         bench.add_graph_file(FileFormat::Metis, file.clone())?;
     }
 

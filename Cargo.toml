@@ -80,3 +80,9 @@ name = "dfvs-preprocessing"
 path = "src/bin/dfvs-preprocessing.rs"
 required-features = ["cli", "pace-digest"]
 test = false
+
+[[bin]]
+name = "exp-bench-par-vs-seq"
+path = "src/bin/exp-bench-par-vs-seq.rs"
+required-features = ["cli"]
+test = false

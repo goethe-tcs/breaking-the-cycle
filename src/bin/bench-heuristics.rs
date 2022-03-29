@@ -9,7 +9,7 @@ use dfvs::heuristics::local_search::rand_topo_strategy::RandomTopoStrategy;
 use dfvs::heuristics::local_search::sim_anneal::sim_anneal;
 use dfvs::log::build_pace_logger_for_verbosity;
 use dfvs::random_models::gnp::generate_gnp;
-use glob::glob;
+use dfvs::utils::expand_globs;
 use log::{info, LevelFilter};
 use rand::prelude::*;
 use rand_pcg::Pcg64;
@@ -99,14 +99,7 @@ fn main() -> std::io::Result<()> {
         }
         Mode::Read { input } => {
             info!("Reading graphs...");
-            let files = input.iter().flat_map(|glob_pattern| {
-                glob(glob_pattern)
-                    .unwrap_or_else(|_| panic!("Failed to read input {}", glob_pattern))
-                    .collect::<Result<Vec<_>, _>>()
-                    .unwrap_or_else(|_| panic!("Failed to read input {}", glob_pattern))
-            });
-
-            for file in files {
+            for file in expand_globs(input.iter()) {
                 bench.add_graph_file(FileFormat::Metis, file.clone())?;
             }
         }
