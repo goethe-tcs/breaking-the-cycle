@@ -72,7 +72,7 @@ pub trait IterativeAlgorithm {
         while !self.is_completed() && !received_ctrl_c() {
             self.execute_step();
 
-            if predicate(self) {
+            if !predicate(self) {
                 break;
             }
         }
