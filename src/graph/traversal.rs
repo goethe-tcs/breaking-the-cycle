@@ -241,6 +241,11 @@ impl<'a, G: AdjacencyList, S: NodeSequencer<I>, I: SequencedItem> TraversalSearc
         self
     }
 
+    pub fn include_node(&mut self, u: Node) -> &mut Self {
+        self.visited.unset_bit(u as usize);
+        self
+    }
+
     /// Exclude multiple nodes from traversal. It is functionally equivalent to repeatedly
     /// calling [`TraversalSearch::exclude_node`].
     ///
@@ -258,6 +263,13 @@ impl<'a, G: AdjacencyList, S: NodeSequencer<I>, I: SequencedItem> TraversalSearc
     pub fn exclude_nodes(&mut self, us: impl IntoIterator<Item = Node>) -> &mut Self {
         for u in us {
             self.exclude_node(u);
+        }
+        self
+    }
+
+    pub fn include_nodes(&mut self, us: impl IntoIterator<Item = Node>) -> &mut Self {
+        for u in us {
+            self.include_node(u);
         }
         self
     }
@@ -456,7 +468,7 @@ pub trait Traversal: AdjacencyList + Sized {
     /// assert!( graph.is_node_on_cycle(5));
     /// ```
     fn is_node_on_cycle(&self, u: Node) -> bool {
-        self.dfs(u).is_node_reachable(u)
+        self.bfs(u).is_node_reachable(u)
     }
 
     /// Returns true iff there exists a directed path from u to u itself without using any nodes in
