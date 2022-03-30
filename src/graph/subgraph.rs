@@ -91,9 +91,34 @@ impl<G: GraphNew + GraphEdgeEditing + AdjacencyList + Sized> InducedSubgraph for
     }
 }
 
+pub trait SubGraph {
+    fn sub_graph<H>(&self, vertices: &BitSet) -> H
+    where
+        H: AdjacencyList + GraphEdgeEditing + GraphOrder + Clone + GraphNew;
+}
+
+impl<G: AdjacencyList + GraphEdgeEditing + GraphOrder + Clone + GraphNew> SubGraph for G {
+    /// creates a subgraph of a graph induced by some nodes (vertices)
+    fn sub_graph<H: AdjacencyList + GraphEdgeEditing + GraphOrder + Clone + GraphNew>(
+        &self,
+        vertices: &BitSet,
+    ) -> H {
+        let mut sub_graph: H = H::new(self.len());
+
+        vertices.iter().for_each(|node| {
+            self.out_neighbors(node as Node)
+                .filter(|&neighbor| vertices[neighbor as usize])
+                .for_each(|neighbor| sub_graph.add_edge(node as Node, neighbor))
+        });
+
+        sub_graph
+    }
+}
+
 #[cfg(test)]
 pub mod tests {
     use super::*;
+    use crate::graph::adj_array::AdjArrayIn;
     use crate::graph::adj_list_matrix::AdjListMatrixIn;
 
     #[test]
@@ -137,5 +162,23 @@ pub mod tests {
             assert_eq!(ind.in_degree(u), 3);
             assert_eq!(ind.out_degree(u), 3);
         }
+    }
+
+    #[test]
+    fn test_sub_graph() {
+        let mut g = AdjListMatrixIn::new(6);
+        for i in 0u32..5 {
+            for j in 0u32..5 {
+                g.add_edge(i, j);
+            }
+        }
+        g.add_edge(4, 5);
+        g.add_edge(5, 0);
+
+        let sub_graph: AdjArrayIn = g.sub_graph(&BitSet::from_slice(g.len(), &[0, 1, 2, 3, 4]));
+        for node in 0u32..4 {
+            assert_eq!(sub_graph.total_degree(node), 10);
+        }
+        assert_eq!(sub_graph.total_degree(5), 0);
     }
 }
