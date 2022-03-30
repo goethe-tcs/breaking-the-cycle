@@ -4,7 +4,9 @@ import platform
 import argparse
 import re
 import subprocess
+
 from glob import glob
+from typing import Union
 
 import numpy as np
 import pandas as pd
@@ -13,9 +15,12 @@ import matplotlib.ticker as plticker
 import seaborn as sns
 
 ARG_PARSER = argparse.ArgumentParser(description="Evaluation script for 'bench-par-vs-seq' experiment logs")
-ARG_PARSER.add_argument('--cutoff', '-c', type=int, default=5, help='All datapoints with an elapsed_sec_algo smaller thant this threshold are ignored.')
+ARG_PARSER.add_argument('--cutoff', '-c', type=int, default=5,
+                        help='All datapoints with an elapsed_sec_algo smaller thant this threshold are ignored.')
 ARG_PARSER.add_argument('--plot-width', type=float, default=5.5, help='Width of a single plot of the figure')
 ARG_PARSER.add_argument('--plot-height', type=float, default=4.3, help='Height of a single plot of the figure')
+ARG_PARSER.add_argument('--dpi', type=float, default=300, help='DPI of the saved PNG file')
+ARG_PARSER.add_argument('--split', action='store_true', help='Create one file per plot')
 ARG_PARSER.add_argument('logs', nargs='+', help='One or multiple paths to log directories of the experiment (relative to the project directory)')
 
 
@@ -33,9 +38,12 @@ def load_csv(path: str):
 
 def get_data(job_path: str, cutoff: int):
     # load all csv files
-    par_data_frames = []
-    for csv_file in glob(f'{job_path}/*.csv'):
-        par_data_frames.append(load_csv(csv_file))
+    csv_files = glob(f'{job_path}/*.csv')
+    if len(csv_files) == 0:
+        raise FileNotFoundError(f"The '{os.getcwd()}/{job_path}' directory does not contain csv files!")
+
+    # read files
+    par_data_frames = [load_csv(csv_file) for csv_file in csv_files]
     data = pd.concat(par_data_frames)
 
     # retrieve sequential (1 thread) rows & calculate mean of sequential elapsed sec
@@ -65,7 +73,10 @@ def sns_violinplot(x: str, y: str, ax: plt.Axes, data: pd.DataFrame, evenspacing
     ax.set_xticks(ticks, labels=labels)
 
 
-def plt_violinplot(y: str, x: str, ax: plt.Axes, data: pd.DataFrame, evenspacing=False):
+def plt_violinplot(y: str, x: str, data: pd.DataFrame, ax: Union[plt.Axes, None] = None, evenspacing=False):
+    if ax is None:
+        ax = plt.gca()
+
     data = data.groupby(x)[y].aggregate(list)
     labels = list(data.index)
 
@@ -83,7 +94,10 @@ def plt_violinplot(y: str, x: str, ax: plt.Axes, data: pd.DataFrame, evenspacing
     parts['cmedians'].set_linewidth(2)
 
 
-def all_designpoints_plot(ax: plt.Axes, df: pd.DataFrame):
+def all_designpoints_plot(df: pd.DataFrame, ax: Union[plt.Axes, None] = None):
+    if ax is None:
+        ax = plt.gca()
+
     color_count = df['thread_count'].nunique()
     palette = sns.color_palette('flare', color_count)
     sns.scatterplot(data=df, x='elapsed_sec_seq_mean', y='factor', hue='thread_count', palette=palette, ax=ax)
@@ -96,8 +110,11 @@ def all_designpoints_plot(ax: plt.Axes, df: pd.DataFrame):
     ax.yaxis.set_major_locator(plticker.MaxNLocator(min_n_ticks=10))
 
 
-def individual_slowdown_plot(ax: plt.Axes, df: pd.DataFrame):
-    plt_violinplot(y='factor', x='thread_count', ax=ax, data=df)
+def individual_slowdown_plot(df: pd.DataFrame, ax: Union[plt.Axes, None] = None):
+    if ax is None:
+        ax = plt.gca()
+
+    plt_violinplot(y='factor', x='thread_count', data=df, ax=ax)
 
     ax.set_title('relative Laufzeitsteigerung einzelner Designpunkte\n(gruppiert nach Thread Anzahl)')
     ax.set_ylabel('t_parallel / avg(t_sequentiell)')
@@ -107,7 +124,10 @@ def individual_slowdown_plot(ax: plt.Axes, df: pd.DataFrame):
     ax.xaxis.set_minor_locator(plticker.MultipleLocator(1))
 
 
-def overall_speedup_plot(ax: plt.Axes, job_path: str):
+def overall_speedup_plot(job_path: str, ax: Union[plt.Axes, None] = None):
+    if ax is None:
+        ax = plt.gca()
+
     # load job log file
     log_file_paths = glob(f'{job_path}/*.log')
     if len(log_file_paths) == 0:
@@ -140,9 +160,10 @@ def overall_speedup_plot(ax: plt.Axes, job_path: str):
     df.sort_index(inplace=True)
 
     # draw
-    plt_violinplot(y='factor', x='thread_count', ax=ax, data=df)
-    ax.set_title('relative Laufzeitverringerung eines ganzen Experiments\n(verglichen mit sequentieller Gesamtlaufzeit)')
-    ax.set_ylabel('t_parallel_gesamt / t_sequentiell_gesamt')
+    plt_violinplot(y='factor', x='thread_count', data=df, ax=ax)
+    ax.set_title(
+        'relative Laufzeitverringerung eines ganzen Experiments\n(verglichen mit sequentieller Gesamtlaufzeit)')
+    ax.set_ylabel('t_parallel_gesamt / avg(t_sequentiell_gesamt)')
     ax.set_xlabel('Thread Anzahl')
     ax.set_yscale('log')
 
@@ -155,11 +176,27 @@ def overall_speedup_plot(ax: plt.Axes, job_path: str):
     ax.xaxis.set_minor_locator(plticker.MultipleLocator(1))
 
 
-def main():
-    args = ARG_PARSER.parse_args()
-    script_path = os.path.dirname(os.path.realpath(__file__))
-    os.chdir(f'{script_path}/../..')
+def create_separate_figures(args: argparse.Namespace):
+    for job_path in args.logs:
+        df = get_data(job_path, args.cutoff)
+        plots = [
+            ('all_designpoints', lambda: all_designpoints_plot(df)),
+            ('individual_slowdown', lambda: individual_slowdown_plot(df)),
+            ('overall_speedup', lambda: overall_speedup_plot(job_path)),
+        ]
 
+        for (plot_name, plot_func) in plots:
+            fig = plt.figure(figsize=(args.plot_width, args.plot_height), dpi=300)
+            ax = plt.gca()
+            ax.grid(axis='y', alpha=0.4)
+
+            plot_func()
+            fig_file_path = f'{job_path}/{plot_name}_cutoff_{args.cutoff}.png'
+            fig.savefig(fig_file_path)
+            print(f"Saved figure to '{fig_file_path}'")
+
+
+def create_combined_figure(args: argparse.Namespace):
     data_sets = [(i, job_path, get_data(job_path, args.cutoff)) for (i, job_path) in enumerate(args.logs)]
 
     fig_size = (len(data_sets) * args.plot_width, 3 * args.plot_height)
@@ -173,15 +210,15 @@ def main():
         job_name = os.path.basename(os.path.normpath(job_path))
 
         # add subplot for column title
-        row = fig.add_subplot(grid[0, i:i+1])
+        row = fig.add_subplot(grid[0, i:i + 1])
         row.set_title(f'{job_name}\n\n\n', fontweight='semibold')
         # hide subplot itself
         row.set_frame_on(False)
         row.axis('off')
 
-        all_designpoints_plot(axs[0, i], df)
-        individual_slowdown_plot(axs[1, i], df)
-        overall_speedup_plot(axs[2, i], job_path)
+        all_designpoints_plot(df, axs[0, i])
+        individual_slowdown_plot(df, axs[1, i])
+        overall_speedup_plot(job_path, axs[2, i])
 
         for row in axs:
             for ax in row:
@@ -196,12 +233,23 @@ def main():
     print(f"Saved figure to '{fig_file_path}'")
 
     # open figure
-    if platform.system() == 'Darwin':       # macOS
+    if platform.system() == 'Darwin':  # macOS
         subprocess.call(('open', fig_file_path))
-    elif platform.system() == 'Windows':    # Windows
+    elif platform.system() == 'Windows':  # Windows
         os.startfile(fig_file_path)
-    else:                                   # linux variants
+    else:  # linux variants
         subprocess.call(('xdg-open', fig_file_path))
+
+
+def main():
+    args = ARG_PARSER.parse_args()
+    script_path = os.path.dirname(os.path.realpath(__file__))
+    os.chdir(f'{script_path}/../..')
+
+    if args.split:
+        create_separate_figures(args)
+    else:
+        create_combined_figure(args)
 
 
 main()

@@ -922,3 +922,4 @@ cobertura.xml
 flamegraph.svg
 perf.data
 bench_output
+logs
