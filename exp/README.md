@@ -9,9 +9,9 @@
 
 
 - Try to stick to these four files for your experiment directory:
-  - `exp/<experiment-name>/run.sh`, wich executes the experiment and can be executed from the projects root
+  - `exp/<experiment-name>/run.sh`, which executes the experiment and can be executed from the projects root
   directory.
-  - `exp/<experiment-name>/eval.py` (optional), which performs data post processing, like transforming output
+  - `exp/<experiment-name>/eval.py` (optional), which performs data post-processing, like transforming output
   data and plotting.
   - `exp/<experiment-name>/job.sh` (optional), with appropriate SLURM settings to run your experiment on the
   Goethe-HLR.
