@@ -5,21 +5,30 @@ use fxhash::{FxBuildHasher, FxHashSet};
 use std::fmt::Debug;
 
 pub trait TopoGraph:
-    GraphNew + GraphEdgeEditing + AdjacencyListIn + GraphOrder + Clone + Debug + 'static
+    GraphNew + GraphEdgeEditing + AdjacencyListIn + GraphOrder + AdjacencyTest + Clone + Debug + 'static
 {
 }
 
 impl<G> TopoGraph for G where
-    G: GraphNew + GraphEdgeEditing + AdjacencyListIn + GraphOrder + Clone + Debug + 'static
+    G: GraphNew
+        + GraphEdgeEditing
+        + AdjacencyListIn
+        + GraphOrder
+        + AdjacencyTest
+        + Clone
+        + Debug
+        + 'static
 {
 }
 
-/// Represents a topological sorting
+/// Represents a topological sorting for a graph without self loops.
 pub trait TopoConfig<'a, G>
 where
     G: TopoGraph,
     Self: Sized,
 {
+    /// Creates an empty instance for the passed in graph. Empty meaning that no nodes are placed in
+    /// the topological sorting and that every node is in the DFVS
     fn new(graph: &'a G) -> Self;
 
     /// **Assumes that `topo_order` is in topological order! Use [Self::set_state_from_fvs] if this
@@ -49,6 +58,8 @@ where
     /// Returns a slice that contains all nodes of the graph that are not in the configuration
     fn fvs(&self) -> &[Node];
 
+    /// Creates a new instance and calculates a topological sorting for all nodes of the graph,
+    /// which are not in the passed in DFVS.
     fn new_with_fvs<I>(graph: &'a G, fvs: I) -> Self
     where
         I: IntoIterator<Item = Node> + Clone,
@@ -59,8 +70,8 @@ where
     }
 
     /// Clears the current topological order, creates a subgraph of the [Self::graph()] using the
-    /// inverse of the fvs and creates a topological order for its nodes. Then updates its state
-    /// accordingly
+    /// inverse of the fvs and uses that graph to create a topological order. Then updates its state
+    /// accordingly.
     fn set_state_from_fvs<I>(&mut self, fvs: I)
     where
         I: IntoIterator<Item = Node> + Clone,
@@ -68,6 +79,8 @@ where
         let (subgraph, node_mapper) = self
             .graph()
             .vertex_induced(&BitSet::new_all_set_but(self.graph().len(), fvs.clone()));
+
+        debug_assert!(subgraph.is_acyclic());
         let topo_order = node_mapper.get_old_ids(subgraph.topo_search());
         self.set_state(topo_order, fvs.into_iter().collect());
     }
@@ -187,6 +200,7 @@ where
         }
     }
 
+    /// Returns whether any nodes are in the topological sorting
     fn is_empty(&self) -> bool {
         self.len() == 0
     }

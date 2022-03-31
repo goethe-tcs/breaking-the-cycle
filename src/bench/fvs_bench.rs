@@ -518,6 +518,8 @@ pub mod test_utils {
     use std::fmt::Display;
     use std::io::sink;
 
+    /// Runs the passed in algorithm on the passed in graph, returns an Error if the resulting
+    /// graph is not acyclic
     pub fn test_algo_with_graph<F>(
         label: impl Display,
         graph: impl AsRef<Path>,
@@ -539,6 +541,8 @@ pub mod test_utils {
             .run_with_writer(sink())
     }
 
+    /// Runs the passed in algorithm on a few small heuristic PACE graphs, returns an Error if
+    /// one of the resulting graphs is not acyclic
     pub fn test_algo_with_pace_graphs<F>(algo_name: impl Display, algo: F) -> std::io::Result<()>
     where
         F: Fn(AdjArrayIn, &mut DesignPointBuffer, Iteration, NumIterations) -> Vec<Node>
@@ -548,6 +552,7 @@ pub mod test_utils {
     {
         let mut bench = FvsBench::new();
         bench
+            // These graphs are run because they are relatively small after reductions (1k > m < 4k)
             .add_graph_file(FileFormat::Metis, "data/pace/heuristic_public/h_007.metis")?
             .add_graph_file(FileFormat::Metis, "data/pace/heuristic_public/h_009.metis")?
             .add_graph_file(FileFormat::Metis, "data/pace/heuristic_public/h_011.metis")?

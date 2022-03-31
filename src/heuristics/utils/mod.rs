@@ -1,3 +1,4 @@
+pub mod macros;
 pub mod node_index_set;
 pub mod set_vec;
 

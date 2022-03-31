@@ -80,7 +80,6 @@ where
             if self.is_dirty[node as usize] {
                 Some(self.recalc_node_performances(topo_config, node, use_i_minus))
             } else {
-                // Some(self.recalc_node_performances(topo_config, node, use_i_minus))
                 Some(self.get_cached_move(node, use_i_minus))
             }
         }
@@ -117,7 +116,7 @@ mod test {
     use crate::algorithm::TerminatingIterativeAlgorithm;
     use crate::bench::fvs_bench::test_utils::test_algo_with_pace_graphs;
     use crate::graph::adj_array::AdjArrayIn;
-    use crate::graph::{GraphOrder, Traversal};
+    use crate::graph::{GraphNew, GraphOrder, Traversal};
     use crate::heuristics::local_search::sim_anneal::SimAnneal;
     use crate::heuristics::utils::apply_fvs_to_graph;
     use rand::SeedableRng;
@@ -138,6 +137,21 @@ mod test {
         let reduced_graph = apply_fvs_to_graph(&graph, fvs.clone());
         assert!(reduced_graph.is_acyclic());
         assert_eq!(fvs.len(), 1);
+    }
+
+    #[test]
+    fn test_empty_fvs() {
+        let graph = AdjArrayIn::new(1);
+
+        let mut strategy_rng = Pcg64::seed_from_u64(0);
+        let mut topo_config = VecTopoConfig::new(&graph);
+        let mut strategy = CandidateTopoStrategy::new(&mut strategy_rng, &topo_config);
+
+        let mut next_move = strategy.next_move(&topo_config).unwrap();
+        strategy.on_before_perform_move(&topo_config, &mut next_move);
+        topo_config.perform_move(next_move);
+
+        assert!(strategy.next_move(&topo_config).is_none());
     }
 
     #[test]
@@ -186,9 +200,10 @@ mod test {
             (5, 0),
             (0, 6),
             (0, 7),
-            (9, 9),
+            (8, 9),
+            (9, 8),
         ]);
-        let topo_order = vec![1, 2, 9, 3, 4, 5, 6, 8, 7];
+        let topo_order = vec![1, 2, 3, 4, 5, 6, 8, 7];
         let fvs = vec![0];
         let mut topo_config = VecTopoConfig::new(&graph);
         topo_config.set_state(topo_order.clone(), fvs.clone());

@@ -13,6 +13,10 @@ macro_rules! priorities {
     };
 }
 
+macro_rules! topo_strat_base_tests {
+    ($factory_func:ident) => {};
+}
+
 macro_rules! topo_config_base_tests {
     ($factory_func:ident) => {
         use crate::graph::adj_array::AdjArrayIn;
@@ -141,16 +145,24 @@ macro_rules! topo_config_base_tests {
 
         #[test]
         fn test_perform_move() {
-            let graph = AdjArrayIn::from(&[(0, 1), (1, 0)]);
+            let graph = AdjArrayIn::from(&[(0, 1), (1, 0), (2, 1)]);
             let mut topo_config = $factory_func(&graph);
 
             let mut topo_move = topo_config.create_move(0, 0);
             topo_config.perform_move(topo_move);
+            assert_eq!(topo_config.as_slice(), &[0]);
 
             topo_move = topo_config.create_move(1, 0);
             topo_config.perform_move(topo_move);
+            assert_eq!(topo_config.as_slice(), &[1]);
 
-            assert_eq!(vec![1], topo_config.as_slice().to_vec());
+            topo_move = topo_config.create_move(2, 1);
+            topo_config.perform_move(topo_move);
+            assert_eq!(topo_config.as_slice(), &[2]);
+
+            topo_move = topo_config.create_move(1, 1);
+            topo_config.perform_move(topo_move);
+            assert_eq!(topo_config.as_slice(), &[2, 1]);
         }
     };
 }

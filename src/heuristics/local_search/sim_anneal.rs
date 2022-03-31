@@ -5,8 +5,6 @@ use crate::bench::io::design_point_buffer::DesignPointBuffer;
 use crate::graph::Node;
 use rand::Rng;
 
-/// **Assumes that the graph has no self-loops**
-///
 /// Implementation of the simulated annealing algorithm that is presented in the
 /// "Applying local search to the feedback vertex set problem" paper by Philippe Galinier et al.
 pub struct SimAnneal<'a, T, S, G, R> {

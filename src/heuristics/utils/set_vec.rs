@@ -1,6 +1,7 @@
 use crate::graph::{GraphOrder, Node};
 use core::slice;
 use fxhash::{FxBuildHasher, FxHashMap};
+use itertools::Itertools;
 use rand::seq::SliceRandom;
 use rand::Rng;
 use std::borrow::Borrow;
@@ -37,6 +38,7 @@ where
         }
     }
 
+    /// Checks if a node is in the set in O(1)
     pub fn contains<Q: ?Sized>(&self, value: &Q) -> bool
     where
         T: Borrow<Q>,
@@ -60,73 +62,90 @@ where
     /// Inserts the element at the specified index in O(n) on average. Elements with an index equal
     /// to or greater than the passed in `index` are shifted to the right.
     pub fn insert_at(&mut self, index: usize, value: T) {
-        debug_assert!(!self.contains(&value));
+        assert!(index <= self.len());
 
-        self.vec.insert(index, value.clone());
-        self.map.insert(value, index);
-        self.fix_successors(index + 1);
+        let dirty_index = if let Some(old_index) = self.get_index(&value) {
+            self.vec.remove(old_index);
+            *self.map.get_mut(&value).unwrap() = index;
+            self.vec.insert(index, value);
+            old_index.min(index + 1)
+        } else {
+            self.vec.insert(index, value.clone());
+            self.map.insert(value, index);
+            index + 1
+        };
+
+        self.fix_successors(dirty_index);
     }
 
     /// Removes the element in O(1). The removed element is replaced by the last element.
-    pub fn swap_remove<Q: ?Sized>(&mut self, value: &Q) -> T
+    pub fn swap_remove<Q: ?Sized>(&mut self, value: &Q) -> Option<T>
     where
         T: Borrow<Q>,
         Q: Hash + Eq,
     {
-        let i = *self
-            .map
-            .get(value)
-            .expect("Can't swap remove element: Its not in the collection!");
-        // remove element
-        self.map.remove(value);
-        let removed_value = self.vec.swap_remove(i);
+        if let Some(&i) = self.map.get(value) {
+            // remove element
+            self.map.remove(value);
+            let removed_value = self.vec.swap_remove(i);
 
-        // update index of swapped element in hashmap
-        if i < self.vec.len() {
-            let new_value_at_i = &self.vec[i];
-            self.map.insert(new_value_at_i.clone(), i);
+            // update index of swapped element in hashmap
+            if i < self.vec.len() {
+                let new_value_at_i = &self.vec[i];
+                self.map.insert(new_value_at_i.clone(), i);
+            }
+            Some(removed_value)
+        } else {
+            None
         }
-
-        removed_value
     }
 
     /// Removes the element in O(n) on average. The elements after the deleted one are shifted to
     /// the left.
-    pub fn shift_remove<Q: ?Sized>(&mut self, value: &Q) -> bool
+    pub fn shift_remove<Q: ?Sized>(&mut self, value: &Q) -> Option<T>
     where
         T: Borrow<Q>,
         Q: Hash + Eq,
     {
         if let Some(&i) = self.map.get(value) {
             self.map.remove(value);
-            self.vec.remove(i);
+            let removed_value = self.vec.remove(i);
             self.fix_successors(i);
-            true
+            Some(removed_value)
         } else {
-            false
+            None
         }
     }
 
+    /// Shift removes all of the passed in nodes and then performs cleanup logic afterwards. This is
+    /// faster than multiple calls to [HashSetVec::shift_remove]
     pub fn shift_remove_bulk<'a>(&mut self, values: impl Iterator<Item = &'a T>)
     where
         T: Eq + Hash + Clone + 'static,
     {
         let min_dirty_index = values
             .into_iter()
-            .filter_map(|value| {
-                if let Some(&i) = self.map.get(value) {
-                    self.map.remove(value);
-                    self.vec.remove(i);
-                    Some(i)
-                } else {
-                    None
-                }
+            .filter_map(|value| self.map.get(value).map(|&index| (value, index)))
+            .sorted_by_key(|&(_, index)| index)
+            .rev()
+            .map(|(value, index)| {
+                self.map.remove(value);
+                self.vec.remove(index);
+                index
             })
             .min();
 
         if let Some(min_dirty_index) = min_dirty_index {
             self.fix_successors(min_dirty_index);
         }
+    }
+
+    /// Removes and returns the element with the highest index of the set in O(1)
+    pub fn pop(&mut self) -> Option<T> {
+        self.vec.pop().map(|deleted_vale| {
+            self.map.remove(&deleted_vale);
+            deleted_vale
+        })
     }
 
     /// Returns the index of `element` in O(1)
@@ -265,69 +284,17 @@ where
     }
 }
 
+#[cfg(feature = "test-case")]
 #[cfg(test)]
-mod tests {
+mod test_cases {
+    use super::super::macros::set_tests;
     use super::*;
 
-    fn set_from(elements: Vec<usize>) -> HashSetVec<usize> {
-        let mut res = HashSetVec::with_capacity(elements.len());
+    fn factory(elements: Vec<Node>, size: usize) -> HashSetVec<Node> {
+        let mut res = HashSetVec::with_capacity(size);
         res.extend(elements);
         res
     }
 
-    fn assert_set_vec(actual: HashSetVec<usize>, expected: Vec<usize>) {
-        assert_eq!(actual.vec, expected);
-
-        for (i, element) in expected.into_iter().enumerate() {
-            assert_eq!(actual.map.get(&element).unwrap(), &i);
-        }
-    }
-
-    #[test]
-    fn test_push() {
-        let mut set = set_from(vec![0, 1]);
-        set.insert(2);
-
-        assert_set_vec(set, vec![0, 1, 2]);
-    }
-
-    #[test]
-    fn test_push_emtpy() {
-        let mut set = set_from(vec![]);
-        set.insert(2);
-
-        assert_set_vec(set, vec![2]);
-    }
-
-    #[test]
-    fn test_insert() {
-        let mut set = set_from(vec![1, 2, 4, 5]);
-        set.insert_at(2, 3);
-
-        assert_set_vec(set, vec![1, 2, 3, 4, 5]);
-    }
-
-    #[test]
-    fn test_insert_almost_at_end() {
-        let mut set = set_from(vec![1, 3]);
-        set.insert_at(1, 2);
-
-        assert_set_vec(set, vec![1, 2, 3]);
-    }
-
-    #[test]
-    fn test_insert_at_end() {
-        let mut set = set_from(vec![1, 2]);
-        set.insert_at(2, 3);
-
-        assert_set_vec(set, vec![1, 2, 3]);
-    }
-
-    #[test]
-    fn test_insert_empty() {
-        let mut set = set_from(vec![]);
-        set.insert_at(0, 5);
-
-        assert_set_vec(set, vec![5]);
-    }
+    set_tests!(HashSetVec<Node>, factory);
 }

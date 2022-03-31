@@ -61,8 +61,11 @@ where
         let topo_config = self
             .topo_config
             .take()
-            .expect("deny_move called recursively!");
-        let mut strategy = self.strategy.take().expect("deny_move called recursively!");
+            .expect("reject_move called recursively!");
+        let mut strategy = self
+            .strategy
+            .take()
+            .expect("reject_move called recursively!");
 
         strategy.on_move_rejected(&topo_config, &topo_move);
 

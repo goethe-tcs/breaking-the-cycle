@@ -17,6 +17,8 @@ where
     G: TopoGraph,
 {
     fn new(graph: &'a G) -> Self {
+        debug_assert!(!graph.has_self_loop());
+
         Self {
             topo_order: NodeIndexSet::new(graph.len()),
             fvs: HashSetVec::from_graph(graph),

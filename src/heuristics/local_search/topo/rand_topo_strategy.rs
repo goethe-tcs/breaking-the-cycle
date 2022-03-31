@@ -55,7 +55,7 @@ mod test {
     use crate::algorithm::TerminatingIterativeAlgorithm;
     use crate::bench::fvs_bench::test_utils::test_algo_with_pace_graphs;
     use crate::graph::adj_array::AdjArrayIn;
-    use crate::graph::Traversal;
+    use crate::graph::{GraphNew, Traversal};
     use crate::heuristics::local_search::sim_anneal::SimAnneal;
     use crate::heuristics::utils::apply_fvs_to_graph;
     use rand::SeedableRng;
@@ -92,5 +92,20 @@ mod test {
             sim_anneal.run_to_completion().unwrap()
         })
         .unwrap();
+    }
+
+    #[test]
+    fn test_empty_fvs() {
+        let graph = AdjArrayIn::new(1);
+
+        let mut strategy_rng = Pcg64::seed_from_u64(0);
+        let mut topo_config = VecTopoConfig::new(&graph);
+        let mut strategy = RandomTopoStrategy::new(&mut strategy_rng, 7);
+
+        let mut next_move = strategy.next_move(&topo_config).unwrap();
+        strategy.on_before_perform_move(&topo_config, &mut next_move);
+        topo_config.perform_move(next_move);
+
+        assert!(strategy.next_move(&topo_config).is_none());
     }
 }

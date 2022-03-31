@@ -16,6 +16,8 @@ where
     G: TopoGraph,
 {
     fn new(graph: &'a G) -> Self {
+        debug_assert!(!graph.has_self_loop());
+
         Self {
             topo_order: Vec::with_capacity(graph.len()),
             fvs: HashSetVec::from_graph(graph),
