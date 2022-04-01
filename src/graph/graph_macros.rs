@@ -188,11 +188,25 @@ macro_rules! test_helper_adjacency_test {
     ($t:ident) => {
         #[test]
         fn adjacency_test() {
-            let edges = vec![(0, 3), (1, 3), (2, 3), (3, 4), (3, 5)];
-            let graph = $t::from(&edges);
-            for (u, v) in edges {
-                assert!(graph.has_edge(u, v));
-                assert!(!graph.has_edge(v, u));
+            // has_edge
+            {
+                let edges = vec![(0, 3), (1, 3), (2, 3), (3, 4), (3, 5)];
+                let graph = $t::from(&edges);
+                for (u, v) in edges {
+                    assert!(graph.has_edge(u, v));
+                    assert!(!graph.has_edge(v, u));
+                }
+            }
+
+            // has_self_loop
+            {
+                let edges = vec![(0, 3), (1, 3), (2, 3), (3, 4), (3, 5)];
+                let graph = $t::from(&edges);
+                assert!(!graph.has_self_loop());
+
+                let edges = vec![(0, 3), (1, 3), (2, 3), (3, 4), (3, 5), (3, 3)];
+                let graph = $t::from(&edges);
+                assert!(graph.has_self_loop());
             }
         }
     };

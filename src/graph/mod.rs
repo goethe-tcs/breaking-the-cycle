@@ -151,6 +151,14 @@ where
 pub trait AdjacencyTest {
     /// Returns *true* exactly if the graph contains the directed edge (u, v)
     fn has_edge(&self, u: Node, v: Node) -> bool;
+
+    /// Returns *true* exactly if the graph contains at least one self loop
+    fn has_self_loop(&self) -> bool
+    where
+        Self: GraphOrder,
+    {
+        self.vertices().any(|u| self.has_edge(u, u))
+    }
 }
 
 /// Provides constructor for a forest of isolated nodes

@@ -511,6 +511,61 @@ where
 }
 
 #[cfg(test)]
+pub mod test_utils {
+    use super::*;
+    use crate::graph::adj_array::AdjArrayIn;
+    use crate::graph::io::FileFormat;
+    use crate::graph::Node;
+    use std::fmt::Display;
+    use std::io::sink;
+
+    /// Runs the passed in algorithm on the passed in graph, returns an Error if the resulting
+    /// graph is not acyclic
+    pub fn test_algo_with_graph<F>(
+        label: impl Display,
+        graph: impl AsRef<Path>,
+        algo: F,
+    ) -> std::io::Result<()>
+    where
+        F: Fn(AdjArrayIn, &mut DesignPointBuffer, Iteration, NumIterations) -> Vec<Node>
+            + Send
+            + Sync
+            + 'static,
+    {
+        let mut bench = FvsBench::new();
+        bench
+            .add_graph_file(FileFormat::Metis, graph)
+            .unwrap()
+            .add_algo(label, algo)
+            .num_threads(1)
+            .strict(true)
+            .run_with_writer(sink())
+    }
+
+    /// Runs the passed in algorithm on a few small heuristic PACE graphs, returns an Error if
+    /// one of the resulting graphs is not acyclic
+    pub fn test_algo_with_pace_graphs<F>(algo_name: impl Display, algo: F) -> std::io::Result<()>
+    where
+        F: Fn(AdjArrayIn, &mut DesignPointBuffer, Iteration, NumIterations) -> Vec<Node>
+            + Send
+            + Sync
+            + 'static,
+    {
+        let mut bench = FvsBench::new();
+        bench
+            // These graphs are run because they are relatively small after reductions (1k > m < 4k)
+            .add_graph_file(FileFormat::Metis, "data/pace/heuristic_public/h_007.metis")?
+            .add_graph_file(FileFormat::Metis, "data/pace/heuristic_public/h_009.metis")?
+            .add_graph_file(FileFormat::Metis, "data/pace/heuristic_public/h_011.metis")?
+            .add_graph_file(FileFormat::Metis, "data/pace/heuristic_public/h_013.metis")?
+            .add_algo(algo_name, algo)
+            .num_threads(1)
+            .strict(true)
+            .run_with_writer(sink())
+    }
+}
+
+#[cfg(test)]
 mod tests_bench {
     use super::*;
     use crate::graph::adj_array::AdjArrayIn;

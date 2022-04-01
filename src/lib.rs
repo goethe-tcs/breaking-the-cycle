@@ -6,6 +6,8 @@
 #![feature(generic_const_exprs)]
 #![feature(custom_test_frameworks)]
 
+extern crate core;
+
 pub mod algorithm;
 pub mod bench;
 pub mod bitset;
