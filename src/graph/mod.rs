@@ -8,6 +8,7 @@ pub mod io;
 pub mod matrix;
 pub mod network_flow;
 pub mod node_mapper;
+pub mod partition;
 pub mod subgraph;
 pub mod traversal;
 pub mod unique_node_stack;
@@ -20,12 +21,14 @@ pub use adj_list_matrix::{AdjListMatrix, AdjListMatrixIn};
 pub use connectivity::Connectivity;
 pub use io::*;
 pub use node_mapper::{Compose, Getter, Inverse, NodeMapper, RankingForwardMapper, Setter};
+pub use partition::*;
 pub use subgraph::*;
 pub use traversal::*;
 pub use unique_node_stack::UniqueNodeStack;
 
 #[cfg(feature = "pace-digest")]
 pub mod digest;
+
 #[cfg(feature = "pace-digest")]
 pub use self::digest::GraphDigest;
 
