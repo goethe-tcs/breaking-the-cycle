@@ -1,7 +1,7 @@
 use super::topo::topo_config::{TopoConfig, TopoGraph, TopoMoveStrategy};
 use super::topo::topo_local_search::TopoLocalSearch;
 use crate::algorithm::{IterativeAlgorithm, TerminatingIterativeAlgorithm};
-use crate::bench::io::design_point_buffer::DesignPointBuffer;
+use crate::bench::io::keyed_buffer::KeyedBuffer;
 use crate::graph::Node;
 use rand::Rng;
 
@@ -73,7 +73,7 @@ where
         }
     }
 
-    pub fn write_metrics(&self, writer: &mut DesignPointBuffer) {
+    pub fn write_metrics(&self, writer: &mut KeyedBuffer) {
         writer.write("move_evals_total", self.move_evals_total);
         writer.write("moves_total", self.moves_total);
     }
