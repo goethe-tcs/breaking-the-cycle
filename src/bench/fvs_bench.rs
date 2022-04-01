@@ -527,7 +527,7 @@ pub mod test_utils {
         algo: F,
     ) -> std::io::Result<()>
     where
-        F: Fn(AdjArrayIn, &mut DesignPointBuffer, Iteration, NumIterations) -> Vec<Node>
+        F: Fn(AdjArrayIn, &mut KeyedBuffer, Iteration, NumIterations) -> Vec<Node>
             + Send
             + Sync
             + 'static,
@@ -546,7 +546,7 @@ pub mod test_utils {
     /// one of the resulting graphs is not acyclic
     pub fn test_algo_with_pace_graphs<F>(algo_name: impl Display, algo: F) -> std::io::Result<()>
     where
-        F: Fn(AdjArrayIn, &mut DesignPointBuffer, Iteration, NumIterations) -> Vec<Node>
+        F: Fn(AdjArrayIn, &mut KeyedBuffer, Iteration, NumIterations) -> Vec<Node>
             + Send
             + Sync
             + 'static,

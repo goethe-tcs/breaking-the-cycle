@@ -241,7 +241,7 @@ where
             }
         }
 
-        self.not_included.remove(&added_node);
+        self.not_included.swap_remove(&added_node);
     }
 
     fn remove_node(&mut self, removed_node: Node) {

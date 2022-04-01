@@ -1,11 +1,15 @@
 extern crate core;
 
+use dfvs::algorithm::TerminatingIterativeAlgorithm;
 use dfvs::bench::fvs_bench::{FvsBench, InnerIterations, Iterations};
 use dfvs::bench::io::logs_dir;
 use dfvs::graph::adj_array::AdjArrayIn;
 use dfvs::graph::io::FileFormat;
-use dfvs::heuristics::local_search::rand_topo_strategy::RandomTopoStrategy;
-use dfvs::heuristics::local_search::sim_anneal::sim_anneal;
+use dfvs::heuristics::local_search::sim_anneal::SimAnneal;
+use dfvs::heuristics::local_search::topo::rand_topo_strategy::RandomTopoStrategy;
+use dfvs::heuristics::local_search::topo::topo_config::TopoConfig;
+use dfvs::heuristics::local_search::topo::topo_local_search::TopoLocalSearch;
+use dfvs::heuristics::local_search::topo::vec_topo_config::VecTopoConfig;
 use dfvs::log::build_pace_logger_for_verbosity;
 use dfvs::utils::expand_globs;
 use log::{info, LevelFilter};
@@ -63,19 +67,19 @@ fn main() -> std::io::Result<()> {
     }
 
     let stage_evals = opt.stage_evals;
-    bench.add_algo("sim_anneal", move |graph: AdjArrayIn, _, _, _| {
+    bench.add_algo("sim_anneal", move |graph: AdjArrayIn, writer, _, _| {
         let mut strategy_rng = Pcg64::seed_from_u64(0);
         let mut sim_anneal_rng = Pcg64::seed_from_u64(1);
-        let mut move_strategy = RandomTopoStrategy::new(&mut strategy_rng, 7);
-        sim_anneal(
-            &graph,
-            &mut move_strategy,
-            stage_evals,
-            20,
-            1.0,
-            0.9,
-            &mut sim_anneal_rng,
-        )
+        let local_search = TopoLocalSearch::new(
+            VecTopoConfig::new(&graph),
+            RandomTopoStrategy::new(&mut strategy_rng, 7),
+        );
+        let mut sim_anneal =
+            SimAnneal::new(local_search, stage_evals, 20, 1.0, 0.9, &mut sim_anneal_rng);
+        let fvs = sim_anneal.run_to_completion().unwrap();
+        sim_anneal.write_metrics(writer);
+
+        fvs
     });
 
     bench
