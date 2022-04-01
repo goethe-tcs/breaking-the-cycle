@@ -43,6 +43,30 @@ pub trait Connectivity: AdjacencyList + Traversal + Sized {
         sc.set_include_singletons(false);
         sc.collect_vec()
     }
+
+    /// Returns a partition of nodes into non-trivial SCCs (analogously to
+    /// [`Connectivity::strongly_connected_components_no_singletons`])
+    ///
+    /// # Example
+    /// ```
+    /// use dfvs::graph::*;
+    /// // {0,1} and {4,5} are scc pairs, 2 is a loop, 3 is a singleton
+    /// let graph = AdjListMatrix::from(&[(0, 1), (1, 0), (2, 2), (4, 5), (5, 4),]);
+    /// let partition = graph.partition_into_strongly_connected_components();
+    /// assert!(partition.class_of_node(3).is_none()); // 3 is a trivial SCC
+    /// assert!(partition.class_of_edge(0, 1).is_some());
+    /// assert!(partition.class_of_edge(4, 5).is_some());
+    /// assert_ne!(partition.class_of_edge(0, 1), partition.class_of_edge(4, 5));
+    /// ```
+    fn partition_into_strongly_connected_components(&self) -> Partition {
+        let mut partition = Partition::new(self.number_of_nodes());
+        let mut sc = StronglyConnected::new(self);
+        sc.set_include_singletons(false);
+        for scc in sc {
+            partition.add_class(scc.into_iter());
+        }
+        partition
+    }
 }
 
 impl<T: AdjacencyList + Sized> Connectivity for T {}
