@@ -1,5 +1,6 @@
 extern crate core;
 
+use dfvs::bench::io::fvs_writer::{FvsFileWriter, FvsWriter};
 use dfvs::bitset::BitSet;
 use dfvs::graph::adj_array::AdjArrayIn;
 use dfvs::graph::io::{DefaultWriter, FileFormat, GraphRead};
@@ -13,6 +14,7 @@ use rayon::prelude::*;
 use std::fs::create_dir_all;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
+use std::time::Instant;
 use structopt::StructOpt;
 
 #[derive(Debug, StructOpt)]
@@ -39,6 +41,10 @@ struct Opt {
     /// graph file. Strongly connected components with only one node and no self loop are omitted.
     #[structopt(long)]
     export_sccs: bool,
+
+    /// Create a file containing the DFVS of the reduction rules.
+    #[structopt(long)]
+    export_dfvs: bool,
 
     /// Set the minimal length of the hash (in characters) that is included in each strongly
     /// connected components file name. The length of the hash used is extended adaptively if file
@@ -74,6 +80,7 @@ fn main() -> std::io::Result<()> {
         .collect_vec(); //collect to avoid infinite iterator
 
     info!("Reducing {} graphs...", graphs.len());
+    let start = Instant::now();
 
     if let Some(num_threads) = opt.num_threads {
         rayon::ThreadPoolBuilder::new()
@@ -84,7 +91,10 @@ fn main() -> std::io::Result<()> {
 
     graphs
         .par_iter()
-        .try_for_each(|graph_path| process_file(&opt, graph_path))
+        .try_for_each(|graph_path| process_file(&opt, graph_path))?;
+
+    info!("Finished in {} seconds.", start.elapsed().as_secs_f64());
+    Ok(())
 }
 
 fn process_file(opt: &Opt, graph_path: &Path) -> std::io::Result<()> {
@@ -116,6 +126,11 @@ fn process_file(opt: &Opt, graph_path: &Path) -> std::io::Result<()> {
 
     file_extension.insert(0, '.'); // 'metis' -> '.metis'
     let file_name_stripped = file_name.strip_suffix(&file_extension).unwrap();
+
+    if opt.export_dfvs {
+        let mut fvs_writer = FvsFileWriter::new(output_dir.clone());
+        fvs_writer.write(file_name_stripped, reduct_state.fvs())?;
+    }
 
     let kernel_name = format!(
         "{}{}{}",
