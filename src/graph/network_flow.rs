@@ -259,8 +259,8 @@ impl EdmondsKarp {
     }
 
     /// Finds the number of edge discoint paths from s to t, but stops counting at a given k.
-    pub fn count_num_disjoint_upto(&mut self, k: usize) -> usize {
-        self.take(k).count()
+    pub fn count_num_disjoint_upto(&mut self, k: Node) -> Node {
+        self.take(k as usize).count() as Node
     }
 
     /// Outputs all edge disjoint paths from s to t. The paths are vertex disjoint in the original graph
@@ -426,7 +426,7 @@ mod tests {
             return b;
         }
         // for node 3
-        let patels_after_edge_added: [((Node, Node), u32); 13] = [
+        let petals_after_edge_added: [((Node, Node), u32); 13] = [
             ((0, 3), 0),
             ((3, 2), 0),
             ((2, 1), 0),
@@ -442,12 +442,12 @@ mod tests {
             ((3, 7), 3),
         ];
         let mut g = AdjListMatrix::new(8);
-        for edge in patels_after_edge_added {
+        for edge in petals_after_edge_added {
             g.add_edge(edge.0 .0, edge.0 .1);
             for k in 0..3 {
                 let mut ec = EdmondsKarp::new(ResidualBitMatrix::petals(&g, 3));
-                let guess = ec.count_num_disjoint_upto(k) as Node;
-                let actual = min(k as Node, edge.1);
+                let guess = ec.count_num_disjoint_upto(k);
+                let actual = min(k, edge.1);
                 assert_eq!(guess, actual);
             }
         }
