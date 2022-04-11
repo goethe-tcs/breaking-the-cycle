@@ -25,18 +25,18 @@ fn main() -> std::io::Result<()> {
         // apply reduction rules
         let mut state = PreprocessorReduction::from(graph);
         state.apply_rules_exhaustively(false);
-
         // remove all disconnected vertices
         let out_graph = state.graph().remove_disconnected_verts().0;
-
         // report performance
         println!(
-            "{:<40} | in n={:>7} m={:>8} | out n={:>7} m={:>8} | time: {:>5}ms",
+            "{:<38} | in n={:>7} m={:>8} | out n={:>7} m={:>8} | fvs: {:>6} | scc: {:>4} | time: {:>5}ms",
             filename.display(),
             n,
             m,
             out_graph.number_of_nodes(),
             out_graph.number_of_edges(),
+            state.fvs().len(),
+            out_graph.strongly_connected_components_no_singletons().len(),
             start.elapsed().as_millis()
         );
     }
