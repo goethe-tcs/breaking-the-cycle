@@ -15,6 +15,8 @@ pub enum Rules {
     Rule6(Node),
     DiClique,
     CompleteNode,
+    PIE,
+    DOME,
     STOP,
     RestartRules,
 }
@@ -124,6 +126,8 @@ where
                         }
                         Rules::DiClique => self.pre_processor.apply_di_cliques_reduction(),
                         Rules::CompleteNode => self.pre_processor.apply_complete_node(),
+                        Rules::PIE => self.pre_processor.apply_pie_reduction(),
+                        Rules::DOME => self.pre_processor.apply_dome_reduction(),
                         Rules::STOP => {
                             if !applied_rule {
                                 self.update_rule_list(index + 1);
@@ -285,6 +289,14 @@ impl<G: GraphNew + GraphEdgeEditing + AdjacencyList + AdjacencyTest + AdjacencyL
     pub fn apply_complete_node(&mut self) -> bool {
         apply_complete_node(&mut self.graph, &mut self.in_fvs)
     }
+
+    pub fn apply_pie_reduction(&mut self) -> bool {
+        apply_pie_reduction(&mut self.graph)
+    }
+
+    pub fn apply_dome_reduction(&mut self) -> bool {
+        apply_dome_reduction(&mut self.graph)
+    }
 }
 
 /// applies rule 1-4 + 5 exhaustively
@@ -303,10 +315,13 @@ pub fn apply_rules_exhaustively<
         let rule_3 = apply_rule_3(graph);
         let rule_4 = apply_rule_4(graph, fvs);
         let rule_di_cliques = apply_di_cliques_reduction(graph, fvs);
-        if !(rule_3 || rule_4 || rule_di_cliques) {
+        let pie = apply_pie_reduction(graph);
+        let dome = apply_dome_reduction(graph);
+        if !(rule_3 || rule_4 || rule_di_cliques || pie || dome) {
             break;
         }
     }
+
     if with_expensive_rules {
         apply_rule_5(graph);
     }
@@ -613,8 +628,9 @@ pub fn apply_di_cliques_reduction<
             for node in intersection {
                 fvs.push(node);
                 graph.remove_edges_at_node(node);
-                applied = true;
             }
+            graph.remove_edges_at_node(u);
+            applied = true;
         }
     }
     applied
@@ -650,6 +666,88 @@ pub fn apply_complete_node<
             return outer_applied;
         }
     }
+}
+
+/// PIE reduction rule
+///
+/// Looks for directed edges that are not strongly connected after removing undirected edges
+pub fn apply_pie_reduction<G: GraphEdgeEditing + AdjacencyList + AdjacencyListIn>(
+    graph: &mut G,
+) -> bool {
+    let mut applied = false;
+    let mut graph_minus_pie = AdjArrayIn::new(graph.len());
+    // get directed out_neighbors for every node and create a graph with only directed edges
+    for node in graph.vertices_range() {
+        let set_in_neighbors = FxHashSet::from_iter(graph.in_neighbors(node));
+        let directed_out_neighbors = graph
+            .out_neighbors(node)
+            .filter(|v| !set_in_neighbors.contains(v));
+        for out_neighbor in directed_out_neighbors {
+            graph_minus_pie.add_edge(node, out_neighbor);
+        }
+    }
+    let graph_sccs = graph_minus_pie.partition_into_strongly_connected_components();
+    if graph_sccs.number_of_classes() == 1 && graph_sccs.number_of_unassigned() == 0 {
+        return applied;
+    }
+    // check for every edge of our graph without undirected edges if the nodes have
+    // stayed in the same scc, if not we can delete the directed edge
+    for edge in graph_minus_pie.edges_iter() {
+        if graph_sccs.class_of_node(edge.0) != graph_sccs.class_of_node(edge.1)
+            || graph_sccs.class_of_node(edge.0) == None
+            || graph_sccs.class_of_node(edge.1) == None
+        {
+            graph.remove_edge(edge.0, edge.1);
+            applied = true;
+        }
+    }
+    applied
+}
+
+/// DOME reduction rule
+///
+/// Looks for directed edges that get dominated by other edges (un/directed edges)
+pub fn apply_dome_reduction<G: GraphNew + GraphEdgeEditing + AdjacencyList + AdjacencyListIn>(
+    graph: &mut G,
+) -> bool {
+    let mut applied = false;
+    for u in graph.vertices_range() {
+        if graph.out_degree(u) == 0 {
+            continue;
+        }
+        let set_in = FxHashSet::from_iter(graph.in_neighbors(u));
+        let set_out = FxHashSet::from_iter(graph.out_neighbors(u));
+
+        let directed_out_neighbors = set_out.difference(&set_in).collect_vec();
+
+        if directed_out_neighbors.is_empty() {
+            continue;
+        }
+
+        let directed_in_neighbors_u = {
+            let set = FxHashSet::from_iter(graph.out_neighbors(u));
+            graph
+                .in_neighbors(u)
+                .filter(|v| !set.contains(v))
+                .collect::<FxHashSet<_>>()
+        };
+        let all_out_neighbors_u = graph.out_neighbors(u).collect::<FxHashSet<_>>();
+
+        for neighbor in directed_out_neighbors {
+            let all_in_neighbors_neighbor = graph.in_neighbors(*neighbor).collect::<FxHashSet<_>>();
+            let directed_out_neighbors_neighbor = graph
+                .out_neighbors(*neighbor)
+                .filter(|v| !all_in_neighbors_neighbor.contains(v))
+                .collect::<FxHashSet<_>>();
+            if directed_in_neighbors_u.is_subset(&all_in_neighbors_neighbor)
+                || directed_out_neighbors_neighbor.is_subset(&all_out_neighbors_u)
+            {
+                applied = true;
+                graph.remove_edge(u, *neighbor);
+            }
+        }
+    }
+    applied
 }
 
 #[cfg(test)]
@@ -997,5 +1095,78 @@ mod test {
 
         pre_processor.graph.remove_edge(0, 0);
         assert!(pre_processor.apply_complete_node());
+    }
+
+    #[test]
+    fn pie_reduction() {
+        let graph = AdjArrayIn::from(&[
+            (0, 1),
+            (0, 3),
+            (0, 5),
+            (1, 2),
+            (1, 3),
+            (1, 4),
+            (2, 0),
+            (2, 4),
+            (2, 5),
+            (3, 0),
+            (3, 4),
+            (4, 1),
+            (4, 5),
+            (4, 2),
+            (5, 3),
+            (5, 0),
+        ]);
+
+        let mut test_pre_process = PreprocessorReduction::from(graph);
+
+        assert_eq!(test_pre_process.graph.edges_vec().len(), 16);
+        test_pre_process.apply_pie_reduction();
+        assert_eq!(test_pre_process.graph.edges_vec().len(), 14);
+    }
+
+    #[test]
+    fn pie_reduction_nones() {
+        let graph = AdjArrayIn::from(&[
+            (0, 1),
+            (0, 2),
+            (0, 3),
+            (1, 0),
+            (1, 2),
+            (2, 1),
+            (2, 3),
+            (3, 0),
+        ]);
+
+        let mut test_pre_process = PreprocessorReduction::from(graph);
+
+        assert_eq!(test_pre_process.graph.edges_vec().len(), 8);
+        test_pre_process.apply_pie_reduction();
+        assert_eq!(test_pre_process.graph.edges_vec().len(), 6);
+    }
+
+    #[test]
+    fn dome_reduction() {
+        let graph = AdjArrayIn::from(&[
+            (0, 1),
+            (0, 2),
+            (1, 0),
+            (1, 2),
+            (2, 1),
+            (2, 3),
+            (2, 4),
+            (3, 0),
+            (3, 5),
+            (4, 3),
+            (4, 5),
+            (5, 0),
+            (5, 4),
+        ]);
+
+        let mut test_pre_process = PreprocessorReduction::from(graph);
+
+        assert_eq!(test_pre_process.graph.edges_vec().len(), 13);
+        test_pre_process.apply_dome_reduction();
+        assert_eq!(test_pre_process.graph.edges_vec().len(), 9);
     }
 }
