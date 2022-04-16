@@ -775,7 +775,6 @@ mod test {
     use super::*;
     use crate::graph::adj_array::AdjArrayIn;
     use crate::graph::io::MetisRead;
-    use crate::pre_processor_reduction::Rules::Rule5;
     use glob::glob;
     use std::fs::File;
     use std::io::BufReader;
