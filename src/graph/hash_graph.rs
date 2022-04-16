@@ -2,6 +2,7 @@ use super::graph_macros::*;
 use super::io::DotWrite;
 use super::*;
 use fxhash::{FxHashMap, FxHashSet};
+use itertools::Itertools;
 use std::fmt::Debug;
 use std::{fmt, str};
 
@@ -19,12 +20,15 @@ pub struct HashGraphIn {
 
 graph_macros::impl_helper_graph_debug!(HashGraph);
 graph_macros::impl_helper_graph_from_edges!(HashGraph);
+graph_macros::impl_helper_undir_adjacency_test!(HashGraph);
 
 graph_macros::impl_helper_graph_debug!(HashGraphIn);
 graph_macros::impl_helper_graph_from_edges!(HashGraphIn);
 graph_macros::impl_helper_adjacency_list!(HashGraphIn, adj_out);
 graph_macros::impl_helper_adjacency_test!(HashGraphIn, adj_out);
 graph_macros::impl_helper_graph_order!(HashGraphIn, adj_out);
+graph_macros::impl_helper_undir_adjacency_test!(HashGraphIn);
+graph_macros::impl_helper_adjacency_list_undir!(HashGraphIn);
 
 impl GraphVertexEditing for HashGraph {
     fn remove_vertex(&mut self, u: Node) {
@@ -162,6 +166,31 @@ impl GraphEdgeEditing for HashGraph {
         std::mem::swap(&mut edges, self.adj.get_mut(&u).unwrap());
         self.m -= edges.len();
     }
+
+    fn contract_node(&mut self, u: Node) -> Vec<Node> {
+        self.try_remove_edge(u, u);
+
+        let in_neighbors = self
+            .vertices()
+            .filter(|&v| self.adj.get(&v).unwrap().contains(&u))
+            .collect_vec();
+
+        let out_neighbors = std::mem::take(self.adj.get_mut(&u).unwrap());
+        self.m -= in_neighbors.len() + out_neighbors.len();
+
+        let mut loops = Vec::new();
+        for v in in_neighbors {
+            self.adj.get_mut(&v).unwrap().remove(&u);
+            for &w in out_neighbors.iter() {
+                self.try_add_edge(v, w);
+                if v == w {
+                    loops.push(v);
+                }
+            }
+        }
+
+        loops
+    }
 }
 
 impl GraphEdgeEditing for HashGraphIn {
@@ -208,6 +237,32 @@ impl GraphEdgeEditing for HashGraphIn {
             self.adj_in.get_mut(&v).unwrap().remove(&u);
         }
     }
+
+    fn contract_node(&mut self, u: Node) -> Vec<Node> {
+        self.try_remove_edge(u, u);
+
+        let in_neighbors = std::mem::take(self.adj_in.get_mut(&u).unwrap());
+        let out_neighbors = std::mem::take(self.adj_out.adj.get_mut(&u).unwrap());
+        self.adj_out.m -= in_neighbors.len() + out_neighbors.len();
+
+        for &v in out_neighbors.iter() {
+            self.adj_in.get_mut(&v).unwrap().remove(&u);
+        }
+
+        let mut loops = Vec::new();
+        for v in in_neighbors {
+            self.adj_out.adj.get_mut(&v).unwrap().remove(&u);
+
+            for &w in &out_neighbors {
+                self.try_add_edge(v, w);
+                if v == w {
+                    loops.push(v);
+                }
+            }
+        }
+
+        loops
+    }
 }
 
 impl GraphNew for HashGraph {
@@ -223,9 +278,15 @@ impl GraphNew for HashGraph {
 
 impl GraphNew for HashGraphIn {
     fn new(n: usize) -> Self {
+        let mut adj_in: FxHashMap<Node, FxHashSet<Node>> =
+            FxHashMap::with_capacity_and_hasher(n, Default::default());
+        for v in 0..n {
+            adj_in.insert(v as Node, FxHashSet::default());
+        }
+
         Self {
             adj_out: HashGraph::new(n),
-            adj_in: FxHashMap::with_capacity_and_hasher(n, Default::default()),
+            adj_in,
         }
     }
 }

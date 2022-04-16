@@ -2,12 +2,13 @@ use super::graph_macros::*;
 use super::io::DotWrite;
 use super::*;
 use crate::bitset::BitSet;
+use itertools::Itertools;
 use std::fmt::Debug;
 use std::{fmt, str};
 
 /// A data structure for a directed graph supporting self-loops,
 /// but no multi-edges. Supports constant time edge-existence queries
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct AdjMatrix {
     n: usize,
     m: usize,
@@ -15,7 +16,7 @@ pub struct AdjMatrix {
 }
 
 /// Same as AdjMatrix, but stores a matrix of all in-edges as well
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct AdjMatrixIn {
     adj: AdjMatrix,
     in_matrix: Vec<BitSet>,
@@ -23,12 +24,15 @@ pub struct AdjMatrixIn {
 
 graph_macros::impl_helper_graph_debug!(AdjMatrix);
 graph_macros::impl_helper_graph_from_edges!(AdjMatrix);
+graph_macros::impl_helper_undir_adjacency_test!(AdjMatrix);
 
 graph_macros::impl_helper_graph_debug!(AdjMatrixIn);
 graph_macros::impl_helper_graph_from_edges!(AdjMatrixIn);
 graph_macros::impl_helper_adjacency_list!(AdjMatrixIn, adj);
 graph_macros::impl_helper_adjacency_test!(AdjMatrixIn, adj);
 graph_macros::impl_helper_graph_order!(AdjMatrixIn, adj);
+graph_macros::impl_helper_undir_adjacency_test!(AdjMatrixIn);
+graph_macros::impl_helper_adjacency_list_undir!(AdjMatrixIn);
 
 impl GraphOrder for AdjMatrix {
     type VertexIter<'a> = impl Iterator<Item = Node> + 'a;
@@ -108,6 +112,39 @@ impl GraphEdgeEditing for AdjMatrix {
         self.m -= self.out_matrix[u as usize].cardinality();
         self.out_matrix[u as usize].unset_all();
     }
+
+    fn contract_node(&mut self, u: Node) -> Vec<Node> {
+        self.try_remove_edge(u, u);
+
+        if self.out_degree(u) == 0 {
+            self.remove_edges_into_node(u);
+            return vec![];
+        }
+
+        self.m -= self.out_matrix[u as usize].cardinality();
+        let old_out_neighbors = {
+            let mut empty_row = BitSet::new(self.n);
+            std::mem::swap(&mut self.out_matrix[u as usize], &mut empty_row);
+            empty_row
+        };
+
+        let mut loops = Vec::new();
+        for v in self.vertices_range() {
+            if self.out_matrix[v as usize].unset_bit(u as usize) {
+                self.m -= 1;
+
+                for w in old_out_neighbors.iter() {
+                    self.try_add_edge(v, w as Node);
+                    if v == w as Node {
+                        loops.push(v);
+                    }
+                }
+            }
+        }
+
+        debug_assert_eq!(self.out_matrix[u as usize].cardinality(), 0);
+        loops
+    }
 }
 
 impl GraphEdgeEditing for AdjMatrixIn {
@@ -143,6 +180,30 @@ impl GraphEdgeEditing for AdjMatrixIn {
             self.in_matrix[v].unset_bit(u as usize);
         }
         out.unset_all();
+    }
+
+    fn contract_node(&mut self, u: Node) -> Vec<Node> {
+        let in_neighbors = self.in_matrix[u as usize]
+            .iter()
+            .map(|i| i as Node)
+            .collect_vec();
+        let out_neighbors = self.adj.out_matrix[u as usize]
+            .iter()
+            .map(|i| i as Node)
+            .collect_vec();
+
+        let mut loops = Vec::new();
+        for v in in_neighbors {
+            for &w in &out_neighbors {
+                self.try_add_edge(v, w);
+                if v == w {
+                    loops.push(v);
+                }
+            }
+        }
+
+        self.remove_edges_at_node(u);
+        loops
     }
 }
 

@@ -81,6 +81,37 @@ macro_rules! impl_helper_adjacency_test {
     };
 }
 
+macro_rules! impl_helper_undir_adjacency_test {
+    ($t:ident) => {
+        impl AdjacencyTestUndir for $t {
+            fn has_undir_edge(&self, u: Node, v: Node) -> bool {
+                self.has_edge(u, v) && self.has_edge(v, u)
+            }
+        }
+    };
+}
+
+macro_rules! impl_helper_adjacency_list_undir {
+    ($t:ident) => {
+        impl AdjacencyListUndir for $t {
+            type IterUndir<'a> = impl Iterator<Item = Node> + 'a;
+
+            fn undir_neighbors(&self, u: Node) -> Self::IterUndir<'_> {
+                let hash_out = FxHashSet::from_iter(self.out_neighbors(u));
+                let hash_in = FxHashSet::from_iter(self.in_neighbors(u));
+                let intersection: Vec<Node> = hash_out.intersection(&hash_in).copied().collect();
+                intersection.into_iter()
+            }
+
+            fn undir_degree(&self, u: Node) -> Node {
+                let hash_out = FxHashSet::from_iter(self.out_neighbors(u));
+                let hash_in = FxHashSet::from_iter(self.in_neighbors(u));
+                hash_out.intersection(&hash_in).count() as Node
+            }
+        }
+    };
+}
+
 macro_rules! impl_helper_adjacency_test_linear_search_bi_directed {
     ($t:ident) => {
         impl AdjacencyTest for $t {
@@ -312,6 +343,89 @@ macro_rules! test_helper_graph_edge_editing {
                     assert_ne!(v, 3);
                 }
             }
+
+            // remove in- and out
+            {
+                let mut graph = org_graph.clone();
+
+                let num_edges_to_delete = graph
+                    .vertices()
+                    .filter(|v| graph.has_edge(*v, 3) || graph.has_edge(3, *v))
+                    .count();
+
+                graph.remove_edges_at_node(3);
+                assert_eq!(
+                    graph.number_of_edges(),
+                    org_graph.number_of_edges() - num_edges_to_delete
+                );
+                for (u, v) in graph.edges_iter() {
+                    assert_ne!(v, 3);
+                    assert_ne!(u, 3);
+                }
+            }
+        }
+
+        #[test]
+        fn contract_node() {
+            // path
+            {
+                let mut org_graph = $t::from(&[(0, 1), (1, 2)]);
+                org_graph.contract_node(1);
+                assert_eq!(org_graph.edges_vec(), vec![(0, 2)]);
+                assert_eq!(org_graph.number_of_edges(), 1);
+            }
+
+            // cross
+            {
+                let mut org_graph = $t::from(&[(0, 2), (1, 2), (2, 3), (2, 4)]);
+                org_graph.contract_node(2);
+                assert_eq!(org_graph.edges_vec(), vec![(0, 3), (0, 4), (1, 3), (1, 4)]);
+                assert_eq!(org_graph.number_of_edges(), 4);
+            }
+
+            // cross with self-loop
+            {
+                let mut org_graph = $t::from(&[(0, 2), (1, 2), (2, 3), (2, 4), (2, 2)]);
+                org_graph.contract_node(2);
+                assert_eq!(org_graph.edges_vec(), vec![(0, 3), (0, 4), (1, 3), (1, 4)]);
+                assert_eq!(org_graph.number_of_edges(), 4);
+            }
+
+            // loop
+            {
+                let mut org_graph = $t::from(&[(0, 1), (1, 0)]);
+                let loops = org_graph.contract_node(1);
+                assert_eq!(org_graph.edges_vec(), vec![(0, 0)]);
+                assert_eq!(org_graph.number_of_edges(), 1);
+                assert_eq!(loops, vec![0]);
+            }
+
+            // no in-neighbors
+            {
+                let mut org_graph = $t::from(&[(0, 1), (1, 2)]);
+                org_graph.contract_node(0);
+                assert_eq!(org_graph.edges_vec(), vec![(1, 2)]);
+                assert_eq!(org_graph.number_of_edges(), 1);
+            }
+
+            // no out-neighbors
+            {
+                let mut org_graph = $t::from(&[(0, 1), (1, 2)]);
+                org_graph.contract_node(2);
+                assert_eq!(org_graph.edges_vec(), vec![(0, 1)]);
+                assert_eq!(org_graph.number_of_edges(), 1);
+            }
+        }
+    };
+}
+
+macro_rules! test_helper_default {
+    ($t:ident) => {
+        #[test]
+        fn test_default() {
+            let graph = $t::default();
+            assert_eq!(graph.len(), 0);
+            assert_eq!(graph.number_of_edges(), 0);
         }
     };
 }
@@ -333,8 +447,101 @@ macro_rules! test_helper_vertex_editing {
     };
 }
 
+macro_rules! test_helper_undir {
+    ($t:ident) => {
+        #[test]
+        fn undir_neighbors() {
+            use itertools::Itertools;
+            use rand::prelude::*;
+
+            let mut rng = rand_pcg::Pcg64::seed_from_u64(1234);
+            let mut edges = Vec::from([(0, 1), (0, 2), (0, 3), (1, 0), (3, 0), (4, 0)]);
+            for _ in 0..10 {
+                edges.shuffle(&mut rng);
+                let graph = $t::from(edges.as_slice());
+
+                fn check_sorted(mut vec: Vec<Node>, expected: Vec<Node>) {
+                    vec.sort_unstable();
+                    assert_eq!(vec, expected);
+                }
+
+                check_sorted(graph.out_neighbors(0).collect_vec(), vec![1, 2, 3]);
+                check_sorted(graph.in_neighbors(0).collect_vec(), vec![1, 3, 4]);
+                check_sorted(graph.undir_neighbors(0).collect_vec(), vec![1, 3]);
+            }
+        }
+
+        #[test]
+        fn dynamic_undir_neighbors() {
+            use itertools::Itertools;
+            use rand::SeedableRng;
+            use rand::*;
+            use std::collections::HashSet;
+
+            let mut rng = rand_pcg::Pcg64::seed_from_u64(1234);
+
+            for n in [1, 2, 5, 10] {
+                let mut edges = HashSet::with_capacity((n * n) as usize);
+                let mut graph = $t::new(n as usize);
+
+                for _ in 0..(5 * n * n) {
+                    let u = rng.gen_range(0..n);
+                    let v = rng.gen_range(0..n);
+
+                    if edges.insert((u, v)) {
+                        graph.add_edge(u, v);
+                    } else {
+                        edges.remove(&(u, v));
+                        graph.remove_edge(u, v);
+                    }
+
+                    for u in 0..n {
+                        let out_n = (0..n)
+                            .into_iter()
+                            .filter(|&v| edges.contains(&(u, v)))
+                            .collect_vec();
+                        let in_n = (0..n)
+                            .into_iter()
+                            .filter(|&v| edges.contains(&(v, u)))
+                            .collect_vec();
+                        let undir_n = (0..n)
+                            .into_iter()
+                            .filter(|&v| edges.contains(&(u, v)) && edges.contains(&(v, u)))
+                            .collect_vec();
+
+                        assert_eq!(graph.out_degree(u) as usize, out_n.len());
+                        assert_eq!(graph.in_degree(u) as usize, in_n.len());
+                        assert_eq!(graph.undir_degree(u) as usize, undir_n.len());
+
+                        let mut g_out = graph.out_neighbors(u).collect_vec();
+                        let mut g_in = graph.in_neighbors(u).collect_vec();
+                        let mut g_undir = graph.undir_neighbors(u).collect_vec();
+
+                        g_out.sort_unstable();
+                        g_in.sort_unstable();
+                        g_undir.sort_unstable();
+
+                        assert_eq!(g_out, out_n);
+                        assert_eq!(g_in, in_n);
+                        assert_eq!(g_undir, undir_n);
+                    }
+
+                    for u in 0..n {
+                        for v in 0..n {
+                            assert_eq!(graph.has_edge(u, v), edges.contains(&(u, v)));
+                        }
+                    }
+
+                    assert_eq!(graph.number_of_edges(), edges.len());
+                }
+            }
+        }
+    };
+}
+
 macro_rules! base_tests {
     ($t:ident) => {
+        test_helper_default!($t);
         test_helper_from_edges!($t);
         test_helper_graph_order!($t);
         test_helper_adjacency_list!($t);
@@ -348,16 +555,19 @@ macro_rules! base_tests_in {
     ($t:ident) => {
         base_tests!($t);
         test_helper_adjacency_list_in!($t);
+        test_helper_undir!($t);
     };
 }
 
 pub(super) use impl_helper_adjacency_list;
+pub(super) use impl_helper_adjacency_list_undir;
 pub(super) use impl_helper_adjacency_test;
 pub(super) use impl_helper_adjacency_test_linear_search_bi_directed;
 pub(super) use impl_helper_graph_debug;
 pub(super) use impl_helper_graph_from_edges;
 pub(super) use impl_helper_graph_order;
 pub(super) use impl_helper_try_add_edge;
+pub(super) use impl_helper_undir_adjacency_test;
 
 pub(super) use base_tests;
 pub(super) use base_tests_in;
@@ -365,7 +575,9 @@ pub(super) use test_helper_adjacency_list;
 pub(super) use test_helper_adjacency_list_in;
 pub(super) use test_helper_adjacency_test;
 pub(super) use test_helper_debug_format;
+pub(super) use test_helper_default;
 pub(super) use test_helper_from_edges;
 pub(super) use test_helper_graph_edge_editing;
 pub(super) use test_helper_graph_order;
+pub(super) use test_helper_undir;
 pub(super) use test_helper_vertex_editing;
