@@ -7,6 +7,7 @@ use std::iter::FromIterator;
 
 /// Rule5 and Rule6 need max_nodes: Node.
 /// That is used to not perform the reduction rule if the reduced graph has more than max_nodes nodes.
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Rules {
     Rule1,
     Rule3,
@@ -31,11 +32,12 @@ pub struct SuperReducer<G> {
     rules: Vec<Rules>,
     scc: bool,
     upper_bound: Option<Node>,
-    to_be_reduced: Vec<(G, NodeMapper)>,
+    to_be_reduced: Vec<(G, NodeMapper, u32)>,
     reduced: Vec<(G, NodeMapper)>,
     fvs: Vec<Node>,
     pre_processor: PreprocessorReduction<G>,
     upper_bound_below_zero: bool,
+    more_rules_to_do: bool,
 }
 
 type Fvs = Vec<Node>;
@@ -63,11 +65,12 @@ where
             rules,
             scc,
             upper_bound: None,
-            to_be_reduced: vec![(graph, NodeMapper::identity(0))],
+            to_be_reduced: vec![(graph, NodeMapper::identity(0), 0)],
             reduced: vec![],
             fvs: vec![],
             pre_processor: PreprocessorReduction::from(G::new(0)),
             upper_bound_below_zero: false,
+            more_rules_to_do: false,
         }
     }
 
@@ -83,7 +86,7 @@ where
     /// from the rules and the same process restarts.
     /// If rules contains enum rule6, but self.upper_bound = None, rule6 will be ignored.
     pub fn reduce(&mut self) -> Option<(&Fvs, &SccGraphs<G>)> {
-        while let Some(to_be_reduced) = self.to_be_reduced.pop() {
+        while let Some(mut to_be_reduced) = self.to_be_reduced.pop() {
             self.pre_processor = PreprocessorReduction::from(to_be_reduced.0);
             let mapper = to_be_reduced.1;
 
@@ -92,7 +95,7 @@ where
                     return None;
                 }
                 let mut applied_rule = false;
-                for index in 0..self.rules.len() {
+                for index in (to_be_reduced.2 as usize)..self.rules.len() {
                     let rule = &self.rules[index];
                     applied_rule |= match *rule {
                         Rules::Rule1 => self.pre_processor.apply_rule_1(),
@@ -130,13 +133,21 @@ where
                         Rules::DOME => self.pre_processor.apply_dome_reduction(),
                         Rules::STOP => {
                             if !applied_rule {
-                                self.update_rule_list(index + 1);
-                                break;
+                                if index + 1 == self.rules.len()
+                                    || self.rules[index + 1] == Rules::STOP
+                                {
+                                    break;
+                                }
+                                to_be_reduced.2 = (index as u32) + 1;
+                                self.more_rules_to_do = true;
                             }
                             break;
                         }
                         Rules::RestartRules => {
-                            break;
+                            if applied_rule {
+                                break;
+                            }
+                            false
                         }
                     }
                 }
@@ -147,7 +158,7 @@ where
             self.update_fvs_and_upper_bound(&mapper);
 
             if self.scc {
-                self.scc(&mapper);
+                self.scc(&mapper, to_be_reduced.2);
             } else {
                 self.reduced
                     .push((self.pre_processor.graph.clone(), mapper))
@@ -172,7 +183,7 @@ where
         }
     }
 
-    fn scc(&mut self, original_mapper: &NodeMapper) {
+    fn scc(&mut self, original_mapper: &NodeMapper, index: u32) {
         let mut all_sccs_mapped = self
             .pre_processor
             .graph()
@@ -183,17 +194,14 @@ where
             *mapper = NodeMapper::compose(original_mapper, mapper);
         }
 
-        if all_sccs_mapped.len() > 1 {
-            for scc in all_sccs_mapped {
-                self.to_be_reduced.push(scc);
+        if all_sccs_mapped.len() > 1 || self.more_rules_to_do {
+            self.more_rules_to_do = false;
+            for (graph, mapper) in all_sccs_mapped {
+                self.to_be_reduced.push((graph, mapper, index));
             }
         } else if let Some(scc) = all_sccs_mapped.pop() {
             self.reduced.push(scc);
         }
-    }
-
-    fn update_rule_list(&mut self, delete_until_index: usize) {
-        self.rules.drain(0..delete_until_index);
     }
 
     fn update_fvs_and_upper_bound(&mut self, mapper: &NodeMapper) {
@@ -275,7 +283,7 @@ impl<G: GraphNew + GraphEdgeEditing + AdjacencyList + AdjacencyTest + AdjacencyL
     }
 
     pub fn apply_rule_5(&mut self) -> bool {
-        apply_rule_5(&mut self.graph)
+        apply_rule_5(&mut self.graph, &mut self.in_fvs)
     }
 
     pub fn apply_rule_6(&mut self, upper_bound: Node) -> Option<bool> {
@@ -323,7 +331,7 @@ pub fn apply_rules_exhaustively<
     }
 
     if with_expensive_rules {
-        apply_rule_5(graph);
+        apply_rule_5(graph, fvs);
     }
 }
 
@@ -434,9 +442,10 @@ fn perform_petal_reduction_rule_5<
     graph: &mut G,
     node: Node,
     capacity: &mut [BitSet],
+    fvs: &mut Vec<Node>,
 ) {
     // removing edges from capacity
-    remove_edges_at_capacity_node(capacity, node, graph.len() as Node);
+    remove_edges_at_capacity_node(capacity, node, graph.number_of_nodes());
     capacity[(node + graph.len() as Node) as usize].unset_all();
     capacity[node as usize].unset_bit((node + (graph.len() as Node)) as usize);
     for bit_vector in capacity.iter_mut() {
@@ -451,7 +460,12 @@ fn perform_petal_reduction_rule_5<
     graph.remove_edges_at_node(node);
 
     // add all possible edges for (in_neighbors, out_neighbors)
+    let mut loop_to_delete: Vec<Node> = vec![];
     for in_neighbor in in_neighbors {
+        if out_neighbors.contains(&in_neighbor) {
+            loop_to_delete.push(in_neighbor);
+            continue;
+        }
         for &out_neighbor in &out_neighbors {
             let edge_from = (in_neighbor as usize) + graph.len();
             let edge_to = out_neighbor as usize;
@@ -459,6 +473,11 @@ fn perform_petal_reduction_rule_5<
 
             graph.try_add_edge(in_neighbor, out_neighbor); // adds new edge to graph
         }
+    }
+    for node in loop_to_delete {
+        fvs.push(node);
+        graph.remove_edges_at_node(node);
+        remove_edges_at_capacity_node(capacity, node, graph.number_of_nodes());
     }
 }
 
@@ -493,6 +512,7 @@ pub fn apply_rule_5<
     G: GraphNew + GraphEdgeEditing + AdjacencyList + AdjacencyTest + AdjacencyListIn,
 >(
     graph: &mut G,
+    fvs: &mut Vec<Node>,
 ) -> bool {
     let mut applied = false;
 
@@ -510,7 +530,7 @@ pub fn apply_rule_5<
         // actual reduction of graph (if petal_count = 1)
         if petal_count == 1 {
             applied = true;
-            perform_petal_reduction_rule_5(graph, node as Node, &mut capacity);
+            perform_petal_reduction_rule_5(graph, node as Node, &mut capacity, fvs);
             continue;
         }
 
@@ -554,7 +574,7 @@ pub fn apply_rule_6<
             fvs.push(node);
 
             // removing edges from capacity
-            remove_edges_at_capacity_node(&mut capacity, node, graph.len() as Node);
+            remove_edges_at_capacity_node(&mut capacity, node, graph.number_of_nodes());
 
             // removing edges from graph
             graph.remove_edges_at_node(node);
@@ -755,6 +775,7 @@ mod test {
     use super::*;
     use crate::graph::adj_array::AdjArrayIn;
     use crate::graph::io::MetisRead;
+    use crate::pre_processor_reduction::Rules::Rule5;
     use glob::glob;
     use std::fs::File;
     use std::io::BufReader;
@@ -919,7 +940,8 @@ mod test {
         let tested_graph_len = 4;
         let mut graph = create_circle(tested_graph_len);
         let mut capacity = create_capacity_for_many_petals(&mut graph);
-        perform_petal_reduction_rule_5(&mut graph, 0, &mut capacity);
+        let mut fvs = vec![];
+        perform_petal_reduction_rule_5(&mut graph, 0, &mut capacity, &mut fvs);
         let expected_edges_capacity = vec![(1, 5), (2, 6), (3, 7), (7, 1), (5, 2), (6, 3)];
 
         let expected_edges_graph = vec![(1, 2), (2, 3), (3, 1)];
@@ -954,26 +976,8 @@ mod test {
 
         test_pre_process.apply_rule_5();
 
-        let expected_edges_graph = vec![(3, 3)];
-
-        assert_eq!(
-            0,
-            test_pre_process.graph.in_degree(0) + test_pre_process.graph.out_degree(0)
-        );
-
-        for from_node in 0..test_pre_process.graph.len() {
-            for to_node in 0..test_pre_process.graph.len() {
-                if expected_edges_graph.contains(&(from_node, to_node)) {
-                    assert!(test_pre_process
-                        .graph
-                        .has_edge(from_node as Node, to_node as Node));
-                } else {
-                    assert!(!test_pre_process
-                        .graph
-                        .has_edge(from_node as Node, to_node as Node));
-                }
-            }
-        }
+        assert_eq!(test_pre_process.fvs(), [3]);
+        assert_eq!(test_pre_process.fvs().len(), 1)
     }
 
     #[test]
