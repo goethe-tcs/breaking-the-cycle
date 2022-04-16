@@ -5,7 +5,7 @@ use std::fmt::Debug;
 use std::{fmt, str};
 
 /// A data structure for a directed graph supporting self-loops and multi-edges
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct AdjArray {
     n: usize,
     m: usize,
@@ -13,7 +13,7 @@ pub struct AdjArray {
 }
 
 /// Same as AdjArray, but stores all in-edges for each vertex in addition to the outedges
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct AdjArrayIn {
     in_neighbors: Vec<Vec<Node>>,
     adj: AdjArray,
@@ -21,12 +21,15 @@ pub struct AdjArrayIn {
 
 graph_macros::impl_helper_graph_debug!(AdjArray);
 graph_macros::impl_helper_graph_from_edges!(AdjArray);
+graph_macros::impl_helper_undir_adjacency_test!(AdjArray);
 
 graph_macros::impl_helper_graph_order!(AdjArrayIn, adj);
 graph_macros::impl_helper_graph_debug!(AdjArrayIn);
 graph_macros::impl_helper_graph_from_edges!(AdjArrayIn);
 graph_macros::impl_helper_adjacency_list!(AdjArrayIn, adj);
 graph_macros::impl_helper_adjacency_test_linear_search_bi_directed!(AdjArrayIn);
+graph_macros::impl_helper_undir_adjacency_test!(AdjArrayIn);
+graph_macros::impl_helper_adjacency_list_undir!(AdjArrayIn);
 
 impl GraphOrder for AdjArray {
     type VertexIter<'a> = impl Iterator<Item = Node> + 'a;
@@ -115,6 +118,30 @@ impl GraphEdgeEditing for AdjArray {
         self.m -= self.out_neighbors[u as usize].len();
         self.out_neighbors[u as usize].clear();
     }
+
+    fn contract_node(&mut self, u: Node) -> Vec<Node> {
+        let mut loops = Vec::new();
+        self.try_remove_edge(u, u);
+        let out_neighbors = std::mem::take(&mut self.out_neighbors[u as usize]);
+
+        for v in self.vertices_range() {
+            if try_remove_helper(&mut self.out_neighbors[v as usize], u).is_ok() {
+                self.m -= 1;
+
+                for &w in &out_neighbors {
+                    self.try_add_edge(v, w);
+
+                    if v == w {
+                        loops.push(v);
+                    }
+                }
+            };
+        }
+
+        self.m -= out_neighbors.len();
+
+        loops
+    }
 }
 
 impl GraphEdgeEditing for AdjArrayIn {
@@ -151,6 +178,31 @@ impl GraphEdgeEditing for AdjArrayIn {
         }
         self.adj.m -= self.adj.out_neighbors[u as usize].len();
         self.adj.out_neighbors[u as usize].clear();
+    }
+
+    fn contract_node(&mut self, u: Node) -> Vec<Node> {
+        let mut loops = Vec::new();
+
+        self.try_remove_edge(u, u);
+        let in_neighbors = std::mem::take(&mut self.in_neighbors[u as usize]);
+        let out_neighbors = std::mem::take(&mut self.adj.out_neighbors[u as usize]);
+
+        for &w in &out_neighbors {
+            remove_helper(&mut self.in_neighbors[w as usize], u);
+        }
+
+        for &v in &in_neighbors {
+            remove_helper(&mut self.adj.out_neighbors[v as usize], u);
+            for &w in &out_neighbors {
+                self.try_add_edge(v, w);
+                if v == w {
+                    loops.push(v);
+                }
+            }
+        }
+
+        self.adj.m -= in_neighbors.len() + out_neighbors.len();
+        loops
     }
 }
 

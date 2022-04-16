@@ -1,4 +1,5 @@
 pub mod adj_array;
+pub mod adj_array_undir;
 pub mod adj_list_matrix;
 pub mod connectivity;
 pub mod generators;
@@ -17,11 +18,13 @@ pub type Node = u32;
 pub type Edge = (Node, Node);
 
 pub use adj_array::{AdjArray, AdjArrayIn};
+pub use adj_array_undir::AdjArrayUndir;
 pub use adj_list_matrix::{AdjListMatrix, AdjListMatrixIn};
 pub use connectivity::Connectivity;
 pub use io::*;
 pub use node_mapper::{Compose, Getter, Inverse, NodeMapper, RankingForwardMapper, Setter};
 pub use partition::*;
+use std::iter::FromIterator;
 pub use subgraph::*;
 pub use traversal::*;
 pub use unique_node_stack::UniqueNodeStack;
@@ -32,6 +35,7 @@ pub mod digest;
 #[cfg(feature = "pace-digest")]
 pub use self::digest::GraphDigest;
 
+use fxhash::FxHashSet;
 use std::ops::Range;
 
 /// Provides getters pertaining to the size of a graph
@@ -83,6 +87,16 @@ pub trait AdjacencyListIn: AdjacencyList {
     fn total_degree(&self, u: Node) -> Node {
         self.in_degree(u) + self.out_degree(u)
     }
+}
+
+pub trait AdjacencyListUndir: AdjacencyList {
+    type IterUndir<'a>: Iterator<Item = Node>
+    where
+        Self: 'a;
+
+    fn undir_neighbors(&self, u: Node) -> Self::IterUndir<'_>;
+
+    fn undir_degree(&self, u: Node) -> Node;
 }
 
 /// Provides basic read-only functionality associated with an adjacency list
@@ -161,8 +175,14 @@ pub trait AdjacencyTest {
     }
 }
 
+/// Provides efficient tests whether an undirected edge exists
+pub trait AdjacencyTestUndir {
+    /// Returns *true* exactly if the graph contains the edges (u, v) and (v, u)
+    fn has_undir_edge(&self, u: Node, v: Node) -> bool;
+}
+
 /// Provides constructor for a forest of isolated nodes
-pub trait GraphNew {
+pub trait GraphNew: Default {
     /// Creates an empty graph with n singleton nodes
     fn new(n: usize) -> Self;
 }
@@ -177,7 +197,9 @@ pub trait GraphVertexEditing {
 pub trait GraphEdgeEditing: GraphNew {
     /// Adds the directed edge *(u,v)* to the graph. I.e., the edge FROM u TO v.
     /// ** Panics if the edge is already contained or possibly if u, v >= n **
-    fn add_edge(&mut self, u: Node, v: Node);
+    fn add_edge(&mut self, u: Node, v: Node) {
+        assert!(self.try_add_edge(u, v));
+    }
 
     /// Adds the directed edge *(u,v)* to the graph. I.e., the edge FROM u TO v.
     /// Returns *true* exactly if the edge was not present previously.
@@ -193,7 +215,9 @@ pub trait GraphEdgeEditing: GraphNew {
 
     /// Removes the directed edge *(u,v)* from the graph. I.e., the edge FROM u TO v.
     /// ** Panics if the edge is not present or u, v >= n **
-    fn remove_edge(&mut self, u: Node, v: Node);
+    fn remove_edge(&mut self, u: Node, v: Node) {
+        assert!(self.try_remove_edge(u, v));
+    }
 
     /// Removes the directed edge *(u,v)* from the graph. I.e., the edge FROM u TO v.
     /// If the edge was removed, returns *true* and *false* otherwise.
@@ -221,4 +245,8 @@ pub trait GraphEdgeEditing: GraphNew {
             self.remove_edges_at_node(*node);
         }
     }
+
+    /// Removes all edges into and out of node `u` and connects every in-neighbor with every out-neighbor.
+    /// Returns all nodes that got a self-loop during the process.
+    fn contract_node(&mut self, u: Node) -> Vec<Node>;
 }
