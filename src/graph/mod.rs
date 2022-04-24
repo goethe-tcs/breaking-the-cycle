@@ -93,10 +93,18 @@ pub trait AdjacencyListUndir: AdjacencyList {
     type IterUndir<'a>: Iterator<Item = Node>
     where
         Self: 'a;
+    type IterOutOnly<'a>: Iterator<Item = Node>
+    where
+        Self: 'a;
+    type IterInOnly<'a>: Iterator<Item = Node>
+    where
+        Self: 'a;
 
     fn undir_neighbors(&self, u: Node) -> Self::IterUndir<'_>;
-
     fn undir_degree(&self, u: Node) -> Node;
+
+    fn out_only_neighbors(&self, u: Node) -> Self::IterOutOnly<'_>;
+    fn in_only_neighbors(&self, u: Node) -> Self::IterInOnly<'_>;
 }
 
 /// Provides basic read-only functionality associated with an adjacency list
@@ -191,6 +199,17 @@ pub trait GraphNew: Default {
 pub trait GraphVertexEditing {
     fn remove_vertex(&mut self, u: Node);
     fn has_vertex(&self, u: Node) -> bool;
+}
+
+pub trait GraphFromSlice {
+    /// Creates a graph with n nodes containing the edges `edges`. This functionally equivalent
+    /// to calling `Graph::from(edges)` but may be implement faster. If the edge list is known
+    /// to contain unique values, `known_unique` should be set to true for better performance.
+    ///
+    /// # Warning
+    /// If the edge list contains duplicates and `known_unique` is false, the implementation
+    /// will work correctly but may or may not allocate too much memory
+    fn from_slice(n: Node, edges: &[(Node, Node)], known_unique: bool) -> Self;
 }
 
 /// Provides functions to insert/delete edges

@@ -128,7 +128,9 @@ impl<G> FvsBench<G>
 where
     G: GraphOrder
         + AdjacencyListIn
+        + AdjacencyListUndir
         + AdjacencyTest
+        + AdjacencyTestUndir
         + GraphEdgeEditing
         + GraphNew
         + GraphRead
@@ -497,6 +499,8 @@ where
     G: GraphOrder
         + AdjacencyListIn
         + AdjacencyTest
+        + AdjacencyListUndir
+        + AdjacencyTestUndir
         + GraphEdgeEditing
         + GraphNew
         + GraphRead
@@ -912,7 +916,7 @@ mod tests_bench_with_tempfile {
             .strict(false)
             .iterations(Iterations::new(
                 3,
-                InnerIterations::Adaptive(std::time::Duration::new(0, 1_000_000), 3),
+                InnerIterations::Adaptive(std::time::Duration::from_millis(1), 3),
             ))
             .split_into_sccs(false)
             .run(output_path.clone())
@@ -954,7 +958,7 @@ mod tests_bench_with_tempfile {
             .strict(false)
             .iterations(Iterations::new(
                 3,
-                InnerIterations::Adaptive(std::time::Duration::new(0, 500_000_000), 1),
+                InnerIterations::Adaptive(std::time::Duration::from_millis(10), 1),
             ))
             .split_into_sccs(false)
             .run(output_path.clone())

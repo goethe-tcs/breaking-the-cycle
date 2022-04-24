@@ -1,4 +1,3 @@
-use dfvs::graph::adj_array::AdjArrayIn;
 use dfvs::graph::io::MetisRead;
 use dfvs::graph::*;
 use dfvs::pre_processor_reduction::*;
@@ -11,14 +10,17 @@ use std::time::Instant;
 fn main() -> std::io::Result<()> {
     dfvs::log::build_pace_logger_for_level(LevelFilter::Info);
 
-    for filename in glob("data/pace/*/*").unwrap().filter_map(Result::ok) {
+    let mut total_n = 0;
+    let mut total_m = 0;
+
+    for filename in glob("data/pace/h*/*.metis").unwrap().filter_map(Result::ok) {
         // start timer
         let start = Instant::now();
 
         // read in file
         let file_in = File::open(filename.as_path())?;
         let buf_reader = BufReader::new(file_in);
-        let graph = AdjArrayIn::try_read_metis(buf_reader)?;
+        let graph = AdjArrayUndir::try_read_metis(buf_reader)?;
         let n = graph.number_of_nodes();
         let m = graph.number_of_edges();
 
@@ -39,7 +41,12 @@ fn main() -> std::io::Result<()> {
             out_graph.strongly_connected_components_no_singletons().len(),
             start.elapsed().as_millis()
         );
+
+        total_n += out_graph.number_of_nodes();
+        total_m += out_graph.number_of_edges();
     }
+
+    println!("{}, {}", total_n, total_m);
 
     Ok(())
 }

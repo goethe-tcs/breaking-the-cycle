@@ -153,7 +153,7 @@ pub mod metis {
         fn try_write_metis<T: Write>(&self, writer: T) -> Result<(), std::io::Error>;
     }
 
-    impl<G: GraphNew + GraphOrder + GraphEdgeEditing + Sized> MetisRead for G {
+    impl<G: GraphFromSlice + Sized> MetisRead for G {
         fn try_read_metis<T: BufRead>(reader: T) -> Result<Self, Error> {
             let mut non_comment_lines = reader.lines().filter_map(|x| -> Option<String> {
                 if let Ok(line) = x {
@@ -167,7 +167,7 @@ pub mod metis {
             let error = |msg| Err(std::io::Error::new(ErrorKind::Other, msg));
 
             // parse header
-            let mut graph: G = {
+            let (n, m) = {
                 if let Some(header) = non_comment_lines.next() {
                     let fields: Vec<_> = header.split(' ').collect();
                     if fields.len() != 3 {
@@ -178,14 +178,23 @@ pub mod metis {
                         return error("Only support unweighted graphs");
                     }
 
-                    match fields[0].parse() {
-                        Ok(n) => G::new(n),
+                    let n: Node = match fields[0].parse() {
+                        Ok(n) => n,
                         Err(_) => return error("Cannot parse number of nodes"),
-                    }
+                    };
+
+                    let m: usize = match fields[0].parse() {
+                        Ok(m) => m,
+                        Err(_) => return error("Cannot parse number of edges"),
+                    };
+
+                    (n, m)
                 } else {
                     return error("Cannot read header");
                 }
             };
+
+            let mut edges: Vec<(Node, Node)> = Vec::with_capacity(m);
 
             // read neighbors
             for (source, neighbors) in non_comment_lines.enumerate() {
@@ -194,27 +203,30 @@ pub mod metis {
                     continue;
                 }
 
-                if source >= graph.len() {
+                if source >= n as usize {
                     return error("Too many neighborhoods");
                 }
 
                 for v in neighbors.split(' ') {
                     if let Ok(int_v) = v.parse::<Node>() {
-                        if 0 == int_v || int_v > graph.number_of_nodes() {
+                        if 0 == int_v || int_v > n {
                             return error(
                                 format!("Neighbor {} of {} is out of range", int_v, source)
                                     .as_str(),
                             );
                         }
 
-                        graph.try_add_edge(source as Node, int_v - 1);
+                        edges.push((source as Node, int_v - 1));
                     } else {
                         return error(format!("Cannot parse neighbor of {}", source).as_str());
                     }
                 }
             }
 
-            Ok(graph)
+            edges.sort_unstable();
+            edges.dedup();
+
+            Ok(G::from_slice(n, edges.as_slice(), true))
         }
     }
 

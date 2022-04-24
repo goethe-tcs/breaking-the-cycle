@@ -21,6 +21,7 @@ pub struct HashGraphIn {
 graph_macros::impl_helper_graph_debug!(HashGraph);
 graph_macros::impl_helper_graph_from_edges!(HashGraph);
 graph_macros::impl_helper_undir_adjacency_test!(HashGraph);
+graph_macros::impl_helper_graph_from_slice!(HashGraph);
 
 graph_macros::impl_helper_graph_debug!(HashGraphIn);
 graph_macros::impl_helper_graph_from_edges!(HashGraphIn);
@@ -29,6 +30,7 @@ graph_macros::impl_helper_adjacency_test!(HashGraphIn, adj_out);
 graph_macros::impl_helper_graph_order!(HashGraphIn, adj_out);
 graph_macros::impl_helper_undir_adjacency_test!(HashGraphIn);
 graph_macros::impl_helper_adjacency_list_undir!(HashGraphIn);
+graph_macros::impl_helper_graph_from_slice!(HashGraphIn);
 
 impl GraphVertexEditing for HashGraph {
     fn remove_vertex(&mut self, u: Node) {

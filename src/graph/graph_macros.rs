@@ -21,6 +21,24 @@ macro_rules! impl_helper_graph_from_edges {
     };
 }
 
+macro_rules! impl_helper_graph_from_slice {
+    ($t:ident) => {
+        impl GraphFromSlice for $t {
+            fn from_slice(n: Node, edges: &[(Node, Node)], known_unique: bool) -> Self {
+                let mut graph = Self::new(n as usize);
+                for e in edges {
+                    if known_unique {
+                        graph.add_edge(e.0, e.1);
+                    } else {
+                        graph.try_add_edge(e.0, e.1);
+                    }
+                }
+                graph
+            }
+        }
+    };
+}
+
 macro_rules! impl_helper_graph_debug {
     ($t:ident) => {
         impl Debug for $t {
@@ -95,12 +113,24 @@ macro_rules! impl_helper_adjacency_list_undir {
     ($t:ident) => {
         impl AdjacencyListUndir for $t {
             type IterUndir<'a> = impl Iterator<Item = Node> + 'a;
+            type IterOutOnly<'a> = impl Iterator<Item = Node> + 'a;
+            type IterInOnly<'a> = impl Iterator<Item = Node> + 'a;
 
             fn undir_neighbors(&self, u: Node) -> Self::IterUndir<'_> {
                 let hash_out = FxHashSet::from_iter(self.out_neighbors(u));
                 let hash_in = FxHashSet::from_iter(self.in_neighbors(u));
                 let intersection: Vec<Node> = hash_out.intersection(&hash_in).copied().collect();
                 intersection.into_iter()
+            }
+
+            fn out_only_neighbors(&self, u: Node) -> Self::IterOutOnly<'_> {
+                let hash_in = FxHashSet::from_iter(self.in_neighbors(u));
+                self.out_neighbors(u).filter(move |v| !hash_in.contains(v))
+            }
+
+            fn in_only_neighbors(&self, u: Node) -> Self::IterInOnly<'_> {
+                let hash_out = FxHashSet::from_iter(self.out_neighbors(u));
+                self.in_neighbors(u).filter(move |v| !hash_out.contains(v))
             }
 
             fn undir_degree(&self, u: Node) -> Node {
@@ -539,6 +569,32 @@ macro_rules! test_helper_undir {
     };
 }
 
+macro_rules! test_helper_from_slice {
+    ($t:ident) => {
+        #[test]
+        fn from_slice() {
+            use rand::prelude::*;
+
+            let edges = [(0, 3), (1, 3), (2, 3), (3, 4), (3, 5), (5, 4)];
+            let org_graph = $t::from(&edges);
+            {
+                let from_slice_graph = $t::from_slice(6, &edges, true);
+                assert_eq!(org_graph.edges_vec(), from_slice_graph.edges_vec());
+            }
+
+            let mut rng = rand_pcg::Pcg64::seed_from_u64(1234);
+            let mut double_edges = Vec::from(edges);
+            double_edges.extend(edges);
+
+            for _ in 0..5 {
+                double_edges.shuffle(&mut rng);
+                let from_slice_graph = $t::from_slice(6, &edges, false);
+                assert_eq!(org_graph.edges_vec(), from_slice_graph.edges_vec());
+            }
+        }
+    };
+}
+
 macro_rules! base_tests {
     ($t:ident) => {
         test_helper_default!($t);
@@ -548,6 +604,7 @@ macro_rules! base_tests {
         test_helper_adjacency_test!($t);
         test_helper_graph_edge_editing!($t);
         test_helper_debug_format!($t);
+        test_helper_from_slice!($t);
     };
 }
 
@@ -565,6 +622,7 @@ pub(super) use impl_helper_adjacency_test;
 pub(super) use impl_helper_adjacency_test_linear_search_bi_directed;
 pub(super) use impl_helper_graph_debug;
 pub(super) use impl_helper_graph_from_edges;
+pub(super) use impl_helper_graph_from_slice;
 pub(super) use impl_helper_graph_order;
 pub(super) use impl_helper_try_add_edge;
 pub(super) use impl_helper_undir_adjacency_test;
@@ -572,11 +630,13 @@ pub(super) use impl_helper_undir_adjacency_test;
 pub(super) use base_tests;
 pub(super) use base_tests_in;
 pub(super) use test_helper_adjacency_list;
+
 pub(super) use test_helper_adjacency_list_in;
 pub(super) use test_helper_adjacency_test;
 pub(super) use test_helper_debug_format;
 pub(super) use test_helper_default;
 pub(super) use test_helper_from_edges;
+pub(super) use test_helper_from_slice;
 pub(super) use test_helper_graph_edge_editing;
 pub(super) use test_helper_graph_order;
 pub(super) use test_helper_undir;

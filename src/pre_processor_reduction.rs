@@ -2,8 +2,18 @@ use crate::bitset::BitSet;
 use crate::graph::network_flow::{EdmondsKarp, ResidualBitMatrix, ResidualNetwork};
 use crate::graph::*;
 use fxhash::FxHashSet;
-use itertools::Itertools;
+use std::collections::HashSet;
 use std::iter::FromIterator;
+
+pub trait ReducibleGraph = GraphNew
+    + GraphEdgeEditing
+    + AdjacencyList
+    + AdjacencyTest
+    + AdjacencyListIn
+    + AdjacencyListUndir
+    + Sized
+    + std::fmt::Debug
+    + Clone;
 
 /// Rule5 and Rule6 need max_nodes: Node.
 /// That is used to not perform the reduction rule if the reduced graph has more than max_nodes nodes.
@@ -14,6 +24,7 @@ pub enum Rules {
     Rule4,
     Rule5(Node),
     Rule6(Node),
+    Rule56(Node),
     DiClique,
     CompleteNode,
     PIE,
@@ -45,13 +56,7 @@ type SccGraphs<G> = Vec<(G, NodeMapper)>;
 
 impl<G> SuperReducer<G>
 where
-    G: GraphNew
-        + GraphEdgeEditing
-        + AdjacencyList
-        + AdjacencyTest
-        + AdjacencyListIn
-        + Sized
-        + Clone,
+    G: ReducibleGraph,
 {
     /// creates a SuperReducer with default rules (Rule1, Rule3, Rule4) and scc = true
     /// use .reduce() to reduce the graph
@@ -122,6 +127,25 @@ where
                                     }
                                 } else {
                                     false
+                                }
+                            } else {
+                                false
+                            }
+                        }
+                        Rules::Rule56(max_nodes) => {
+                            if self.pre_processor.graph().number_of_nodes() < max_nodes {
+                                self.update_fvs_and_upper_bound(&mapper);
+                                if let Some(upper_bound) = self.upper_bound {
+                                    if let Some(applied) =
+                                        self.pre_processor.apply_rules_5_and_6(upper_bound)
+                                    {
+                                        applied
+                                    } else {
+                                        self.upper_bound_below_zero = true;
+                                        break;
+                                    }
+                                } else {
+                                    self.pre_processor.apply_rule_5()
                                 }
                             } else {
                                 false
@@ -260,9 +284,7 @@ impl<G> From<G> for PreprocessorReduction<G> {
     }
 }
 
-impl<G: GraphNew + GraphEdgeEditing + AdjacencyList + AdjacencyTest + AdjacencyListIn>
-    PreprocessorReduction<G>
-{
+impl<G: ReducibleGraph> PreprocessorReduction<G> {
     // added AdjacencyListIn so we can use self.graph.out_degree()
     /// applies rule 1-4 exhaustively
     /// rule 5 is optional, because it runs slow
@@ -290,6 +312,10 @@ impl<G: GraphNew + GraphEdgeEditing + AdjacencyList + AdjacencyTest + AdjacencyL
         apply_rule_6(&mut self.graph, upper_bound, &mut self.in_fvs)
     }
 
+    pub fn apply_rules_5_and_6(&mut self, upper_bound: Node) -> Option<bool> {
+        apply_rules_5_and_6(&mut self.graph, upper_bound, &mut self.in_fvs)
+    }
+
     pub fn apply_di_cliques_reduction(&mut self) -> bool {
         apply_di_cliques_reduction(&mut self.graph, &mut self.in_fvs)
     }
@@ -311,9 +337,7 @@ impl<G: GraphNew + GraphEdgeEditing + AdjacencyList + AdjacencyTest + AdjacencyL
 /// each reduction rule returns true, if it performed a reduction. false otherwise.
 /// reduction rule 5 is much slower, than rule 1-4.
 /// can take a minute if graph has about 10.000 nodes.
-pub fn apply_rules_exhaustively<
-    G: GraphNew + GraphEdgeEditing + AdjacencyList + AdjacencyTest + AdjacencyListIn,
->(
+pub fn apply_rules_exhaustively<G: ReducibleGraph>(
     graph: &mut G,
     fvs: &mut Vec<Node>,
     with_expensive_rules: bool,
@@ -338,12 +362,7 @@ pub fn apply_rules_exhaustively<
 /// rule 1 - self-loop
 ///
 /// returns true if rule got applied at least once, false if not at all
-pub fn apply_rule_1<
-    G: GraphNew + GraphEdgeEditing + AdjacencyList + AdjacencyTest + AdjacencyListIn,
->(
-    graph: &mut G,
-    fvs: &mut Vec<Node>,
-) -> bool {
+pub fn apply_rule_1<G: ReducibleGraph>(graph: &mut G, fvs: &mut Vec<Node>) -> bool {
     let mut applied = false;
     for u in graph.vertices_range() {
         if graph.has_edge(u, u) {
@@ -358,11 +377,7 @@ pub fn apply_rule_1<
 /// rule 3 sink/source nodes
 ///
 /// returns true if rule got applied at least once, false if not at all
-pub fn apply_rule_3<
-    G: GraphNew + GraphEdgeEditing + AdjacencyList + AdjacencyTest + AdjacencyListIn,
->(
-    graph: &mut G,
-) -> bool {
+pub fn apply_rule_3<G: ReducibleGraph>(graph: &mut G) -> bool {
     let mut applied = false;
     for u in graph.vertices_range() {
         if (graph.in_degree(u) == 0) != (graph.out_degree(u) == 0) {
@@ -377,39 +392,16 @@ pub fn apply_rule_3<
 /// rule 4 chaining nodes with deleting self loop
 ///
 /// returns true if rule got applied at least once, false if not at all
-pub fn apply_rule_4<
-    G: GraphNew + GraphEdgeEditing + AdjacencyList + AdjacencyTest + AdjacencyListIn,
->(
-    graph: &mut G,
-    fvs: &mut Vec<Node>,
-) -> bool {
+pub fn apply_rule_4<G: ReducibleGraph>(graph: &mut G, fvs: &mut Vec<Node>) -> bool {
     let mut applied = false;
     for u in graph.vertices_range() {
-        if graph.in_degree(u) == 1 {
-            let neighbor = graph.in_neighbors(u).next().unwrap();
-            let out_neighbors: Vec<Node> = graph.out_neighbors(u).collect();
-            if out_neighbors.contains(&neighbor) {
-                fvs.push(neighbor);
-                graph.remove_edges_at_node(neighbor);
-            } else {
-                for out_neighbor in out_neighbors {
-                    graph.try_add_edge(neighbor, out_neighbor);
-                }
+        if graph.in_degree(u) == 1 || graph.out_degree(u) == 1 {
+            debug_assert!(!graph.has_edge(u, u));
+            let loops = graph.contract_node(u);
+            fvs.extend(&loops);
+            for v in loops {
+                graph.remove_edges_at_node(v);
             }
-            graph.remove_edges_at_node(u);
-            applied = true;
-        } else if graph.out_degree(u) == 1 {
-            let neighbor = graph.out_neighbors(u).next().unwrap();
-            let in_neighbors: Vec<Node> = graph.in_neighbors(u).collect();
-            if in_neighbors.contains(&neighbor) {
-                fvs.push(neighbor);
-                graph.remove_edges_at_node(neighbor);
-            } else {
-                for in_neighbor in in_neighbors {
-                    graph.try_add_edge(in_neighbor, neighbor);
-                }
-            }
-            graph.remove_edges_at_node(u);
             applied = true;
         }
     }
@@ -419,11 +411,7 @@ pub fn apply_rule_4<
 /// Converts a graph into a Vector of BitSets. But every node v of the graph is split into two nodes.
 /// One node has the ingoing edges of v and one has the outgoing edges of v.
 /// Also adds an edge from the node with ingoing edges to the node with outgoing edges.
-fn create_capacity_for_many_petals<
-    G: GraphNew + GraphEdgeEditing + AdjacencyList + AdjacencyTest + AdjacencyListIn,
->(
-    graph: &mut G,
-) -> Vec<BitSet> {
+fn create_capacity_for_many_petals<G: ReducibleGraph>(graph: &mut G) -> Vec<BitSet> {
     let graph_len_double = graph.len() * 2;
     let mut capacity = vec![BitSet::new(graph_len_double); graph_len_double];
     for node in graph.vertices_range() {
@@ -436,9 +424,7 @@ fn create_capacity_for_many_petals<
 }
 
 /// Updates capacity and graph.
-fn perform_petal_reduction_rule_5<
-    G: GraphNew + GraphEdgeEditing + AdjacencyList + AdjacencyTest + AdjacencyListIn,
->(
+fn perform_petal_reduction_rule_5<G: ReducibleGraph>(
     graph: &mut G,
     node: Node,
     capacity: &mut [BitSet],
@@ -508,12 +494,7 @@ fn count_petals(
 /// Checks for each node u on a given graph, if u has exactly one petal.
 /// If so, the graph gets reduced. That means, the node u with petal=1 gets deleted and all possible
 /// edges (in_neighbors(u), out_neighbour(u)) are added to the graph.
-pub fn apply_rule_5<
-    G: GraphNew + GraphEdgeEditing + AdjacencyList + AdjacencyTest + AdjacencyListIn,
->(
-    graph: &mut G,
-    fvs: &mut Vec<Node>,
-) -> bool {
+pub fn apply_rule_5<G: ReducibleGraph>(graph: &mut G, fvs: &mut Vec<Node>) -> bool {
     let mut applied = false;
 
     let mut capacity = create_capacity_for_many_petals(graph); // this capacity is used to calculate petals for every node of graph
@@ -539,9 +520,7 @@ pub fn apply_rule_5<
     applied
 }
 
-pub fn apply_rule_6<
-    G: GraphNew + GraphEdgeEditing + AdjacencyList + AdjacencyTest + AdjacencyListIn,
->(
+pub fn apply_rule_6<G: ReducibleGraph>(
     graph: &mut G,
     upper_bound: Node,
     fvs: &mut Vec<Node>,
@@ -591,6 +570,89 @@ pub fn apply_rule_6<
     Some(applied_counter < upper_bound)
 }
 
+pub fn apply_rules_5_and_6<G: ReducibleGraph>(
+    graph: &mut G,
+    upper_bound_incl: Node,
+    fvs: &mut Vec<Node>,
+) -> Option<bool> {
+    let mut applied = false;
+    let mut upper_bound_excl = upper_bound_incl + 1;
+
+    let num_nodes = graph
+        .vertices()
+        .filter(|&u| graph.in_degree(u) > 0 && graph.out_degree(u) > 0)
+        .take(upper_bound_excl as usize)
+        .count() as Node;
+
+    if num_nodes < upper_bound_excl
+        || !graph.vertices().any(|u| {
+            graph.in_degree(u) >= upper_bound_excl && graph.out_degree(u) >= upper_bound_excl
+        })
+    {
+        return Some(apply_rule_5(graph, fvs));
+    }
+
+    let mut capacity = create_capacity_for_many_petals(graph); // this capacity is used to calculate petals for every node of graph
+    let mut labels: Vec<Node> = graph // same with labels
+        .vertices_range()
+        .chain(graph.vertices_range())
+        .collect();
+
+    // check for each node of graph, if the reduction can be applied. If yes -> reduce
+    for node in graph.vertices_range() {
+        if graph.in_degree(node) == 0 || graph.out_degree(node) == 0 {
+            continue;
+        }
+
+        let petal_count = if graph.undir_degree(node) >= upper_bound_excl {
+            upper_bound_excl as usize
+        } else {
+            let mut count_to = upper_bound_excl
+                .min(graph.in_degree(node))
+                .min(graph.out_degree(node));
+
+            if count_to == 0 {
+                continue;
+            }
+
+            if count_to < upper_bound_excl {
+                count_to = 2;
+            }
+
+            let petal_count;
+            (capacity, labels, petal_count) =
+                count_petals(node, graph.len(), capacity, labels, count_to);
+            petal_count
+        };
+
+        if petal_count == 1 {
+            let fvs_len_before = fvs.len();
+            perform_petal_reduction_rule_5(graph, node as Node, &mut capacity, fvs);
+            upper_bound_excl -= (fvs.len() - fvs_len_before) as Node;
+            applied = true;
+            continue;
+        } else if petal_count >= upper_bound_excl as usize {
+            fvs.push(node);
+
+            // removing edges from capacity
+            remove_edges_at_capacity_node(&mut capacity, node, graph.len() as Node);
+
+            // removing edges from graph
+            graph.remove_edges_at_node(node);
+            if upper_bound_excl == 0 {
+                return None;
+            }
+            upper_bound_excl -= 1;
+            applied = true;
+            continue;
+        }
+
+        capacity[node as usize].set_bit(node as usize + graph.len());
+    }
+
+    Some(applied)
+}
+
 fn remove_edges_at_capacity_node(capacity: &mut [BitSet], node: Node, graph_size: Node) {
     capacity[(node + graph_size) as usize].unset_all();
     capacity[node as usize].unset_bit((node + (graph_size)) as usize);
@@ -602,53 +664,39 @@ fn remove_edges_at_capacity_node(capacity: &mut [BitSet], node: Node, graph_size
 /// Safe Di-Cliques Reduction, requires self loops to be deleted
 ///
 /// returns true if rule got applied at least once, false if not at all
-pub fn apply_di_cliques_reduction<
-    G: GraphNew + GraphEdgeEditing + AdjacencyList + AdjacencyTest + AdjacencyListIn,
->(
-    graph: &mut G,
-    fvs: &mut Vec<Node>,
-) -> bool {
+pub fn apply_di_cliques_reduction<G: ReducibleGraph>(graph: &mut G, fvs: &mut Vec<Node>) -> bool {
     let mut applied = false;
     for u in graph.vertices_range() {
-        if graph.out_degree(u) == 0 || graph.in_degree(u) == 0 {
+        let k = graph.undir_degree(u);
+
+        if k == 0 || graph.undir_neighbors(u).any(|v| graph.undir_degree(v) < k) {
             continue;
         }
-        // creating an intersection of node u's neighborhood (nodes with 2 clique to u)
-        let intersection = {
-            if graph.out_degree(u) < graph.in_degree(u) {
-                let set = FxHashSet::from_iter(graph.out_neighbors(u));
-                graph
-                    .in_neighbors(u)
-                    .filter(|v| set.contains(v))
-                    .collect_vec()
-            } else {
-                let set = FxHashSet::from_iter(graph.in_neighbors(u));
-                graph
-                    .out_neighbors(u)
-                    .filter(|v| set.contains(v))
-                    .collect_vec()
-            }
-        };
-        // check whether u is in more than one clique. We can skip u if it is
-        if intersection.is_empty()
-            || intersection
-                .iter()
-                .cartesian_product(intersection.iter())
-                .any(|(&x, &y)| x != y && !graph.has_edge(x, y))
-        {
+
+        let neighbors: HashSet<Node, _> = FxHashSet::from_iter(graph.undir_neighbors(u));
+
+        if neighbors.iter().any(|&v| {
+            graph
+                .undir_neighbors(v)
+                .filter(|x| *x == u || neighbors.contains(x))
+                .take(k as usize)
+                .count()
+                < k as usize
+        }) {
             continue;
         }
+
         // if u is only in 1 clique we check here if we can safely delete all nodes but u from that
         // clique. Either u has only out- or in-going edges or there is no circle back to u
         // outside of the clique. This last point is checked via breadth first search
-        if graph.in_degree(u) as usize == intersection.len()
-            || graph.out_degree(u) as usize == intersection.len()
-            || !graph.is_node_on_cycle_after_deleting(u, intersection.clone())
+        if graph.in_degree(u) == k
+            || graph.out_degree(u) == k
+            || !graph.is_node_on_cycle_after_deleting(u, neighbors.iter().copied())
         {
-            for node in intersection {
-                fvs.push(node);
+            for &node in &neighbors {
                 graph.remove_edges_at_node(node);
             }
+            fvs.extend(neighbors.iter());
             graph.remove_edges_at_node(u);
             applied = true;
         }
@@ -656,12 +704,7 @@ pub fn apply_di_cliques_reduction<
     applied
 }
 
-pub fn apply_complete_node<
-    G: GraphNew + GraphEdgeEditing + AdjacencyList + AdjacencyTest + AdjacencyListIn,
->(
-    graph: &mut G,
-    fvs: &mut Vec<Node>,
-) -> bool {
+pub fn apply_complete_node<G: ReducibleGraph>(graph: &mut G, fvs: &mut Vec<Node>) -> bool {
     let mut outer_applied = false;
     let mut num_nodes = graph
         .vertices()
@@ -691,18 +734,12 @@ pub fn apply_complete_node<
 /// PIE reduction rule
 ///
 /// Looks for directed edges that are not strongly connected after removing undirected edges
-pub fn apply_pie_reduction<G: GraphEdgeEditing + AdjacencyList + AdjacencyListIn>(
-    graph: &mut G,
-) -> bool {
+pub fn apply_pie_reduction<G: ReducibleGraph>(graph: &mut G) -> bool {
     let mut applied = false;
-    let mut graph_minus_pie = AdjArrayIn::new(graph.len());
+    let mut graph_minus_pie = AdjArray::new(graph.len());
     // get directed out_neighbors for every node and create a graph with only directed edges
     for node in graph.vertices_range() {
-        let set_in_neighbors = FxHashSet::from_iter(graph.in_neighbors(node));
-        let directed_out_neighbors = graph
-            .out_neighbors(node)
-            .filter(|v| !set_in_neighbors.contains(v));
-        for out_neighbor in directed_out_neighbors {
+        for out_neighbor in graph.out_only_neighbors(node) {
             graph_minus_pie.add_edge(node, out_neighbor);
         }
     }
@@ -712,12 +749,12 @@ pub fn apply_pie_reduction<G: GraphEdgeEditing + AdjacencyList + AdjacencyListIn
     }
     // check for every edge of our graph without undirected edges if the nodes have
     // stayed in the same scc, if not we can delete the directed edge
-    for edge in graph_minus_pie.edges_iter() {
-        if graph_sccs.class_of_node(edge.0) != graph_sccs.class_of_node(edge.1)
-            || graph_sccs.class_of_node(edge.0) == None
-            || graph_sccs.class_of_node(edge.1) == None
+    for (u, v) in graph_minus_pie.edges_iter() {
+        if graph_sccs.class_of_node(u) == None
+            || graph_sccs.class_of_node(v) == None
+            || graph_sccs.class_of_node(u) != graph_sccs.class_of_node(v)
         {
-            graph.remove_edge(edge.0, edge.1);
+            graph.remove_edge(u, v);
             applied = true;
         }
     }
@@ -727,43 +764,35 @@ pub fn apply_pie_reduction<G: GraphEdgeEditing + AdjacencyList + AdjacencyListIn
 /// DOME reduction rule
 ///
 /// Looks for directed edges that get dominated by other edges (un/directed edges)
-pub fn apply_dome_reduction<G: GraphNew + GraphEdgeEditing + AdjacencyList + AdjacencyListIn>(
-    graph: &mut G,
-) -> bool {
+pub fn apply_dome_reduction<G: ReducibleGraph>(graph: &mut G) -> bool {
     let mut applied = false;
     for u in graph.vertices_range() {
-        if graph.out_degree(u) == 0 {
-            continue;
-        }
-        let set_in = FxHashSet::from_iter(graph.in_neighbors(u));
-        let set_out = FxHashSet::from_iter(graph.out_neighbors(u));
+        loop {
+            if graph.in_degree(u) == 0 || graph.out_degree(u) == 0 {
+                break;
+            }
 
-        let directed_out_neighbors = set_out.difference(&set_in).collect_vec();
+            let in_only_neigh_u = graph.in_only_neighbors(u).collect::<FxHashSet<_>>();
+            let out_neigh_u = graph.out_neighbors(u).collect::<FxHashSet<_>>();
 
-        if directed_out_neighbors.is_empty() {
-            continue;
-        }
+            let v = graph.out_only_neighbors(u).find(|&neighbor|
+                    // test if in_only_neigh_u is subset of in_only_neighbors(neighbor)
+                    graph
+                        .in_neighbors(neighbor)
+                        .filter(|v| in_only_neigh_u.contains(v))
+                        .take(in_only_neigh_u.len())
+                        .count()
+                        == in_only_neigh_u.len()
+                    // test if out_only_neighbors(neighbor) is subset of out_neigh_u
+                    || graph
+                        .out_only_neighbors(neighbor)
+                        .all(|v| out_neigh_u.contains(&v)));
 
-        let directed_in_neighbors_u = {
-            let set = FxHashSet::from_iter(graph.out_neighbors(u));
-            graph
-                .in_neighbors(u)
-                .filter(|v| !set.contains(v))
-                .collect::<FxHashSet<_>>()
-        };
-        let all_out_neighbors_u = graph.out_neighbors(u).collect::<FxHashSet<_>>();
-
-        for neighbor in directed_out_neighbors {
-            let all_in_neighbors_neighbor = graph.in_neighbors(*neighbor).collect::<FxHashSet<_>>();
-            let directed_out_neighbors_neighbor = graph
-                .out_neighbors(*neighbor)
-                .filter(|v| !all_in_neighbors_neighbor.contains(v))
-                .collect::<FxHashSet<_>>();
-            if directed_in_neighbors_u.is_subset(&all_in_neighbors_neighbor)
-                || directed_out_neighbors_neighbor.is_subset(&all_out_neighbors_u)
-            {
+            if let Some(v) = v {
                 applied = true;
-                graph.remove_edge(u, *neighbor);
+                graph.remove_edge(u, v);
+            } else {
+                break;
             }
         }
     }
@@ -773,14 +802,13 @@ pub fn apply_dome_reduction<G: GraphNew + GraphEdgeEditing + AdjacencyList + Adj
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::graph::adj_array::AdjArrayIn;
     use crate::graph::io::MetisRead;
     use glob::glob;
     use std::fs::File;
     use std::io::BufReader;
 
-    fn create_test_pre_processor() -> PreprocessorReduction<AdjArrayIn> {
-        let graph = AdjArrayIn::from(&[
+    fn create_test_pre_processor() -> PreprocessorReduction<AdjArrayUndir> {
+        let graph = AdjArrayUndir::from(&[
             (0, 1),
             (1, 4),
             (2, 2),
@@ -796,8 +824,8 @@ mod test {
         test_pre_process
     }
 
-    fn create_test_pre_processor_2() -> PreprocessorReduction<AdjArrayIn> {
-        let graph = AdjArrayIn::from(&[
+    fn create_test_pre_processor_2() -> PreprocessorReduction<AdjArrayUndir> {
+        let graph = AdjArrayUndir::from(&[
             (0, 1),
             (0, 2),
             (1, 0),
@@ -819,8 +847,8 @@ mod test {
         test_pre_process
     }
 
-    fn create_test_pre_processor3() -> PreprocessorReduction<AdjArrayIn> {
-        let graph = AdjArrayIn::from(&[(0, 1), (1, 0), (0, 2), (2, 0), (1, 2), (2, 3), (2, 2)]);
+    fn create_test_pre_processor3() -> PreprocessorReduction<AdjArrayUndir> {
+        let graph = AdjArrayUndir::from(&[(0, 1), (1, 0), (0, 2), (2, 0), (1, 2), (2, 3), (2, 2)]);
 
         let test_pre_process = PreprocessorReduction::from(graph);
         test_pre_process
@@ -853,7 +881,7 @@ mod test {
 
     #[test]
     fn rule_4_neighbor_not_neighbor() {
-        let graph = AdjArrayIn::from(&[
+        let graph = AdjArrayUndir::from(&[
             (0, 2),
             (0, 5),
             (1, 0),
@@ -887,8 +915,8 @@ mod test {
         assert!(!test_pre_process.apply_rule_4());
     }
 
-    fn create_circle(graph_size: usize) -> AdjArrayIn {
-        let mut graph = AdjArrayIn::new(graph_size);
+    fn create_circle(graph_size: usize) -> AdjArrayUndir {
+        let mut graph = AdjArrayUndir::new(graph_size);
         for i in 0..graph_size - 1 {
             graph.add_edge(i as Node, (i + 1) as Node);
         }
@@ -897,8 +925,8 @@ mod test {
     }
 
     /// edges go in both directions
-    fn create_star(satellite_count: usize) -> AdjArrayIn {
-        let mut graph = AdjArrayIn::new(satellite_count + 1);
+    fn create_star(satellite_count: usize) -> AdjArrayUndir {
+        let mut graph = AdjArrayUndir::new(satellite_count + 1);
         for satellite in 1..satellite_count + 1 {
             graph.add_edge(0, satellite as Node);
             graph.add_edge(satellite as Node, 0);
@@ -1000,7 +1028,7 @@ mod test {
 
     #[test]
     fn di_cliques_reduction() {
-        let graph = AdjArrayIn::from(&[
+        let graph = AdjArrayUndir::from(&[
             (0, 1),
             (0, 3),
             (0, 6),
@@ -1033,7 +1061,9 @@ mod test {
 
         let mut test_pre_process = PreprocessorReduction::from(graph);
         test_pre_process.apply_di_cliques_reduction();
-        assert_eq!(test_pre_process.fvs(), vec![4, 5, 1, 6, 8]);
+        let mut fvs = Vec::from(test_pre_process.fvs());
+        fvs.sort();
+        assert_eq!(fvs, vec![1, 4, 5, 6, 8]);
     }
 
     fn graph_edges_count<
@@ -1056,7 +1086,7 @@ mod test {
         {
             let file_in = File::open(filename.as_path())?;
             let buf_reader = BufReader::new(file_in);
-            let graph = AdjArrayIn::try_read_metis(buf_reader)?;
+            let graph = AdjArrayUndir::try_read_metis(buf_reader)?;
             let mut super_reducer = SuperReducer::with_settings(
                 graph,
                 vec![
@@ -1102,7 +1132,7 @@ mod test {
 
     #[test]
     fn pie_reduction() {
-        let graph = AdjArrayIn::from(&[
+        let graph = AdjArrayUndir::from(&[
             (0, 1),
             (0, 3),
             (0, 5),
@@ -1130,7 +1160,7 @@ mod test {
 
     #[test]
     fn pie_reduction_nones() {
-        let graph = AdjArrayIn::from(&[
+        let graph = AdjArrayUndir::from(&[
             (0, 1),
             (0, 2),
             (0, 3),
@@ -1150,7 +1180,7 @@ mod test {
 
     #[test]
     fn dome_reduction() {
-        let graph = AdjArrayIn::from(&[
+        let graph = AdjArrayUndir::from(&[
             (0, 1),
             (0, 2),
             (1, 0),
