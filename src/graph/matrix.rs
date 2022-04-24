@@ -25,6 +25,7 @@ pub struct AdjMatrixIn {
 graph_macros::impl_helper_graph_debug!(AdjMatrix);
 graph_macros::impl_helper_graph_from_edges!(AdjMatrix);
 graph_macros::impl_helper_undir_adjacency_test!(AdjMatrix);
+graph_macros::impl_helper_graph_from_slice!(AdjMatrix);
 
 graph_macros::impl_helper_graph_debug!(AdjMatrixIn);
 graph_macros::impl_helper_graph_from_edges!(AdjMatrixIn);
@@ -33,6 +34,7 @@ graph_macros::impl_helper_adjacency_test!(AdjMatrixIn, adj);
 graph_macros::impl_helper_graph_order!(AdjMatrixIn, adj);
 graph_macros::impl_helper_undir_adjacency_test!(AdjMatrixIn);
 graph_macros::impl_helper_adjacency_list_undir!(AdjMatrixIn);
+graph_macros::impl_helper_graph_from_slice!(AdjMatrixIn);
 
 impl GraphOrder for AdjMatrix {
     type VertexIter<'a> = impl Iterator<Item = Node> + 'a;

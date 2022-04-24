@@ -22,6 +22,7 @@ pub struct AdjArrayIn {
 graph_macros::impl_helper_graph_debug!(AdjArray);
 graph_macros::impl_helper_graph_from_edges!(AdjArray);
 graph_macros::impl_helper_undir_adjacency_test!(AdjArray);
+graph_macros::impl_helper_graph_from_slice!(AdjArray);
 
 graph_macros::impl_helper_graph_order!(AdjArrayIn, adj);
 graph_macros::impl_helper_graph_debug!(AdjArrayIn);
@@ -30,6 +31,7 @@ graph_macros::impl_helper_adjacency_list!(AdjArrayIn, adj);
 graph_macros::impl_helper_adjacency_test_linear_search_bi_directed!(AdjArrayIn);
 graph_macros::impl_helper_undir_adjacency_test!(AdjArrayIn);
 graph_macros::impl_helper_adjacency_list_undir!(AdjArrayIn);
+graph_macros::impl_helper_graph_from_slice!(AdjArrayIn);
 
 impl GraphOrder for AdjArray {
     type VertexIter<'a> = impl Iterator<Item = Node> + 'a;

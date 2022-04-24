@@ -26,6 +26,7 @@ graph_macros::impl_helper_graph_from_edges!(AdjListMatrix);
 graph_macros::impl_helper_graph_debug!(AdjListMatrixIn);
 graph_macros::impl_helper_graph_from_edges!(AdjListMatrixIn);
 graph_macros::impl_helper_undir_adjacency_test!(AdjListMatrix);
+graph_macros::impl_helper_graph_from_slice!(AdjListMatrix);
 
 graph_macros::impl_helper_adjacency_list!(AdjListMatrix, adj_array);
 graph_macros::impl_helper_adjacency_test!(AdjListMatrix, adj_matrix);
@@ -35,6 +36,7 @@ graph_macros::impl_helper_adjacency_test_linear_search_bi_directed!(AdjListMatri
 graph_macros::impl_helper_graph_order!(AdjListMatrixIn, adj_out);
 graph_macros::impl_helper_undir_adjacency_test!(AdjListMatrixIn);
 graph_macros::impl_helper_adjacency_list_undir!(AdjListMatrixIn);
+graph_macros::impl_helper_graph_from_slice!(AdjListMatrixIn);
 
 impl GraphEdgeEditing for AdjListMatrix {
     fn add_edge(&mut self, u: Node, v: Node) {

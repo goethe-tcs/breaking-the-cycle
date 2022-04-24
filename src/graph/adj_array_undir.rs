@@ -18,6 +18,44 @@ impl GraphNew for AdjArrayUndir {
         }
     }
 }
+
+impl GraphFromSlice for AdjArrayUndir {
+    fn from_slice(n: Node, edges: &[(Node, Node)], known_unique: bool) -> Self {
+        let mut degrees: Vec<Node> = vec![0; n as usize];
+        for &(u, v) in edges {
+            degrees[u as usize] += 1;
+            degrees[v as usize] += 1;
+        }
+
+        let mut graph = {
+            let neighbors = degrees
+                .iter()
+                .map(|&d| Neighborhood::with_capacity(d))
+                .collect_vec();
+            Self { neighbors, m: 0 }
+        };
+
+        if known_unique {
+            for &(u, v) in edges {
+                graph.neighbors[u as usize].neighbors.push(v);
+                graph.neighbors[u as usize].num_out += 1;
+            }
+
+            for &(u, v) in edges {
+                graph.neighbors[v as usize].in_add(u);
+            }
+
+            graph.m = edges.len();
+        } else {
+            for &(u, v) in edges {
+                graph.try_add_edge(u, v);
+            }
+        }
+
+        graph
+    }
+}
+
 graph_macros::impl_helper_graph_from_edges!(AdjArrayUndir);
 graph_macros::impl_helper_graph_debug!(AdjArrayUndir);
 
@@ -73,6 +111,8 @@ impl AdjacencyListIn for AdjArrayUndir {
 
 impl AdjacencyListUndir for AdjArrayUndir {
     type IterUndir<'a> = impl Iterator<Item = Node> + 'a;
+    type IterOutOnly<'a> = impl Iterator<Item = Node> + 'a;
+    type IterInOnly<'a> = impl Iterator<Item = Node> + 'a;
 
     fn undir_neighbors(&self, u: Node) -> Self::IterUndir<'_> {
         self.neighbors[u as usize].undir_neighbors().iter().copied()
@@ -80,6 +120,20 @@ impl AdjacencyListUndir for AdjArrayUndir {
 
     fn undir_degree(&self, u: Node) -> Node {
         self.neighbors[u as usize].undir_neighbors().len() as Node
+    }
+
+    fn out_only_neighbors(&self, u: Node) -> Self::IterOutOnly<'_> {
+        self.neighbors[u as usize]
+            .out_only_neighbors()
+            .iter()
+            .copied()
+    }
+
+    fn in_only_neighbors(&self, u: Node) -> Self::IterInOnly<'_> {
+        self.neighbors[u as usize]
+            .in_only_neighbors()
+            .iter()
+            .copied()
     }
 }
 
