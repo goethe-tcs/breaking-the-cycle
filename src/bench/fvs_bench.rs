@@ -16,7 +16,7 @@ use crate::bench::io::other_io_error;
 use crate::bitset::BitSet;
 use crate::graph::io::{FileFormat, GraphRead};
 use crate::graph::*;
-use crate::pre_processor_reduction::{PreprocessorReduction, ReductionState};
+use crate::kernelization::{PreprocessorReduction, ReductionState};
 
 /// Measures the computation time and solution size of multiple DFVS-algorithms against multiple
 /// graphs. Each algorithm is run for each graph at least once.

@@ -14,7 +14,7 @@ use dfvs::bitset::BitSet;
 use dfvs::exact::branch_and_bound::branch_and_bound;
 use dfvs::graph::adj_array::AdjArrayIn;
 use dfvs::graph::io::MetisRead;
-use dfvs::pre_processor_reduction::{PreprocessorReduction, ReductionState};
+use dfvs::kernelization::{PreprocessorReduction, ReductionState};
 
 type Graph = AdjArrayIn;
 

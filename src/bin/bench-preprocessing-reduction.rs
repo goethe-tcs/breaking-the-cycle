@@ -1,6 +1,6 @@
 use dfvs::graph::io::MetisRead;
 use dfvs::graph::*;
-use dfvs::pre_processor_reduction::*;
+use dfvs::kernelization::*;
 use glob::glob;
 use log::LevelFilter;
 use std::fs::File;
