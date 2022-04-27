@@ -11,7 +11,7 @@ use std::time::Instant;
 use structopt::StructOpt;
 
 use dfvs::bitset::BitSet;
-use dfvs::exact::branch_and_bound::branch_and_bound;
+use dfvs::exact::branch_and_bound_matrix::branch_and_bound_matrix;
 use dfvs::graph::adj_array::AdjArrayIn;
 use dfvs::graph::io::MetisRead;
 use dfvs::kernelization::{PreprocessorReduction, ReductionState};
@@ -188,7 +188,7 @@ fn process_graph(_opt: &Opt, graph: Graph) -> std::io::Result<Vec<Node>> {
         }
 
         let start = Instant::now();
-        let solution = branch_and_bound(&scc, None).unwrap();
+        let solution = branch_and_bound_matrix(&scc, None).unwrap();
         let mapper = NodeMapper::compose(&red_mapper, &mapper);
 
         info!(
