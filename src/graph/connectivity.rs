@@ -385,7 +385,7 @@ pub mod tests {
             }
         }
 
-        /// the graph K4
+        // the graph K4
         let graph = AdjArray::from(&c1);
 
         let mut joined: Vec<_> = c1;
