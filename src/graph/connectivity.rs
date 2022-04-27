@@ -229,7 +229,7 @@ impl<'a, T: AdjacencyList> StronglyConnected<'a, T> {
     }
 }
 
-pub struct CutVertices<'a, T: AdjacencyList> {
+pub struct UndirectedCutVertices<'a, T: AdjacencyList> {
     graph: &'a T,
     low_point: Vec<Node>,
     dfs_num: Vec<Node>,
@@ -239,7 +239,7 @@ pub struct CutVertices<'a, T: AdjacencyList> {
     parent: Vec<Option<Node>>,
 }
 
-impl<'a, T: AdjacencyList> CutVertices<'a, T> {
+impl<'a, T: AdjacencyList> UndirectedCutVertices<'a, T> {
     /// Assumes the graph is connected, and for each edge (u, v) the edge (v, u) exists
     pub fn new(graph: &'a T) -> Self {
         let n = graph.len();
@@ -391,13 +391,13 @@ pub mod tests {
         let mut joined: Vec<_> = c1;
         joined.extend_from_slice(&c2);
 
-        let cut_vertices = CutVertices::new(&graph).compute();
+        let cut_vertices = UndirectedCutVertices::new(&graph).compute();
         assert_eq!(cut_vertices.cardinality(), 0);
 
         // The graph constructed by taking K4 and K5 and joining it at one vertex
         let graph = AdjArray::from(&joined);
 
-        let cut_vertices = CutVertices::new(&graph).compute();
+        let cut_vertices = UndirectedCutVertices::new(&graph).compute();
         assert_eq!(cut_vertices.cardinality(), 1);
 
         // A case where only the root 0 is a cut vertex
@@ -416,7 +416,7 @@ pub mod tests {
 
         let graph = AdjArray::from(&edges);
 
-        let cut_vertices = CutVertices::new(&graph).compute();
+        let cut_vertices = UndirectedCutVertices::new(&graph).compute();
         assert_eq!(cut_vertices.cardinality(), 1);
     }
 
