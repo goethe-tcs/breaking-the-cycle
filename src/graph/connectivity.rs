@@ -1,5 +1,7 @@
 use super::*;
+use crate::bitset::BitSet;
 use itertools::Itertools;
+use std::cmp::min;
 use std::iter::FusedIterator;
 
 pub trait Connectivity: AdjacencyList + Traversal + Sized {
@@ -227,6 +229,73 @@ impl<'a, T: AdjacencyList> StronglyConnected<'a, T> {
     }
 }
 
+pub struct UndirectedCutVertices<'a, T: AdjacencyList> {
+    graph: &'a T,
+    low_point: Vec<Node>,
+    dfs_num: Vec<Node>,
+    visited: BitSet,
+    articulation_points: BitSet,
+    current_dfs_num: Node,
+    parent: Vec<Option<Node>>,
+}
+
+impl<'a, T: AdjacencyList> UndirectedCutVertices<'a, T> {
+    /// Assumes the graph is connected, and for each edge (u, v) the edge (v, u) exists
+    pub fn new(graph: &'a T) -> Self {
+        let n = graph.len();
+        Self {
+            graph,
+            low_point: vec![0; n],
+            dfs_num: vec![0; n],
+            visited: BitSet::new(n),
+            parent: vec![None; n],
+            articulation_points: BitSet::new(n),
+            current_dfs_num: 0,
+        }
+    }
+
+    pub fn compute(mut self) -> BitSet {
+        self.compute_recursive(0);
+        self.articulation_points
+    }
+
+    fn compute_recursive(&mut self, u: Node) {
+        self.visited.set_bit(u as usize);
+        self.current_dfs_num += 1;
+        self.dfs_num[u as usize] = self.current_dfs_num;
+        self.low_point[u as usize] = self.current_dfs_num;
+
+        // counts number of tree neighbors
+        let mut tree_neighbors = 0;
+        for v in self.graph.out_neighbors(u) {
+            // tree edge
+            if !self.visited[v as usize] {
+                tree_neighbors += 1;
+                self.parent[v as usize] = Some(u);
+                self.compute_recursive(v);
+                self.low_point[u as usize] =
+                    min(self.low_point[u as usize], self.low_point[v as usize]);
+
+                if self.parent[u as usize].is_some()
+                    && self.low_point[v as usize] >= self.dfs_num[u as usize]
+                {
+                    self.articulation_points.set_bit(u as usize);
+                }
+            } else {
+                // back edge, update value if v is not the parent
+                if self.parent[u as usize].is_none() || self.parent[u as usize].unwrap() != v {
+                    self.low_point[u as usize] =
+                        min(self.low_point[u as usize], self.dfs_num[v as usize]);
+                }
+            }
+        }
+
+        if self.parent[u as usize].is_none() && tree_neighbors > 1 {
+            self.articulation_points.set_bit(u as usize);
+        }
+    }
+}
+
 impl<'a, T: AdjacencyList> Iterator for StronglyConnected<'a, T> {
     type Item = Vec<Node>;
 
@@ -297,6 +366,59 @@ pub mod tests {
     use crate::random_models::gnp::generate_gnp;
     use rand::SeedableRng;
     use rand_pcg::Pcg64;
+
+    #[test]
+    pub fn cut_vertex() {
+        let mut c1 = vec![];
+        for u in 0..4 {
+            for v in (u + 1)..4 {
+                c1.push((u, v));
+                c1.push((v, u));
+            }
+        }
+
+        let mut c2 = vec![];
+        for u in 3..8 {
+            for v in (u + 1)..8 {
+                c2.push((u, v));
+                c2.push((v, u));
+            }
+        }
+
+        // the graph K4
+        let graph = AdjArray::from(&c1);
+
+        let mut joined: Vec<_> = c1;
+        joined.extend_from_slice(&c2);
+
+        let cut_vertices = UndirectedCutVertices::new(&graph).compute();
+        assert_eq!(cut_vertices.cardinality(), 0);
+
+        // The graph constructed by taking K4 and K5 and joining it at one vertex
+        let graph = AdjArray::from(&joined);
+
+        let cut_vertices = UndirectedCutVertices::new(&graph).compute();
+        assert_eq!(cut_vertices.cardinality(), 1);
+
+        // A case where only the root 0 is a cut vertex
+        let mut edges = vec![];
+        edges.push((0, 1));
+        edges.push((0, 2));
+
+        edges.push((2, 3));
+        edges.push((3, 4));
+
+        edges.push((0, 3));
+        edges.push((0, 4));
+
+        let tmp: Vec<_> = edges.iter().copied().map(|(u, v)| (v, u)).collect();
+        edges.extend_from_slice(&tmp);
+
+        let graph = AdjArray::from(&edges);
+
+        let cut_vertices = UndirectedCutVertices::new(&graph).compute();
+        assert_eq!(cut_vertices.cardinality(), 1);
+    }
 
     #[test]
     pub fn scc() {
