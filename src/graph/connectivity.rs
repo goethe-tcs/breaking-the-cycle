@@ -371,7 +371,7 @@ pub mod tests {
     pub fn cut_vertex() {
         let mut c1 = vec![];
         for u in 0..4 {
-            for v in (u+1)..4 {
+            for v in (u + 1)..4 {
                 c1.push((u, v));
                 c1.push((v, u));
             }
@@ -379,7 +379,7 @@ pub mod tests {
 
         let mut c2 = vec![];
         for u in 3..8 {
-            for v in (u+1)..8 {
+            for v in (u + 1)..8 {
                 c2.push((u, v));
                 c2.push((v, u));
             }
