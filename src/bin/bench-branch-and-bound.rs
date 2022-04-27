@@ -2,8 +2,10 @@ extern crate core;
 
 use dfvs::bench::fvs_bench::{FvsBench, InnerIterations, Iterations};
 use dfvs::bench::io::bench_dir;
-use dfvs::exact::branch_and_bound::bb_stats::BBStats;
-use dfvs::exact::branch_and_bound::{branch_and_bound, branch_and_bound_stats};
+use dfvs::exact::branch_and_bound_matrix::bb_stats::BBStats;
+use dfvs::exact::branch_and_bound_matrix::{
+    branch_and_bound_matrix, branch_and_bound_matrix_stats,
+};
 use dfvs::graph::io::FileFormat;
 use dfvs::graph::matrix::AdjMatrixIn;
 use dfvs::graph::{GraphEdgeEditing, GraphOrder};
@@ -110,13 +112,13 @@ fn main() -> std::io::Result<()> {
             |graph, buffer, iteration, num_iterations| {
                 if iteration == num_iterations - 1 {
                     let mut stats = BBStats::new();
-                    let solution = branch_and_bound_stats(&graph, None, &mut stats).unwrap();
+                    let solution = branch_and_bound_matrix_stats(&graph, None, &mut stats).unwrap();
 
                     stats.write_to_buffer(buffer);
 
                     solution
                 } else {
-                    branch_and_bound(&graph, None).unwrap()
+                    branch_and_bound_matrix(&graph, None).unwrap()
                 }
             },
         )

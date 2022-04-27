@@ -1,7 +1,5 @@
 use crate::graph::{AdjacencyList, GraphEdgeEditing, Node, Traversal};
-use crate::utils::int_iterator::IntegerIterators;
-use crate::utils::int_subsets::AllIntSubsets;
-use bitintr::Popcnt;
+use crate::utils::*;
 use itertools::Itertools;
 
 /// A simple implementation of an exhaustive search to provide cross-validation
@@ -24,7 +22,7 @@ where
         AllIntSubsets::start_with_bits_set(lower_bound.unwrap_or(0), graph.len() as u32);
 
     let smallest_solution = all_possible_solutions
-        .take_while(|&x| upper_bound.map_or(true, |up| x.popcnt() <= up.into()))
+        .take_while(|&x| upper_bound.map_or(true, |up| x.count_ones() <= up))
         .find(|&sol| is_valid_dfvs(graph, sol.iter_ones()))?;
 
     Some(

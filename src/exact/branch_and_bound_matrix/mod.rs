@@ -1,36 +1,31 @@
 use crate::algorithm::*;
 use crate::graph::*;
-use crate::utils::int_iterator::IntegerIterators;
-use bitintr::Pext;
+use crate::utils::*;
+use itertools::Itertools;
 use num::cast::AsPrimitive;
 use num::PrimInt;
 
-mod bb_core;
-mod bb_graph;
+#[cfg(target_arch = "x86_64")]
+mod avx2;
+pub mod bb_core;
+pub mod bb_graph;
 pub mod bb_stats;
 mod generic_int_graph;
-mod graph4;
-mod graph8;
 mod scc_iterator;
-mod solution;
 
-use bb_core::*;
-use bb_graph::*;
-use generic_int_graph::*;
-use graph4::*;
-use graph8::*;
+pub use bb_core::*;
+pub use bb_graph::*;
+pub use generic_int_graph::*;
 use scc_iterator::*;
-use solution::*;
 
-use crate::exact::branch_and_bound::bb_stats::BBStats;
-pub use graph4::build_lookup_table;
+use bb_stats::BBStats;
 
-pub struct BranchAndBound<'a, G> {
+pub struct BranchAndBoundMatrix<'a, G> {
     graph: &'a G,
     solution: Option<Vec<Node>>,
 }
 
-impl<'a, G> BranchAndBound<'a, G>
+impl<'a, G> BranchAndBoundMatrix<'a, G>
 where
     G: 'a + AdjacencyList,
 {
@@ -42,12 +37,12 @@ where
     }
 }
 
-impl<'a, G> IterativeAlgorithm for BranchAndBound<'a, G>
+impl<'a, G> IterativeAlgorithm for BranchAndBoundMatrix<'a, G>
 where
     G: 'a + AdjacencyList,
 {
     fn execute_step(&mut self) {
-        self.solution = branch_and_bound(self.graph, None);
+        self.solution = branch_and_bound_matrix(self.graph, None);
         assert!(self.solution.is_some());
     }
 
@@ -60,42 +55,43 @@ where
     }
 }
 
-impl<'a, G> TerminatingIterativeAlgorithm for BranchAndBound<'a, G> where G: 'a + AdjacencyList {}
+impl<'a, G> TerminatingIterativeAlgorithm for BranchAndBoundMatrix<'a, G> where G: 'a + AdjacencyList
+{}
 
 /// Return the smallest dfvs with up to `upper_bound` nodes (inclusive).
-pub fn branch_and_bound<G: AdjacencyList>(
+pub fn branch_and_bound_matrix<G: AdjacencyList>(
     graph: &G,
     upper_bound: Option<Node>,
 ) -> Option<Vec<Node>> {
-    branch_and_bound_stats(graph, upper_bound, &mut BBStats::new())
+    branch_and_bound_matrix_stats(graph, upper_bound, &mut BBStats::new())
 }
 
-pub fn branch_and_bound_stats<G: AdjacencyList>(
+pub fn branch_and_bound_matrix_stats<G: AdjacencyList>(
     graph: &G,
     upper_bound: Option<Node>,
     stats: &mut BBStats,
 ) -> Option<Vec<Node>> {
-    let upper_bound = upper_bound.unwrap_or_else(|| graph.number_of_nodes()) + 1;
+    fn solution_to_vec<T: IntegerIterators>(s: Option<T>) -> Option<Vec<Node>> {
+        s.map(|s| s.iter_ones().map(|x| x as Node).collect_vec())
+    }
 
-    let solution = if graph.len() > 32 {
-        let graph = GenericIntGraph::<u64, 64>::from(graph);
-        branch_and_bound_impl_start(&graph, upper_bound, stats)
+    let upper_bound = upper_bound.unwrap_or_else(|| graph.number_of_nodes()) + 1;
+    if graph.len() > 64 {
+        let graph = Graph128::from(graph);
+        solution_to_vec(branch_and_bound_impl_sccs(&graph, upper_bound, stats))
+    } else if graph.len() > 32 {
+        let graph = Graph64::from(graph);
+        solution_to_vec(branch_and_bound_impl_sccs(&graph, upper_bound, stats))
     } else if graph.len() > 16 {
-        let graph = GenericIntGraph::<u32, 32>::from(graph);
-        branch_and_bound_impl_start(&graph, upper_bound, stats)
+        let graph = Graph32::from(graph);
+        solution_to_vec(branch_and_bound_impl_sccs(&graph, upper_bound, stats))
     } else if graph.len() > 8 {
-        let graph = GenericIntGraph::<u16, 16>::from(graph);
-        branch_and_bound_impl_start(&graph, upper_bound, stats)
+        let graph = Graph16::from(graph);
+        solution_to_vec(branch_and_bound_impl_sccs(&graph, upper_bound, stats))
     } else {
         let graph = Graph8::from(graph);
-        branch_and_bound_impl_start(&graph, upper_bound, stats)
-    }?;
-
-    Some(solution.included())
-}
-
-trait BBSolver {
-    fn branch_and_bound(graph: &Self, limit: Node) -> Solution;
+        solution_to_vec(branch_and_bound_impl_sccs(&graph, upper_bound, stats))
+    }
 }
 
 #[cfg(test)]
@@ -103,6 +99,7 @@ mod tests {
     use super::*;
     use crate::bitset::BitSet;
     use crate::random_models::gnp::generate_gnp;
+    use crate::random_models::planted_cycles::generate_planted_cycles;
     use rand::prelude::SliceRandom;
     use rand::SeedableRng;
     use rand_pcg::Pcg64Mcg;
@@ -112,7 +109,7 @@ mod tests {
         {
             // graph is acyclic -> solution {}
             assert_eq!(
-                branch_and_bound(&AdjListMatrix::from(&[(0, 1)]), None).unwrap(),
+                branch_and_bound_matrix(&AdjListMatrix::from(&[(0, 1)]), None).unwrap(),
                 vec![]
             );
         }
@@ -120,7 +117,7 @@ mod tests {
         {
             // graph has loop at 0 -> solution {0}
             assert_eq!(
-                branch_and_bound(&AdjListMatrix::from(&[(0, 1), (0, 0)]), None,).unwrap(),
+                branch_and_bound_matrix(&AdjListMatrix::from(&[(0, 1), (0, 0)]), None,).unwrap(),
                 vec![0]
             );
         }
@@ -128,7 +125,7 @@ mod tests {
         {
             // graph has loop at 0 -> solution {0}
             assert_eq!(
-                branch_and_bound(&AdjListMatrix::from(&[(0, 1), (0, 0)]), None,).unwrap(),
+                branch_and_bound_matrix(&AdjListMatrix::from(&[(0, 1), (0, 0)]), None,).unwrap(),
                 vec![0]
             );
         }
@@ -136,29 +133,31 @@ mod tests {
         {
             // graph has loop at 0, 3 -> solution {0, 3}
             assert_eq!(
-                branch_and_bound(&AdjListMatrix::from(&[(0, 1), (0, 0), (3, 3)]), None,).unwrap(),
+                branch_and_bound_matrix(&AdjListMatrix::from(&[(0, 1), (0, 0), (3, 3)]), None,)
+                    .unwrap(),
                 vec![0, 3]
             );
         }
 
         {
             // no solution, as limit too low
-            assert!(
-                branch_and_bound(&AdjListMatrix::from(&[(0, 1), (0, 0), (3, 3)]), Some(1),)
-                    .is_none()
-            );
+            assert!(branch_and_bound_matrix(
+                &AdjListMatrix::from(&[(0, 1), (0, 0), (3, 3)]),
+                Some(1),
+            )
+            .is_none());
         }
 
         {
             // graph has loop at 2 -> solution {2}
             let graph = AdjListMatrix::from(&[(0, 1), (1, 2), (2, 3), (3, 0), (2, 2)]);
-            assert_eq!(branch_and_bound(&graph, None).unwrap(), vec![2]);
+            assert_eq!(branch_and_bound_matrix(&graph, None).unwrap(), vec![2]);
         }
 
         {
             // graph has loop at 0, 3 -> solution {0, 3}
             let graph = AdjListMatrix::from(&[(0, 0), (1, 2), (2, 3), (3, 4), (4, 1), (3, 3)]);
-            assert_eq!(branch_and_bound(&graph, None).unwrap(), vec![0, 3]);
+            assert_eq!(branch_and_bound_matrix(&graph, None).unwrap(), vec![0, 3]);
         }
 
         {
@@ -168,7 +167,7 @@ mod tests {
 
             for _ in 0..10 {
                 nodes.shuffle(&mut rand::thread_rng());
-                let solution = branch_and_bound(&graph, None).unwrap();
+                let solution = branch_and_bound_matrix(&graph, None).unwrap();
                 assert_eq!(solution.len(), 3);
                 assert_eq!(solution[0], 0);
                 assert!(1 <= solution[1] && solution[1] < 5);
@@ -180,14 +179,14 @@ mod tests {
     #[test]
     fn bb_scc_specific() {
         // limit reached in first scc
-        assert!(branch_and_bound(
+        assert!(branch_and_bound_matrix(
             &AdjListMatrix::from(&[(0, 1), (1, 0), (2, 3), (3, 2)]),
             Some(1),
         )
         .is_none());
 
         // limit reached in second scc
-        assert!(branch_and_bound(
+        assert!(branch_and_bound_matrix(
             &AdjListMatrix::from(&[
                 (0, 1),
                 (1, 0),
@@ -203,16 +202,17 @@ mod tests {
         .is_none());
 
         assert_eq!(
-            branch_and_bound(
+            branch_and_bound_matrix(
                 &AdjListMatrix::from(&[(0, 1), (0, 2), (1, 1), (1, 2), (2, 0),]),
                 Some(3),
             )
-            .unwrap(),
-            vec![0, 1]
+            .unwrap()
+            .len(),
+            2
         );
 
         assert_eq!(
-            branch_and_bound(
+            branch_and_bound_matrix(
                 &AdjListMatrix::from(&[
                     (0, 1),
                     (1, 0),
@@ -225,12 +225,13 @@ mod tests {
                 ]),
                 Some(4),
             )
-            .unwrap(),
-            vec![0, 2, 3, 5]
+            .unwrap()
+            .len(),
+            4
         );
 
         assert_eq!(
-            branch_and_bound(
+            branch_and_bound_matrix(
                 &AdjListMatrix::from(&[
                     (0, 3),
                     (1, 0),
@@ -243,22 +244,24 @@ mod tests {
                 ]),
                 None,
             )
-            .unwrap(),
-            vec![1, 2]
+            .unwrap()
+            .len(),
+            2
         );
 
         assert_eq!(
-            branch_and_bound(
+            branch_and_bound_matrix(
                 &AdjListMatrix::from(&[(0, 3), (1, 0), (1, 2), (1, 3), (2, 4), (3, 1), (4, 2),]),
                 None,
             )
-            .unwrap(),
-            vec![1, 2]
+            .unwrap()
+            .len(),
+            2
         );
 
         // several recursive sccs when removing a node
         assert_eq!(
-            branch_and_bound(
+            branch_and_bound_matrix(
                 &AdjListMatrix::from(&[
                     (0, 1),
                     (1, 4),
@@ -272,8 +275,9 @@ mod tests {
                 ]),
                 None,
             )
-            .unwrap(),
-            vec![2, 3]
+            .unwrap()
+            .len(),
+            2
         );
     }
 
@@ -297,7 +301,7 @@ mod tests {
                         graph.try_remove_edge(i, i);
                     }
 
-                    let solution = branch_and_bound(&graph, None).unwrap();
+                    let solution = branch_and_bound_matrix(&graph, None).unwrap();
                     let solution_mask = {
                         let mut set = BitSet::new_all_set(graph.len());
                         for node in &solution {
@@ -308,6 +312,33 @@ mod tests {
 
                     assert_eq!(solution.len(), solution_sizes[((n - 10) * 3 + i) as usize]);
                     assert!(graph.vertex_induced(&solution_mask).0.is_acyclic());
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn planted_cycles() {
+        let mut gen = Pcg64Mcg::seed_from_u64(234);
+
+        for k in [1, 3] {
+            for num_cycles in [k, 2 * k] {
+                for cycle_len in [1, 2] {
+                    for offset in [1, 5] {
+                        let n = num_cycles * cycle_len + k + offset;
+                        for avg_deg in [1.5, 5.0] {
+                            if 2.0 * avg_deg >= n as f64 {
+                                continue;
+                            }
+
+                            let (graph, solution): (AdjArray, Vec<_>) = generate_planted_cycles(
+                                &mut gen, n, avg_deg, k, num_cycles, cycle_len,
+                            );
+                            let computed = branch_and_bound_matrix(&graph, None).unwrap();
+
+                            assert_eq!(solution.len(), computed.len());
+                        }
+                    }
                 }
             }
         }
