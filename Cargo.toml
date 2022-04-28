@@ -47,6 +47,11 @@ required-features = ["cli"]
 test = false
 
 [[bin]]
+name = "optil_exact"
+path = "src/bin/optil_exact.rs"
+test = false
+
+[[bin]]
 name = "gen-gnp"
 path = "src/bin/gen-gnp.rs"
 required-features = ["cli"]

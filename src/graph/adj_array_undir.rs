@@ -135,6 +135,11 @@ impl AdjacencyListUndir for AdjArrayUndir {
             .iter()
             .copied()
     }
+
+    fn has_dir_edges(&self, u: Node) -> bool {
+        !self.neighbors[u as usize].out_only_neighbors().is_empty()
+            || !self.neighbors[u as usize].in_only_neighbors().is_empty()
+    }
 }
 
 impl AdjacencyTest for AdjArrayUndir {
@@ -144,6 +149,12 @@ impl AdjacencyTest for AdjArrayUndir {
         } else {
             self.out_neighbors(u).contains(&v)
         }
+    }
+}
+
+impl AdjacencyTestUndir for AdjArrayUndir {
+    fn has_undir_edge(&self, u: Node, v: Node) -> bool {
+        self.undir_neighbors(u).contains(&v)
     }
 }
 

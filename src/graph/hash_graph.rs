@@ -150,13 +150,12 @@ impl GraphEdgeEditing for HashGraph {
 
     /// Removes all edges into node u, i.e. post-condition the in-degree is 0
     fn remove_edges_into_node(&mut self, u: Node) {
-        let mut edges: Vec<_> = Default::default();
-        for v in self.vertices() {
-            if self.adj.get(&v).unwrap().contains(&u) {
-                edges.push(v);
-            }
-        }
+        let edges = self
+            .vertices()
+            .filter(|&v| self.adj.get(&v).unwrap().contains(&u))
+            .collect_vec();
         self.m -= edges.len();
+
         for v in edges {
             self.adj.get_mut(&v).unwrap().remove(&u);
         }

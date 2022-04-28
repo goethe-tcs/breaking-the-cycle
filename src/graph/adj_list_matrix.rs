@@ -18,7 +18,7 @@ pub struct AdjListMatrix {
 #[derive(Clone, Default)]
 pub struct AdjListMatrixIn {
     adj_out: AdjListMatrix,
-    adj_in: AdjListMatrix,
+    adj_in: AdjArray,
 }
 
 graph_macros::impl_helper_graph_debug!(AdjListMatrix);
@@ -32,7 +32,7 @@ graph_macros::impl_helper_adjacency_list!(AdjListMatrix, adj_array);
 graph_macros::impl_helper_adjacency_test!(AdjListMatrix, adj_matrix);
 graph_macros::impl_helper_graph_order!(AdjListMatrix, adj_array);
 graph_macros::impl_helper_adjacency_list!(AdjListMatrixIn, adj_out);
-graph_macros::impl_helper_adjacency_test_linear_search_bi_directed!(AdjListMatrixIn);
+graph_macros::impl_helper_adjacency_test!(AdjListMatrixIn, adj_out);
 graph_macros::impl_helper_graph_order!(AdjListMatrixIn, adj_out);
 graph_macros::impl_helper_undir_adjacency_test!(AdjListMatrixIn);
 graph_macros::impl_helper_adjacency_list_undir!(AdjListMatrixIn);
@@ -93,7 +93,7 @@ impl GraphEdgeEditing for AdjListMatrixIn {
     /// Removes all edges into node u, i.e. post-condition the in-degree is 0
     fn remove_edges_into_node(&mut self, u: Node) {
         // contains all edges into u
-        let edges: Vec<_> = self.adj_in.adj_array.out_neighbors(u).collect();
+        let edges: Vec<_> = self.adj_in.out_neighbors(u).collect();
         for v in edges {
             self.remove_edge(v, u);
         }
@@ -128,7 +128,7 @@ impl GraphNew for AdjListMatrixIn {
     /// Creates a new AdjListMatrix with *V={0,1,...,n-1}* and without any edges.
     fn new(n: usize) -> Self {
         Self {
-            adj_in: AdjListMatrix::new(n),
+            adj_in: AdjArray::new(n),
             adj_out: AdjListMatrix::new(n),
         }
     }

@@ -112,10 +112,11 @@ fn process_file(opt: &Opt, graph_path: &Path) -> std::io::Result<()> {
     trace!("Reading file {:?}", graph_path);
     let file_format = FileFormat::from_str(&file_extension)?;
     let graph = AdjArrayIn::try_read_graph(file_format, graph_path)?;
+    let n = graph.len();
 
     trace!("Reducing graph {:?}", graph_path);
     let mut reduct_state = PreprocessorReduction::from(graph);
-    reduct_state.apply_rules_exhaustively(false);
+    reduct_state.apply_rules_exhaustively(n < 10000);
     let reduced_graph = reduct_state.graph().remove_disconnected_verts().0;
 
     let output_dir = opt

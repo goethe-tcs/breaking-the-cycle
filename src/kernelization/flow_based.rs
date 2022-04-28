@@ -385,7 +385,7 @@ mod tests {
         ]);
 
         let mut test_pre_process = PreprocessorReduction::from(graph);
-        test_pre_process.apply_di_cliques_reduction();
+        test_pre_process.apply_rule_di_cliques();
         let mut fvs = Vec::from(test_pre_process.fvs());
         fvs.sort();
         assert_eq!(fvs, vec![1, 4, 5, 6, 8]);

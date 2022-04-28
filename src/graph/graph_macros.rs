@@ -1,6 +1,16 @@
 // cargo check does not detect imports and macro use in test modules. This is the only workaround
 #![allow(unused_macros, unused_imports)]
 
+macro_rules! impl_helper_graph_default {
+    ($t:ident) => {
+        impl Default for $t {
+            fn default() -> Self {
+                $t::new(0)
+            }
+        }
+    };
+}
+
 macro_rules! impl_helper_graph_from_edges {
     ($t:ident) => {
         impl<'a, T: IntoIterator<Item = &'a Edge> + Clone> From<T> for $t {
@@ -621,6 +631,7 @@ pub(super) use impl_helper_adjacency_list_undir;
 pub(super) use impl_helper_adjacency_test;
 pub(super) use impl_helper_adjacency_test_linear_search_bi_directed;
 pub(super) use impl_helper_graph_debug;
+pub(super) use impl_helper_graph_default;
 pub(super) use impl_helper_graph_from_edges;
 pub(super) use impl_helper_graph_from_slice;
 pub(super) use impl_helper_graph_order;

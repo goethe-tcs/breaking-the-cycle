@@ -5,6 +5,8 @@
 #![allow(incomplete_features)]
 #![feature(generic_const_exprs)]
 #![feature(custom_test_frameworks)]
+#![feature(stdsimd)]
+#![feature(is_sorted)]
 #![feature(trait_alias)]
 
 extern crate core;
