@@ -1,4 +1,4 @@
-//#![deny(warnings)]
+#![deny(warnings)]
 
 use dfvs::graph::*;
 use itertools::Itertools;
@@ -11,12 +11,13 @@ use std::time::Instant;
 use structopt::StructOpt;
 
 use dfvs::bitset::BitSet;
-use dfvs::exact::branch_and_bound_matrix::branch_and_bound_matrix;
-use dfvs::graph::adj_array::AdjArrayIn;
 use dfvs::graph::io::MetisRead;
-use dfvs::kernelization::{PreprocessorReduction, ReductionState};
+use dfvs::kernelization::*;
 
-type Graph = AdjArrayIn;
+type Graph = AdjArrayUndir;
+
+use dfvs::algorithm::TerminatingIterativeAlgorithm;
+use dfvs::exact::BranchAndBound;
 
 #[cfg(feature = "jemallocator")]
 #[cfg(not(target_env = "msvc"))]
@@ -108,7 +109,13 @@ impl TryFrom<&str> for OutputFormat {
 
 fn main() -> std::io::Result<()> {
     let opt = Opt::from_args();
+    //let opt = Opt::from_iter(std::iter::empty::<std::ffi::OsString>());
     dfvs::log::build_pace_logger_for_verbosity(LevelFilter::Warn, opt.verbose);
+
+    #[cfg(target_arch = "x86_64")]
+    if is_x86_feature_detected!("avx2") {
+        info!("With AVX2 support");
+    }
 
     let mode: Solver =
         Solver::try_from(opt.mode.as_str()).expect("Failed parsing 'mode' parameter: ");
@@ -118,6 +125,7 @@ fn main() -> std::io::Result<()> {
 
     let graph: Graph = match &opt.input {
         Some(path) => {
+            info!("Read file {:?}", path);
             let file = File::open(path)?;
             Graph::try_read_metis(BufReader::new(file))?
         }
@@ -133,10 +141,57 @@ fn main() -> std::io::Result<()> {
         graph.number_of_edges()
     );
 
-    let mut solution = match mode {
-        Solver::Exact => process_graph(&opt, graph.clone())?,
-        _ => panic!("Solver not supported"),
-    };
+    let mut super_reducer = SuperReducer::with_settings(
+        graph.clone(),
+        vec![
+            Rules::Rule1,
+            Rules::Rule3,
+            Rules::Rule4,
+            Rules::RestartRules,
+            Rules::PIE,
+            Rules::DiClique,
+            Rules::C4,
+            Rules::DOMN,
+            Rules::RestartRules,
+            Rules::Unconfined,
+            Rules::STOP,
+            Rules::CompleteNode,
+            Rules::Crown(5000),
+            Rules::Rule5(5000),
+        ],
+        true,
+    );
+
+    let (solution, sccs) = super_reducer.reduce().unwrap();
+    let mut solution = solution.clone();
+    let mut sccs = sccs.clone();
+    sccs.sort_by_key(|(g, _)| g.len());
+
+    for (graph, mapper) in sccs {
+        let start = Instant::now();
+
+        let scc_solution = match mode {
+            Solver::Exact => {
+                let mut algo = BranchAndBound::with_paranoia(graph.clone());
+                algo.run_to_completion()
+                    .unwrap()
+                    .iter()
+                    .copied()
+                    .collect_vec()
+            }
+            _ => panic!("Solver not supported"),
+        };
+
+        solution.extend(scc_solution.iter().map(|&x| mapper.old_id_of(x).unwrap()));
+        info!(
+            "Processed SCC with n={:>5} and m={:>7}. Solution cardinality {:>5}. Elapsed: {:>8}ms",
+            graph.number_of_nodes(),
+            graph.number_of_edges(),
+            scc_solution.len(),
+            start.elapsed().as_millis()
+        );
+    }
+
     solution.sort_unstable();
 
     info!("Solution has size {}", solution.len());
@@ -144,9 +199,12 @@ fn main() -> std::io::Result<()> {
     // Verify solution
     {
         info!("Verify solution {}", solution.len());
-        let sol = graph
-            .vertex_induced(&BitSet::new_all_set_but(graph.len(), solution.clone()))
-            .0;
+        let mask = BitSet::new_all_set_but(graph.len(), solution.iter().copied());
+
+        // no doubles
+        assert_eq!(graph.len() - mask.cardinality(), solution.len());
+
+        let sol = graph.vertex_induced(&mask).0;
         assert!(sol.is_acyclic());
     }
 
@@ -161,50 +219,6 @@ fn main() -> std::io::Result<()> {
     info!("Done");
 
     Ok(())
-}
-
-fn process_graph(_opt: &Opt, graph: Graph) -> std::io::Result<Vec<Node>> {
-    let mut reduct_state = PreprocessorReduction::from(graph);
-    reduct_state.apply_rules_exhaustively(true);
-    let (reduced_graph, red_mapper) = reduct_state.graph().remove_disconnected_verts();
-
-    let mut fvs = reduct_state.fvs().to_vec();
-
-    trace!("Splitting kernel into sccs...");
-    let sccs = reduced_graph
-        .strongly_connected_components_no_singletons()
-        .into_iter()
-        .map(|scc| {
-            reduced_graph.vertex_induced(&BitSet::new_all_unset_but(reduced_graph.len(), scc))
-        });
-
-    for (scc, mapper) in sccs {
-        if scc.number_of_nodes() >= 64 {
-            panic!(
-                "Cannot process SCCs with n={} and m={}",
-                scc.number_of_nodes(),
-                scc.number_of_edges()
-            );
-        }
-
-        let start = Instant::now();
-        let solution = branch_and_bound_matrix(&scc, None).unwrap();
-        let mapper = NodeMapper::compose(&red_mapper, &mapper);
-
-        info!(
-            "Processed SCC with n={:4}, m={:6} k={:4} in {:6}us",
-            scc.number_of_nodes(),
-            scc.number_of_edges(),
-            solution.len(),
-            start.elapsed().as_micros()
-        );
-
-        for x in solution {
-            fvs.push(mapper.old_id_of(x).unwrap());
-        }
-    }
-
-    Ok(fvs)
 }
 
 fn output_result<W: Write>(

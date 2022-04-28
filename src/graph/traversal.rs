@@ -1,6 +1,6 @@
 use super::*;
 use crate::bitset::BitSet;
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::marker::PhantomData;
 
 pub trait WithGraphRef<G> {
@@ -296,6 +296,72 @@ impl<'a, G: AdjacencyList, S: NodeSequencer<I>, I: SequencedItem> TraversalSearc
     }
 }
 
+/*
+//////////////////////////////////////////////////////////////////////////////////// BFS With Layers
+pub struct BFSWithLayers<'a, G> {
+    graph: &'a G,
+    start: Node,
+    visited: BitSet,
+    layer: Node,
+    queue: VecDeque<Node>,
+}
+
+impl<'a, G : GraphOrder> BFSWithLayers<'a, G> {
+    fn new(graph : &G, start : Node) -> Self {
+        Self {
+            graph,
+            start,
+            visited: BitSet::new(graph.len()),
+            layer: 0,
+            queue: VecDeque::new()
+        }
+    }
+}
+
+impl<'a, G : AdjacencyList > Iterator for BFSWithLayers<'a, G> {
+    type Item = (Node, Node);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.layer == 0 {
+            // not properly initialized yet
+            self.visited.set_bit(node as usize);
+
+            for u in self.graph.out_neighbors(self.start) {
+                if !self.visited.set_bit(u as usize) {
+                    self.queue.push_back(u);
+                }
+            }
+
+            self.queue.push_back(self.start); // layer indicator!
+            self.layer = 1;
+
+            return Some((start, 0));
+        }
+
+
+        let node = self.queue.pop_front()?;
+        if node == self.start {
+            self.layer += 1;
+
+            // indicates the begin of a new layer
+            if self.queue.is_empty() {
+                return None;
+            }
+
+            return self.next();
+        }
+
+        // ordinary BFS
+        for u in self.graph.out_neighbors(node) {
+            if !self.visited.set_bit(u as usize) {
+                self.queue.push_back(u);
+            }
+        }
+
+        Some((node, self.layer))
+    }
+}
+*/
 ///////////////////////////////////////////////////////////////////////////////////////// TopoSearch
 pub struct TopoSearch<'a, G> {
     graph: &'a G,
@@ -492,6 +558,36 @@ pub trait Traversal: AdjacencyList + Sized {
         let mut bfs = self.bfs(u);
         bfs.exclude_nodes(deleted);
         bfs.is_node_reachable(u)
+    }
+
+    fn shortest_path(&self, start: Node, end: Node) -> Option<Vec<Node>> {
+        let mut bfs = BFSWithPredecessor::new(self, start);
+        let mut parent: HashMap<Node, Node> = HashMap::new();
+
+        parent.insert(start, start);
+
+        if start == end {
+            bfs.visited.unset_bit(start as usize);
+            bfs.next();
+        }
+
+        for item in bfs {
+            parent.insert(item.item(), item.predecessor().unwrap());
+            if item.item() == end {
+                let mut path = Vec::new();
+
+                let mut node = item.predecessor().unwrap();
+                while node != start {
+                    path.push(node);
+                    node = parent[&node];
+                }
+
+                path.reverse();
+                return Some(path);
+            }
+        }
+
+        None
     }
 }
 

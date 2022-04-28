@@ -1,11 +1,13 @@
 pub mod adj_array;
 pub mod adj_array_undir;
 pub mod adj_list_matrix;
+pub mod complete_subgraphs;
 pub mod connectivity;
 pub mod generators;
 pub(super) mod graph_macros;
 pub mod hash_graph;
 pub mod io;
+pub mod matching;
 pub mod matrix;
 pub mod network_flow;
 pub mod node_mapper;
@@ -20,8 +22,12 @@ pub type Edge = (Node, Node);
 pub use adj_array::{AdjArray, AdjArrayIn};
 pub use adj_array_undir::AdjArrayUndir;
 pub use adj_list_matrix::{AdjListMatrix, AdjListMatrixIn};
-pub use connectivity::Connectivity;
+pub use complete_subgraphs::CompleteSubgraphEnumerator;
+
+pub use connectivity::*;
 pub use io::*;
+pub use matching::Matching;
+pub use network_flow::*;
 pub use node_mapper::{Compose, Getter, Inverse, NodeMapper, RankingForwardMapper, Setter};
 pub use partition::*;
 use std::iter::FromIterator;
@@ -105,6 +111,14 @@ pub trait AdjacencyListUndir: AdjacencyList {
 
     fn out_only_neighbors(&self, u: Node) -> Self::IterOutOnly<'_>;
     fn in_only_neighbors(&self, u: Node) -> Self::IterInOnly<'_>;
+
+    fn has_undir_edges(&self, u: Node) -> bool {
+        self.undir_degree(u) > 0
+    }
+
+    fn has_dir_edges(&self, u: Node) -> bool {
+        self.out_only_neighbors(u).count() != 0 || self.in_only_neighbors(u).count() != 0
+    }
 }
 
 /// Provides basic read-only functionality associated with an adjacency list

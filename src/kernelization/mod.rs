@@ -1,14 +1,20 @@
 use crate::graph::*;
+use log::info;
+mod crown;
 pub mod flow_based;
 mod single_staged;
+mod two_staged;
 
+pub use crown::*;
 pub use flow_based::*;
 pub use single_staged::*;
+pub use two_staged::*;
 
 pub trait ReducibleGraph = GraphNew
     + GraphEdgeEditing
     + AdjacencyList
     + AdjacencyTest
+    + AdjacencyTestUndir
     + AdjacencyListIn
     + AdjacencyListUndir
     + Sized
@@ -29,6 +35,10 @@ pub enum Rules {
     CompleteNode,
     PIE,
     DOME,
+    DOMN,
+    C4,
+    Crown(Node),
+    Unconfined,
     STOP,
     RestartRules,
 }
@@ -102,6 +112,17 @@ where
                 let mut applied_rule = false;
                 for index in (to_be_reduced.2 as usize)..self.rules.len() {
                     let rule = &self.rules[index];
+
+                    let n = self
+                        .pre_processor
+                        .graph()
+                        .vertices()
+                        .filter(|&u| self.pre_processor.graph().total_degree(u) > 0)
+                        .count();
+                    let m = self.pre_processor.graph.number_of_edges();
+
+                    info!("Start rule {:?} with n={}, m={}", &rule, n, m);
+
                     applied_rule |= match *rule {
                         Rules::Rule1 => self.pre_processor.apply_rule_1(),
                         Rules::Rule3 => self.pre_processor.apply_rule_3(),
@@ -151,10 +172,20 @@ where
                                 false
                             }
                         }
-                        Rules::DiClique => self.pre_processor.apply_di_cliques_reduction(),
-                        Rules::CompleteNode => self.pre_processor.apply_complete_node(),
-                        Rules::PIE => self.pre_processor.apply_pie_reduction(),
-                        Rules::DOME => self.pre_processor.apply_dome_reduction(),
+                        Rules::DiClique => self.pre_processor.apply_rule_di_cliques(),
+                        Rules::CompleteNode => self.pre_processor.apply_rule_complete_node(),
+                        Rules::PIE => self.pre_processor.apply_rule_pie(),
+                        Rules::DOME => self.pre_processor.apply_rule_dome(),
+                        Rules::DOMN => self.pre_processor.apply_rule_domn(),
+                        Rules::C4 => self.pre_processor.apply_rule_c4(),
+                        Rules::Unconfined => self.pre_processor.apply_rule_unconfined(),
+                        Rules::Crown(max_nodes) => {
+                            if self.pre_processor.graph().number_of_nodes() < max_nodes {
+                                self.pre_processor.apply_rule_crown()
+                            } else {
+                                false
+                            }
+                        }
                         Rules::STOP => {
                             if !applied_rule {
                                 if index + 1 == self.rules.len()
@@ -316,21 +347,92 @@ impl<G: ReducibleGraph> PreprocessorReduction<G> {
         apply_rules_5_and_6(&mut self.graph, upper_bound, &mut self.in_fvs)
     }
 
-    pub fn apply_di_cliques_reduction(&mut self) -> bool {
+    pub fn apply_rule_di_cliques(&mut self) -> bool {
         apply_rule_di_cliques(&mut self.graph, &mut self.in_fvs)
     }
 
-    pub fn apply_complete_node(&mut self) -> bool {
+    pub fn apply_rule_complete_node(&mut self) -> bool {
         apply_rule_complete_node(&mut self.graph, &mut self.in_fvs)
     }
 
-    pub fn apply_pie_reduction(&mut self) -> bool {
+    pub fn apply_rule_pie(&mut self) -> bool {
         apply_rule_pie(&mut self.graph)
     }
 
-    pub fn apply_dome_reduction(&mut self) -> bool {
+    pub fn apply_rule_dome(&mut self) -> bool {
         apply_rule_dome(&mut self.graph)
     }
+
+    pub fn apply_rule_domn(&mut self) -> bool {
+        apply_rule_domn(&mut self.graph, &mut self.in_fvs)
+    }
+
+    pub fn apply_rule_unconfined(&mut self) -> bool {
+        apply_rule_unconfined(&mut self.graph, &mut self.in_fvs)
+    }
+
+    pub fn apply_rule_c4(&mut self) -> bool {
+        apply_rule_c4(&mut self.graph, &mut self.in_fvs)
+    }
+    pub fn apply_rule_crown(&mut self) -> bool {
+        apply_rule_crown(&mut self.graph, &mut self.in_fvs)
+    }
+}
+
+/// Two-staged rules work as follows: in the preprocessor pass they search for certain subgraphs
+/// and replace them with easier gadgets.
+#[derive(Default)]
+pub struct Postprocessor {
+    rules: Vec<Box<dyn PostprocessorRule>>,
+    will_add: Node,
+}
+
+impl Postprocessor {
+    pub fn new() -> Self {
+        Self {
+            rules: Vec::new(),
+            will_add: 0,
+        }
+    }
+
+    fn push(&mut self, rule: Box<dyn PostprocessorRule>) {
+        self.will_add += rule.will_add();
+        self.rules.push(rule)
+    }
+
+    pub fn len(&self) -> usize {
+        self.rules.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.rules.is_empty()
+    }
+
+    pub fn will_add(&self) -> Node {
+        self.will_add
+    }
+
+    pub fn finalize_with_global_solution(&mut self, dfvs: &mut Vec<Node>) {
+        dfvs.reserve(self.will_add as usize);
+        while let Some(mut r) = self.rules.pop() {
+            let expect = dfvs.len() + r.will_add() as usize;
+            r.apply(dfvs);
+            debug_assert_eq!(dfvs.len(), expect);
+        }
+    }
+}
+
+trait PostprocessorRule: std::fmt::Debug {
+    fn apply(&mut self, dfs: &mut Vec<Node>);
+    fn will_add(&self) -> Node;
+}
+
+macro_rules! apply_rule {
+    ($e:expr) => {
+        if ($e) {
+            continue;
+        }
+    };
 }
 
 /// applies rule 1-4 + 5 exhaustively
@@ -344,18 +446,35 @@ pub fn apply_rules_exhaustively<G: ReducibleGraph>(
 ) {
     apply_rule_1(graph, fvs);
     loop {
-        let rule_3 = apply_rule_3(graph);
-        let rule_4 = apply_rule_4(graph, fvs);
-        let rule_di_cliques = apply_rule_di_cliques(graph, fvs);
-        let pie = apply_rule_pie(graph);
-        let dome = apply_rule_dome(graph);
-        if !(rule_3 || rule_4 || rule_di_cliques || pie || dome) {
+        loop {
+            apply_rule!(apply_rule_3(graph) | apply_rule_4(graph, fvs));
+            apply_rule!(apply_rule_di_cliques(graph, fvs));
+            apply_rule!(apply_rule_pie(graph));
+            apply_rule!(apply_rule_c4(graph, fvs));
+            apply_rule!(apply_rule_domn(graph, fvs));
+            //apply_rule!(apply_dome_reduction(graph));
+            apply_rule!(apply_rule_unconfined(graph, fvs));
             break;
         }
-    }
 
-    if with_expensive_rules {
-        apply_rule_5(graph, fvs);
+        if with_expensive_rules {
+            apply_rule!(apply_rule_5(graph, fvs));
+        }
+
+        break;
+    }
+}
+
+/// Repeatedly calls `pred` until it returns `false` for the first time. Returns true if `pred`
+/// returned true at least once
+fn repeat_while<F: FnMut() -> bool>(mut pred: F) -> bool {
+    let mut success = false;
+    loop {
+        if !pred() {
+            return success;
+        }
+
+        success = true;
     }
 }
 

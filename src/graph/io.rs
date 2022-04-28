@@ -28,8 +28,8 @@ pub mod dot {
     }
 
     const ATTRIB_NODE_IN_DFVS: &str = "[color=red]";
-    const ATTRIB_EDGE_UNDIR: &str = "[dir=n,color=\"#0000ff\",penwidth=2]";
-    const ATTRIB_EDGE_UNDIR_DEL: &str = "[dir=n,color=\"#a0a0ff\",penwidth=2]";
+    const ATTRIB_EDGE_UNDIR: &str = "[dir=\"both\",color=\"#0000ff\",penwidth=2]";
+    const ATTRIB_EDGE_UNDIR_DEL: &str = "[dir=\"both\",color=\"#a0a0ff\",penwidth=2]";
     const ATTRIB_EDGE_DIR: &str = "";
     const ATTRIB_EDGE_DIR_DEL: &str = "[color=\"#a0a0a0\"]";
 
@@ -69,10 +69,12 @@ pub mod dot {
             // export nodes in DFVS
             {
                 let mut vec = dfvs.iter().copied().collect_vec();
-                vec.sort_unstable();
-                statements.push(
-                    vec.iter().copied().map(format_node).join(",") + " " + ATTRIB_NODE_IN_DFVS,
-                );
+                if !vec.is_empty() {
+                    vec.sort_unstable();
+                    statements.push(
+                        vec.iter().copied().map(format_node).join(",") + " " + ATTRIB_NODE_IN_DFVS,
+                    );
+                }
             }
 
             for u in self.vertices().filter(|&u| self.out_degree(u) > 0) {
@@ -94,7 +96,7 @@ pub mod dot {
                         continue;
                     }
 
-                    neighbors[2 * (is_undir as usize) + (is_deleted as usize)].push(v);
+                    neighbors[2 * (!is_undir as usize) + (is_deleted as usize)].push(v);
                 }
 
                 let mut print_neighbors = |vec: &mut Vec<Node>, attrib: &str| {

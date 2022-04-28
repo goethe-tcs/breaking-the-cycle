@@ -1,4 +1,5 @@
 /// Iterator to enumerate all integers with a given number of bits set
+#[derive(Debug)]
 pub struct IntSubsetsOfSize {
     value: u64,
     num_bits_set: u32,
@@ -37,6 +38,7 @@ impl IntSubsetsOfSize {
 
 /// An iterator wrapping [`IntSubsetsOfSize`] that increases the number of bits set each time,
 /// the inner iterator ends.
+#[derive(Debug)]
 pub struct AllIntSubsets {
     num_bits: u32,
     k: u32,
