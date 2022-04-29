@@ -52,6 +52,12 @@ path = "src/bin/optil_exact.rs"
 test = false
 
 [[bin]]
+name = "optil_heuristic"
+path = "src/bin/optil_heuristic.rs"
+required-features = ["signal-handling"]
+test = false
+
+[[bin]]
 name = "gen-gnp"
 path = "src/bin/gen-gnp.rs"
 required-features = ["cli"]

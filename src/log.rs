@@ -1,13 +1,16 @@
-use env_logger::Builder;
+use env_logger::{Builder, Env};
 use log::LevelFilter;
 use std::io::Write;
 use std::sync::Arc;
 use std::time::Instant;
 
+/// Builds the logger using the environment variable 'RUST_LOG' to determine the log level. Uses the
+/// passed in `level` if the environment variable is not set.
 pub fn build_pace_logger_for_level(level: LevelFilter) {
     let start_time = Arc::new(Instant::now());
 
-    let mut builder = Builder::from_default_env();
+    let env = Env::default().default_filter_or(level.as_str());
+    let mut builder = Builder::from_env(env);
     builder
         .format(move |buf, record| {
             let elapsed = start_time.elapsed().as_millis();
@@ -20,14 +23,12 @@ pub fn build_pace_logger_for_level(level: LevelFilter) {
                 record.args()
             )
         })
-        .filter(None, level)
         .init();
 }
 
-pub fn build_pace_logger() {
-    build_pace_logger_for_level(LevelFilter::Error);
-}
-
+/// Builds the logger using the environment variable 'RUST_LOG' to determine the log level. If the
+/// environment variable is not set, the passed in `default_level` is increased by `verbosity` many
+/// levels and the result is used as the log level.
 pub fn build_pace_logger_for_verbosity(default_level: LevelFilter, verbosity: usize) {
     let result_level = level_from_verbosity(default_level, verbosity);
     build_pace_logger_for_level(result_level);

@@ -74,6 +74,30 @@ where
         Self::with_settings(graph, vec![Rules::Rule1, Rules::Rule3, Rules::Rule4], true)
     }
 
+    //TODO: Optimize settings for public pace instances
+    pub fn with_optimal_pace_settings(graph: G) -> Self {
+        Self::with_settings(
+            graph,
+            vec![
+                Rules::Rule1,
+                Rules::Rule3,
+                Rules::Rule4,
+                Rules::RestartRules,
+                Rules::PIE,
+                Rules::DiClique,
+                Rules::C4,
+                Rules::DOMN,
+                Rules::RestartRules,
+                Rules::Unconfined,
+                Rules::STOP,
+                Rules::CompleteNode,
+                Rules::Crown(5000),
+                Rules::Rule5(4000),
+            ],
+            true,
+        )
+    }
+
     /// use .reduce() to reduce the graph
     pub fn with_settings(graph: G, rules: Vec<Rules>, scc: bool) -> Self {
         Self {
