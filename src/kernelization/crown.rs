@@ -135,7 +135,6 @@ pub fn apply_rule_crown<G: ReducibleGraph>(graph: &mut G, fvs: &mut Vec<Node>) -
             }
 
             let mut to_delete = head.iter().map(|u| u as Node).collect_vec();
-            println!("Crown: {:?}", &to_delete);
 
             graph.remove_edges_of_nodes(&to_delete);
             fvs.append(&mut to_delete);
