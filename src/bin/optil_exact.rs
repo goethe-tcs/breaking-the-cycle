@@ -87,10 +87,10 @@ fn main() -> std::io::Result<()> {
     // Verify solution
     {
         info!("Verify solution {}", solution.len());
-        let sol = graph
-            .vertex_induced(&BitSet::new_all_set_but(graph.len(), solution.clone()))
-            .0;
+        let mask = BitSet::new_all_set_but(graph.len(), solution.clone());
+        let sol = graph.vertex_induced(&mask).0;
         assert!(sol.is_acyclic());
+        assert_eq!(graph.len() - mask.cardinality(), solution.len());
     }
 
     // Output solution
