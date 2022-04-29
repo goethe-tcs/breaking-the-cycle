@@ -35,27 +35,7 @@ fn main() -> std::io::Result<()> {
         graph.number_of_edges()
     );
 
-    let mut super_reducer = SuperReducer::with_settings(
-        graph.clone(),
-        vec![
-            Rules::Rule1,
-            Rules::Rule3,
-            Rules::Rule4,
-            Rules::RestartRules,
-            Rules::PIE,
-            Rules::DiClique,
-            Rules::C4,
-            Rules::DOMN,
-            Rules::RestartRules,
-            Rules::Unconfined,
-            Rules::STOP,
-            Rules::CompleteNode,
-            Rules::Crown(5000),
-            Rules::Rule5(5000),
-        ],
-        true,
-    );
-
+    let mut super_reducer = SuperReducer::with_optimal_pace_settings(graph.clone());
     let (solution, sccs) = super_reducer.reduce().unwrap();
     let mut solution = solution.clone();
     let mut sccs = sccs.clone();
