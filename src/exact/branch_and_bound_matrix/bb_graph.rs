@@ -21,11 +21,6 @@ pub trait GraphItem:
     + AsPrimitive<u8>
     + BitManip
 {
-    // This is already added to PrimInt but not published yet, see
-    // https://github.com/rust-num/num-traits/pull/205/files
-    fn trailing_ones(self) -> u32 {
-        (!self).trailing_zeros()
-    }
 }
 
 impl GraphItem for u8 {}
