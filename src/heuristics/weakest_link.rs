@@ -11,12 +11,17 @@ use std::cmp::min;
 /// Afterwards min_node is a sink or source
 /// and we are applying reduction 3 exhaustively.
 /// This algorithm needs reduction rule 1 (no self-loops).
-pub fn weakest_link<G: GraphEdgeEditing + AdjacencyListIn + Clone>(
+pub fn weakest_link<G: GraphEdgeEditing + AdjacencyListIn + Clone, F: Fn() -> bool>(
     mut working_graph: G,
-) -> Vec<Node> {
+    stop_condition: F,
+) -> Option<Vec<Node>> {
     let mut dfvs = Vec::new();
     let mut bucket_queue = BucketQueue::new_from_graph(&working_graph);
     while working_graph.number_of_edges() > 0 {
+        if stop_condition() {
+            return None;
+        }
+
         // apply rule 3 exhaustively:
         while !bucket_queue.buckets[0].is_empty() {
             let node_zero = bucket_queue.buckets[0][0];
@@ -44,7 +49,13 @@ pub fn weakest_link<G: GraphEdgeEditing + AdjacencyListIn + Clone>(
             dfvs.push(node)
         }
     }
-    dfvs
+    Some(dfvs)
+}
+
+pub fn weakest_link_no_stop_condition<G: GraphEdgeEditing + AdjacencyListIn + Clone>(
+    working_graph: G,
+) -> Vec<Node> {
+    weakest_link(working_graph, || false).unwrap()
 }
 
 fn delete_node<G: GraphEdgeEditing + AdjacencyListIn + Clone>(
@@ -106,18 +117,18 @@ impl BucketQueue {
 #[cfg(test)]
 mod test {
     use crate::graph::adj_array::AdjArrayIn;
-    use crate::heuristics::weakest_link::weakest_link;
+    use crate::heuristics::weakest_link::weakest_link_no_stop_condition;
 
     #[test]
     fn test_0() {
         let graph = AdjArrayIn::from(&[(0, 1), (1, 2), (2, 0), (2, 3), (3, 4), (4, 3), (2, 1)]);
-        let dfvs = weakest_link(graph);
+        let dfvs = weakest_link_no_stop_condition(graph);
         assert_eq!(Vec::from([1, 3]), dfvs);
     }
     #[test]
     fn test_1() {
         let graph = AdjArrayIn::from(&[(0, 1), (1, 0), (0, 2), (0, 3), (1, 2), (2, 3), (3, 0)]);
-        let dfvs = weakest_link(graph);
+        let dfvs = weakest_link_no_stop_condition(graph);
         assert_eq!(Vec::from([0]), dfvs);
     }
     #[test]
@@ -135,7 +146,7 @@ mod test {
             (5, 6),
             (6, 7),
         ]);
-        let dfvs = weakest_link(graph);
+        let dfvs = weakest_link_no_stop_condition(graph);
         assert_eq!(Vec::from([4, 0]), dfvs);
     }
 }
