@@ -3,6 +3,7 @@
 use crate::algorithm::*;
 use crate::graph::*;
 use itertools::Itertools;
+use log::info;
 use std::fmt::Debug;
 
 mod cuts;
@@ -10,6 +11,7 @@ mod frame;
 pub mod result_cache;
 
 use crate::bitset::BitSet;
+use crate::exact::branch_and_bound_matrix::branch_and_bound_matrix;
 use frame::*;
 use result_cache::ResultCache;
 
@@ -47,9 +49,9 @@ use result_cache::ResultCache;
 /// let solution = BranchAndBound::new(input_graph).run_to_completion().unwrap();
 /// assert_eq!(solution, vec![1]);
 /// ```
-pub struct BranchAndBound<G> {
+pub struct BranchAndBound<G: BnBGraph> {
     stack: Vec<Frame<G>>,
-    graph_stack: Vec<G>,
+    paranoia_stack: Vec<G>,
     from_child: Option<OptSolution>,
     solution: Option<OptSolution>,
 
@@ -59,6 +61,9 @@ pub struct BranchAndBound<G> {
     iterations: usize,
 
     paranoid: bool,
+    super_verbose: bool,
+    drop_output: bool,
+    cross_validation: bool,
 }
 
 pub trait BnBGraph = AdjacencyListIn
@@ -84,18 +89,20 @@ const MIN_NODES_FOR_CACHE: Node = 16;
 impl<G: BnBGraph> BranchAndBound<G> {
     pub fn new(graph: G) -> Self {
         let mut stack: Vec<Frame<G>> = Vec::with_capacity(3 * (graph.len() + 2));
-        let graph_stack = vec![];
         let number_of_nodes = graph.number_of_nodes();
         stack.push(Frame::new(graph, 0, number_of_nodes + 1));
 
         Self {
             stack,
-            graph_stack,
+            paranoia_stack: Vec::new(),
             solution: None,
             from_child: None,
             number_of_nodes,
             iterations: 0,
             paranoid: false,
+            super_verbose: false,
+            drop_output: false,
+            cross_validation: false,
             cache: Default::default(),
         }
     }
@@ -105,7 +112,7 @@ impl<G: BnBGraph> BranchAndBound<G> {
         graph_stack.push(graph.clone());
         let mut res = Self::new(graph);
         res.paranoid = true;
-        res.graph_stack = graph_stack;
+        res.paranoia_stack = graph_stack;
         res
     }
 
@@ -137,6 +144,33 @@ impl<G: BnBGraph> BranchAndBound<G> {
     /// [`BranchAndBound::execute_step`]) processed so far
     pub fn number_of_iterations(&self) -> usize {
         self.iterations
+    }
+
+    /// Prints a backtrace if the solver instance is dropped without completing.
+    /// This is useful if an assertion fired during the computation. However, be aware,
+    /// that if you're using the solver with a time limit, this functionality might also
+    /// fire if the solver did not finish within the time budget.
+    pub fn set_drop_output(&mut self, enabled: bool) {
+        self.drop_output = enabled;
+    }
+
+    /// Prints a call stack for each call into frame. Requires paranoia.
+    ///
+    /// # Warning
+    /// This might produces millions lines of output.
+    pub fn set_print_call_stack(&mut self, enabled: bool) {
+        assert!(self.paranoid || !enabled);
+        self.super_verbose = enabled
+    }
+
+    /// Uses the matrix solver to cross check all results obtained by the solver for small
+    /// graphs. Requires paranoia.
+    ///
+    /// # Warning
+    /// This might be extremely slow! Never use this feature in production.
+    pub fn set_cross_validation(&mut self, enabled: bool) {
+        assert!(self.paranoid || !enabled);
+        self.cross_validation = enabled;
     }
 
     /// Uses the matrix solver to cross check all results obtained by the solver for small
@@ -198,17 +232,30 @@ impl<G: BnBGraph> IterativeAlgorithm for BranchAndBound<G> {
                 let frame = self.stack.last().unwrap();
 
                 if self.paranoid {
-                    assert_eq!(self.graph_stack.len(), self.stack.len());
-                    let graph = self.graph_stack.pop().unwrap();
+                    if self.super_verbose {
+                        info!(
+                            "{:<54} |{} {}",
+                            "",
+                            (0..self.stack.len()).into_iter().map(|_| ' ').join(""),
+                            res.as_ref().map_or(-1, |r| r.len() as i64)
+                        );
+                    }
+
+                    assert_eq!(self.paranoia_stack.len(), self.stack.len());
+                    let graph = self.paranoia_stack.pop().unwrap();
 
                     if let Some(solution) = res.as_ref() {
-                        assert!(
-                            solution.is_empty()
-                                || *solution.iter().max().unwrap() < graph.number_of_nodes()
-                        );
+                        assert!(solution.iter().all(|&u| u < graph.number_of_nodes()));
 
                         let solution_mask =
                             BitSet::new_all_set_but(graph.len(), solution.iter().copied());
+
+                        assert!(
+                            frame
+                                .partial_solution_parent
+                                .iter()
+                                .all(|&x| !solution_mask[x as usize]) // solution mask is inverted!
+                        );
 
                         // check no repeats
                         assert_eq!(
@@ -220,6 +267,35 @@ impl<G: BnBGraph> IterativeAlgorithm for BranchAndBound<G> {
 
                         let induced = graph.vertex_induced(&solution_mask);
                         assert!(induced.0.is_acyclic());
+                    }
+
+                    if self.cross_validation && graph.len() < 64 {
+                        let res_child = res.as_ref().map(|r| {
+                            r.iter()
+                                .copied()
+                                .filter(|x| !frame.partial_solution_parent.contains(x))
+                                .collect_vec()
+                        });
+
+                        let rsol = branch_and_bound_matrix(&graph, None).unwrap();
+                        assert!(frame.initial_lower_bound <= rsol.len() as Node);
+                        if let Some(res_child) = res_child {
+                            assert_eq!(
+                                rsol.len(),
+                                res_child.len(),
+                                "ref: {:?}, sol: {:?}, graph={:?}",
+                                rsol,
+                                res_child,
+                                &graph
+                            );
+                        } else {
+                            assert!(
+                                rsol.len() as Node >= frame.initial_upper_bound,
+                                "ref: {:?}, sol: --, graph={:?}",
+                                rsol,
+                                &graph
+                            );
+                        }
                     }
                 }
 
@@ -263,6 +339,28 @@ impl<G: BnBGraph> IterativeAlgorithm for BranchAndBound<G> {
             }
 
             BBResult::Branch(frame) => {
+                if self.paranoid && self.super_verbose && self.stack.len() < 40 {
+                    let graph = &self.paranoia_stack.last().unwrap();
+                    let parent = self.stack.last().unwrap();
+
+                    info!(
+                        "{:>4} n={:>5} m={:>5} mund={:>5} l={:>5} u={:>5} d={:>4} | {} {}",
+                        self.stack.len(),
+                        graph.number_of_nodes(),
+                        graph.number_of_edges(),
+                        graph
+                            .vertices()
+                            .map(|u| graph.undir_degree(u) as usize)
+                            .sum::<usize>()
+                            / 2,
+                        parent.lower_bound,
+                        parent.upper_bound,
+                        parent.upper_bound - parent.lower_bound,
+                        (0..self.stack.len()).into_iter().map(|_| ' ').join(""),
+                        parent.resume_with.describe()
+                    );
+                }
+
                 assert!(
                     self.stack.len() + 1 < self.stack.capacity(),
                     "stack states: {:?}",
@@ -272,7 +370,7 @@ impl<G: BnBGraph> IterativeAlgorithm for BranchAndBound<G> {
                         .join("")
                 );
                 if self.paranoid {
-                    self.graph_stack.push(frame.graph.clone());
+                    self.paranoia_stack.push(frame.graph.clone());
                 }
 
                 self.stack.push(frame);
@@ -290,6 +388,31 @@ impl<G: BnBGraph> IterativeAlgorithm for BranchAndBound<G> {
             sol.as_deref()
         } else {
             None
+        }
+    }
+}
+
+impl<G: BnBGraph> Drop for BranchAndBound<G> {
+    fn drop(&mut self) {
+        while let Some(frame) = self.stack.pop() {
+            if self.drop_output {
+                info!(
+                    "{} {} (dbg-lower={}, dbg-upper={})",
+                    (0..self.stack.len()).into_iter().map(|_| ' ').join(""),
+                    frame.resume_with.describe(),
+                    frame.initial_lower_bound,
+                    frame.initial_upper_bound,
+                );
+            }
+        }
+
+        if self.cache.len() > 100 {
+            info!(
+                "Cache size: {}, hits: {}, misses: {}",
+                self.cache.len(),
+                self.cache.number_of_cache_hits(),
+                self.cache.number_of_cache_misses()
+            );
         }
     }
 }

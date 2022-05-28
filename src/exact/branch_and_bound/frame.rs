@@ -19,6 +19,20 @@ pub(super) enum FrameState<G> {
     ResumeMapped(NodeMapper),
 }
 
+impl<G> FrameState<G> {
+    pub(super) fn describe(&self) -> String {
+        match self {
+            Uninitialized => String::from("Uninitialized"),
+            ResumeDeleteBranch(_, num) => format!("DeleteBranch(deleted={})", num),
+            ResumeContractBranch(_) => String::from("ContractBranch"),
+            ResumeSCCSplit(branches, _) => format!("SCCSplit(remaining: {})", branches.len() - 1),
+            ResumeVertexCut(_, _, _, _) => String::from("ResumeVertexCut"),
+            ResumeClique(_, _, _) => String::from("Clique"),
+            ResumeMapped(_) => String::from("Mapped"),
+        }
+    }
+}
+
 use FrameState::*;
 
 /// The frame implements the heavy lifting of the branch and bound algorithm (see also [`BranchAndBound`]
@@ -369,7 +383,9 @@ impl<G: BnBGraph> Frame<G> {
                 self.upper_bound,
             );
 
-            branch.partial_solution_parent.reserve(nodes_deleted as usize);
+            branch
+                .partial_solution_parent
+                .reserve(nodes_deleted as usize);
             branch.max_clique = self.max_clique;
 
             for (_, &node) in cut
