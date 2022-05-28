@@ -23,7 +23,7 @@ pub trait ReducibleGraph = GraphNew
 
 /// Rule5 and Rule6 need max_nodes: Node.
 /// That is used to not perform the reduction rule if the reduced graph has more than max_nodes nodes.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Rules {
     Rule1,
     Rule3,
