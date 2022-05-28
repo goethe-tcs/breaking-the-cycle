@@ -22,33 +22,73 @@ pub fn apply_rule_1<G: ReducibleGraph>(graph: &mut G, fvs: &mut Vec<Node>) -> bo
 ///
 /// returns true if rule got applied at least once, false if not at all
 pub fn apply_rule_3<G: ReducibleGraph>(graph: &mut G) -> bool {
-    let mut applied = false;
-    for u in graph.vertices_range() {
-        if (graph.in_degree(u) == 0) != (graph.out_degree(u) == 0) {
-            graph.remove_edges_at_node(u);
-            applied = true;
+    repeat_while(|| {
+        let mut applied = false;
+        for u in graph.vertices_range() {
+            if (graph.in_degree(u) == 0) != (graph.out_degree(u) == 0) {
+                graph.remove_edges_at_node(u);
+                applied = true;
+            }
         }
-    }
 
-    applied
+        applied
+    })
 }
 
 /// rule 4 chaining nodes with deleting self loop
 ///
 /// returns true if rule got applied at least once, false if not at all
 pub fn apply_rule_4<G: ReducibleGraph>(graph: &mut G, fvs: &mut Vec<Node>) -> bool {
+    repeat_while(|| {
+        let mut applied = false;
+        for u in graph.vertices_range() {
+            if graph.in_degree(u) == 1 || graph.out_degree(u) == 1 {
+                debug_assert!(!graph.has_edge(u, u));
+                let loops = graph.contract_node(u);
+                fvs.extend(&loops);
+                graph.remove_edges_of_nodes(&loops);
+                applied = true;
+            }
+        }
+        applied
+    })
+}
+
+/// This rule identifies all SCCs and deletes edge between them. It should not be included
+/// into the [`SuperReducer`] since its SCC-Split is more efficient.
+pub fn apply_rule_scc<G: ReducibleGraph>(graph: &mut G) -> bool {
+    let partition = graph.partition_into_strongly_connected_components();
+    if partition.number_of_classes() == 0 {
+        return false;
+    }
+
+    if partition.number_of_classes() == 1 && partition.number_of_unassigned() == 0 {
+        return false;
+    }
+
     let mut applied = false;
     for u in graph.vertices_range() {
-        if graph.in_degree(u) == 1 || graph.out_degree(u) == 1 {
-            debug_assert!(!graph.has_edge(u, u));
-            let loops = graph.contract_node(u);
-            fvs.extend(&loops);
-            for v in loops {
-                graph.remove_edges_at_node(v);
+        if graph.total_degree(u) == 0 {
+            continue;
+        }
+
+        if let Some(part_u) = partition.class_of_node(u) {
+            let inter_scc = graph
+                .out_neighbors(u)
+                .filter(|&v| partition.class_of_node(v) != Some(part_u))
+                .collect_vec();
+
+            applied |= !inter_scc.is_empty();
+
+            for v in inter_scc {
+                graph.remove_edge(u, v);
             }
+        } else {
+            graph.remove_edges_at_node(u);
             applied = true;
         }
     }
+
     applied
 }
 
@@ -129,13 +169,7 @@ pub fn apply_rule_complete_node<G: ReducibleGraph>(graph: &mut G, fvs: &mut Vec<
 /// Looks for directed edges that are not strongly connected after removing undirected edges
 pub fn apply_rule_pie<G: ReducibleGraph>(graph: &mut G) -> bool {
     let mut applied = false;
-    let mut graph_minus_pie = AdjArray::new(graph.len());
-    // get directed out_neighbors for every node and create a graph with only directed edges
-    for node in graph.vertices_range() {
-        for out_neighbor in graph.out_only_neighbors(node) {
-            graph_minus_pie.add_edge(node, out_neighbor);
-        }
-    }
+    let graph_minus_pie = graph_without_pie(graph);
     let graph_sccs = graph_minus_pie.partition_into_strongly_connected_components();
     if graph_sccs.number_of_classes() == 1 && graph_sccs.number_of_unassigned() == 0 {
         return applied;
@@ -144,7 +178,6 @@ pub fn apply_rule_pie<G: ReducibleGraph>(graph: &mut G) -> bool {
     // stayed in the same scc, if not we can delete the directed edge
     for (u, v) in graph_minus_pie.edges_iter() {
         if graph_sccs.class_of_node(u) == None
-            || graph_sccs.class_of_node(v) == None
             || graph_sccs.class_of_node(u) != graph_sccs.class_of_node(v)
         {
             graph.remove_edge(u, v);
@@ -192,24 +225,22 @@ pub fn apply_rule_dome<G: ReducibleGraph>(graph: &mut G) -> bool {
     applied
 }
 
+/// We are looking for an "undirected" cycle of four nodes (not induced; i.e. there
+/// may be additional edges).
+///      u
+///    /   \
+///  v       w
+///    \   /
+///      x
+///
+/// In such a structure, we have to delete at least {u, x} or {v, w}. Thus, the remaining
+/// pair needs to have (amongst others) an undir-degree of exactly 2. To prune the search
+/// space we require that the undir-degree of u *is* 2 --- {v,w} may have larger undir-degree.
+///
+/// To make the deletion of nodes (and adding to the DFVS) compatible with a globally optimal
+/// solution,  we require that the remaining pair not to have cycles outside the subgraph. Thus,
+/// we can delete all four nodes and add two to the DFVS.
 pub fn apply_rule_c4<G: ReducibleGraph>(graph: &mut G, fvs: &mut Vec<Node>) -> bool {
-    /* We are looking for an "undirected" cycle of four nodes (not induced; i.e. there
-      may be additional edges).
-           u
-         /   \
-       v       w
-         \   /
-           x
-
-      In such a structure, we have to delete at least {u, x} or {v, w}. Thus, the remaining
-      pair needs to have (amongst others) an undir-degree of exactly 2. To prune the search
-      space we require that the undir-degree of u *is* 2 --- {v,w} may have larger undir-degree.
-
-      To make the deletion of nodes (and adding to the DFVS) compatible with a globally optimal
-      solution,  we require that the remaining pair not to have cycles outside the subgraph. Thus,
-      we can delete all four nodes and add two to the DFVS.
-    */
-
     let mut applied = 0;
 
     loop {
@@ -387,32 +418,83 @@ pub fn apply_rule_unconfined<G: ReducibleGraph>(graph: &mut G, fvs: &mut Vec<Nod
     }
 }
 
+/// If the contraction of a node does not add an additional edge, we know that we have to
+/// delete its neighbors if we need to break a cycle. Hence we can contract that node.
 pub fn apply_rule_domn<G: ReducibleGraph>(graph: &mut G, fvs: &mut Vec<Node>) -> bool {
-    let mut applied = false;
+    repeat_while(|| {
+        let mut applied = false;
 
-    loop {
-        let node = graph.vertices().find(|&u| {
-            graph.in_degree(u) > 0
+        for u in graph.vertices_range() {
+            if graph.in_degree(u) > 0
                 && graph.out_degree(u) > 0
+                && graph.in_neighbors(u).all(|i|
+                    graph.out_degree(i) >= graph.out_degree(u)) // fail early
                 && graph.in_neighbors(u).all(|i| {
                     graph
                         .out_neighbors(u)
                         .all(|j| i == j || graph.has_edge(i, j))
                 })
-        });
+            {
+                applied = true;
+                let loops = graph.undir_neighbors(u).collect_vec();
 
-        if let Some(node) = node {
-            applied = true;
-            let loops = graph.undir_neighbors(node).collect_vec();
+                graph.remove_edges_at_node(u);
+                graph.remove_edges_of_nodes(&loops);
 
-            graph.remove_edges_at_node(node);
-            graph.remove_edges_of_nodes(&loops);
+                fvs.extend(&loops);
+            }
+        }
 
-            fvs.extend(&loops);
-        } else {
-            return applied;
+        applied
+    })
+}
+
+/// The dominance rule proposed for VC searches to node u and v such that
+/// N\[u\] subseteq N\[v\]. Then we node v can be put into the VC safely. We generalize it to
+/// DFVS by requiring that u and v have undirected edges and that possible in-/out-only neighbors
+/// of u have to be present at v as well (in that direction).
+pub fn apply_rule_dominance<G: ReducibleGraph>(graph: &mut G, fvs: &mut Vec<Node>) -> bool {
+    repeat_while(|| {
+        let m = graph.number_of_edges();
+
+        let mut vertices = graph
+            .vertices_range()
+            .filter(|&u| graph.undir_degree(u) > 0)
+            .collect_vec();
+        vertices.sort_unstable_by_key(|&u| graph.number_of_nodes() - graph.undir_degree(u));
+
+        for &u in &vertices {
+            let mut neighbors = graph
+                .undir_neighbors(u)
+                .filter(|&v| graph.undir_degree(v) >= graph.total_degree(u) - graph.undir_degree(u))
+                .collect_vec();
+            neighbors.sort_unstable_by_key(|&u| graph.number_of_nodes() - graph.undir_degree(u));
+
+            for v in neighbors {
+                if graph
+                    .undir_neighbors(u)
+                    .all(|w| w == v || graph.has_undir_edge(v, w))
+                    && graph.out_only_neighbors(u).all(|w| graph.has_edge(v, w))
+                    && graph.in_only_neighbors(u).all(|w| graph.has_edge(w, v))
+                {
+                    graph.remove_edges_at_node(v);
+                    fvs.push(v)
+                }
+            }
+        }
+
+        m != graph.number_of_edges()
+    })
+}
+
+pub(super) fn graph_without_pie<G: ReducibleGraph>(graph: &G) -> G {
+    let mut graph_minus_pie = G::new(graph.len());
+    for node in graph.vertices_range() {
+        for out_neighbor in graph.out_only_neighbors(node) {
+            graph_minus_pie.add_edge(node, out_neighbor);
         }
     }
+    graph_minus_pie
 }
 
 #[cfg(test)]
@@ -627,6 +709,11 @@ mod tests {
     }
 
     #[test]
+    fn stress_dominance() {
+        stress_test_kernel(|graph, fvs, _| Some(apply_rule_dominance(graph, fvs)));
+    }
+
+    #[test]
     fn stress_domn() {
         stress_test_kernel(|graph, fvs, _| Some(apply_rule_domn(graph, fvs)));
     }
@@ -634,6 +721,11 @@ mod tests {
     #[test]
     fn stress_pie() {
         stress_test_kernel(|graph, _, _| Some(apply_rule_pie(graph)));
+    }
+
+    #[test]
+    fn stress_scc() {
+        stress_test_kernel(|graph, _, _| Some(apply_rule_scc(graph)));
     }
 
     #[test]

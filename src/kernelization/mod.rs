@@ -1,12 +1,15 @@
 use crate::graph::*;
 use log::info;
+use std::time::Duration;
 mod crown;
 pub mod flow_based;
+mod redundant_cycles;
 mod single_staged;
 mod two_staged;
 
 pub use crown::*;
 pub use flow_based::*;
+pub use redundant_cycles::apply_rule_redundant_cycle;
 pub use single_staged::*;
 pub use two_staged::*;
 
@@ -39,6 +42,8 @@ pub enum Rules {
     C4,
     Crown(Node),
     Unconfined,
+    RedundantCycles,
+    Dominance,
     STOP,
     RestartRules,
 }
@@ -86,7 +91,9 @@ where
                 Rules::PIE,
                 Rules::DiClique,
                 Rules::C4,
+                Rules::Dominance,
                 Rules::DOMN,
+                Rules::RedundantCycles,
                 Rules::RestartRules,
                 Rules::Unconfined,
                 Rules::STOP,
@@ -203,6 +210,8 @@ where
                         Rules::DOMN => self.pre_processor.apply_rule_domn(),
                         Rules::C4 => self.pre_processor.apply_rule_c4(),
                         Rules::Unconfined => self.pre_processor.apply_rule_unconfined(),
+                        Rules::Dominance => self.pre_processor.apply_rule_dominance(),
+                        Rules::RedundantCycles => self.pre_processor.apply_rule_redundant_cycle(),
                         Rules::Crown(max_nodes) => {
                             if self.pre_processor.graph().number_of_nodes() < max_nodes {
                                 self.pre_processor.apply_rule_crown()
@@ -398,8 +407,16 @@ impl<G: ReducibleGraph> PreprocessorReduction<G> {
     pub fn apply_rule_c4(&mut self) -> bool {
         apply_rule_c4(&mut self.graph, &mut self.in_fvs)
     }
-    pub fn apply_rule_crown(&mut self) -> bool {
-        apply_rule_crown(&mut self.graph, &mut self.in_fvs)
+    pub fn apply_rule_crown(&mut self, timeout: Option<Duration>) -> bool {
+        apply_rule_crown(&mut self.graph, &mut self.in_fvs, timeout)
+    }
+
+    pub fn apply_rule_redundant_cycle(&mut self) -> bool {
+        apply_rule_redundant_cycle(&mut self.graph)
+    }
+
+    pub fn apply_rule_dominance(&mut self) -> bool {
+        apply_rule_dominance(&mut self.graph, &mut self.in_fvs)
     }
 }
 
@@ -475,7 +492,9 @@ pub fn apply_rules_exhaustively<G: ReducibleGraph>(
             apply_rule!(apply_rule_di_cliques(graph, fvs));
             apply_rule!(apply_rule_pie(graph));
             apply_rule!(apply_rule_c4(graph, fvs));
+            apply_rule!(apply_rule_dominance(graph, fvs));
             apply_rule!(apply_rule_domn(graph, fvs));
+            apply_rule!(apply_rule_redundant_cycle(graph));
             //apply_rule!(apply_dome_reduction(graph));
             apply_rule!(apply_rule_unconfined(graph, fvs));
             break;
