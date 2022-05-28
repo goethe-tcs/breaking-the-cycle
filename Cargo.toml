@@ -88,11 +88,16 @@ test = false
 [[bin]]
 name = "dfvs-preprocessing"
 path = "src/bin/dfvs-preprocessing.rs"
-required-features = ["cli", "pace-digest"]
+required-features = ["cli"]
 test = false
 
 [[bin]]
 name = "exp-bench-par-vs-seq"
 path = "src/bin/exp-bench-par-vs-seq.rs"
 required-features = ["cli"]
+test = false
+
+[[bin]]
+name = "kernel-stress-tests"
+path = "src/bin/kernel-stress-tests.rs"
 test = false
