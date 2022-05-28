@@ -13,7 +13,8 @@ pub use redundant_cycles::apply_rule_redundant_cycle;
 pub use single_staged::*;
 pub use two_staged::*;
 
-pub trait ReducibleGraph = GraphNew
+pub trait ReducibleGraph:
+    GraphNew
     + GraphEdgeEditing
     + AdjacencyList
     + AdjacencyTest
@@ -22,7 +23,24 @@ pub trait ReducibleGraph = GraphNew
     + AdjacencyListUndir
     + Sized
     + std::fmt::Debug
-    + Clone;
+    + Clone
+{
+}
+
+impl<
+        T: GraphNew
+            + GraphEdgeEditing
+            + AdjacencyList
+            + AdjacencyTest
+            + AdjacencyTestUndir
+            + AdjacencyListIn
+            + AdjacencyListUndir
+            + Sized
+            + std::fmt::Debug
+            + Clone,
+    > ReducibleGraph for T
+{
+}
 
 /// Rule5 and Rule6 need max_nodes: Node.
 /// That is used to not perform the reduction rule if the reduced graph has more than max_nodes nodes.

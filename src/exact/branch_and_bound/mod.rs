@@ -66,7 +66,8 @@ pub struct BranchAndBound<G: BnBGraph> {
     cross_validation: bool,
 }
 
-pub trait BnBGraph = AdjacencyListIn
+pub trait BnBGraph:
+    AdjacencyListIn
     + AdjacencyListUndir
     + AdjacencyTest
     + AdjacencyTestUndir
@@ -74,7 +75,23 @@ pub trait BnBGraph = AdjacencyListIn
     + GraphEdgeEditing
     + Clone
     + Default
-    + Debug;
+    + Debug
+{
+}
+
+impl<
+        G: AdjacencyListIn
+            + AdjacencyListUndir
+            + AdjacencyTest
+            + AdjacencyTestUndir
+            + GraphNew
+            + GraphEdgeEditing
+            + Clone
+            + Default
+            + Debug,
+    > BnBGraph for G
+{
+}
 
 enum BBResult<G> {
     Result(OptSolution),
