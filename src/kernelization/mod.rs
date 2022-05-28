@@ -59,6 +59,7 @@ pub enum Rules {
     DOMN,
     C4,
     Crown(Node),
+    CrownWithTimeout(Node, Duration),
     Unconfined,
     RedundantCycles,
     Dominance,
@@ -116,7 +117,7 @@ where
                 Rules::Unconfined,
                 Rules::STOP,
                 Rules::CompleteNode,
-                Rules::Crown(5000),
+                Rules::CrownWithTimeout(100000, std::time::Duration::from_secs(60)),
                 Rules::Rule5(4000),
             ],
             true,
@@ -170,7 +171,9 @@ where
                         .count();
                     let m = self.pre_processor.graph.number_of_edges();
 
-                    info!("Start rule {:?} with n={}, m={}", &rule, n, m);
+                    if n > 1000 {
+                        info!("Start rule {:?} with n={}, m={}", &rule, n, m);
+                    }
 
                     applied_rule |= match *rule {
                         Rules::Rule1 => self.pre_processor.apply_rule_1(),
@@ -232,7 +235,14 @@ where
                         Rules::RedundantCycles => self.pre_processor.apply_rule_redundant_cycle(),
                         Rules::Crown(max_nodes) => {
                             if self.pre_processor.graph().number_of_nodes() < max_nodes {
-                                self.pre_processor.apply_rule_crown()
+                                self.pre_processor.apply_rule_crown(None)
+                            } else {
+                                false
+                            }
+                        }
+                        Rules::CrownWithTimeout(max_nodes, timeout) => {
+                            if self.pre_processor.graph().number_of_nodes() < max_nodes {
+                                self.pre_processor.apply_rule_crown(Some(timeout))
                             } else {
                                 false
                             }
