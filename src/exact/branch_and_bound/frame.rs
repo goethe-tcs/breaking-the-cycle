@@ -11,7 +11,7 @@ use std::iter::FromIterator;
 #[derive(Debug)]
 pub(super) enum FrameState<G> {
     Uninitialized,
-    ResumeDeleteBranch(Node),
+    ResumeDeleteBranch(Node, Node),
     ResumeContractBranch(/* from_delete: */ OptSolution),
     ResumeSCCSplit(Vec<(G, NodeMapper)>, Vec<Node>),
     ResumeVertexCut(OptSolution, Vec<Node>, AllIntSubsets, bool),
@@ -47,6 +47,7 @@ pub(super) struct Frame<G> {
     /// Note that a parent may use `partial_solution` to remember node deletions. So do not assume that
     /// `partial_solution` is empty before calling [`Frame::initialize`]
     pub(super) partial_solution: Solution,
+    pub(super) partial_solution_parent: Solution,
 
     /// Optimization: we safe the size of the largest clique found during lower bound computation and
     /// pass this information along to our children to accelerate their lower bound computation.
@@ -63,7 +64,22 @@ pub(super) struct Frame<G> {
     /// Postprocessor that keeps the state of two-staged kernelization rules. It is used in the
     /// terminating methods [`Frame::add_partial_solution`] and [`Frame::partial_solution_as_result`]
     pub(super) postprocessor: Postprocessor,
+
+    pub(super) directed_mode: bool,
+
+    pub(super) initial_upper_bound: Node,
+    pub(super) initial_lower_bound: Node,
+
+    graph_digest: String,
 }
+
+const MIN_REDUCED_SCC_SIZE: Node = 2;
+const DELETE_TWINS_MIRRORS_AND_SATELLITES: bool = true;
+const MATRIX_SOLVER_SIZE: Node = 64;
+const SEARCH_CUTS: bool = true;
+const DELETE_CYCLES: bool = true;
+const DELETE_CLIQUES: bool = true;
+const ALWAYS_COMPUTE_LOWER_BOUNDS: bool = false;
 
 impl<G: BnBGraph> Frame<G> {
     pub(super) fn new(graph: G, lower_bound: Node, upper_bound: Node) -> Self {
@@ -71,17 +87,45 @@ impl<G: BnBGraph> Frame<G> {
             graph,
             resume_with: Uninitialized,
             upper_bound,
+            initial_upper_bound: upper_bound,
             lower_bound,
+            initial_lower_bound: lower_bound,
             max_clique: None,
             graph_is_connected: None,
             graph_is_reduced: false,
-            partial_solution: vec![],
+            partial_solution: Vec::new(),
+            partial_solution_parent: Vec::new(),
             postprocessor: Postprocessor::new(),
+            directed_mode: false,
+            graph_digest: String::new(),
         }
+    }
+
+    pub(super) fn graph_digest(&mut self) -> &String {
+        if self.graph_digest.is_empty() {
+            self.graph_digest = self.graph.digest_sha256();
+        }
+
+        &self.graph_digest
+    }
+
+    fn branch(&self, graph: G, lower_bound: Node, upper_bound: Node) -> Self {
+        let mut branch = Self::new(graph, lower_bound, upper_bound);
+        branch.max_clique = self.max_clique;
+        branch
     }
 
     /// This function carries out kernelization and decides upon a branching strategy.
     pub(super) fn initialize(&mut self) -> BBResult<G> {
+        assert!(self.partial_solution.is_empty());
+        assert!(self
+            .partial_solution_parent
+            .iter()
+            .all(|&u| self.graph.total_degree(u) == 0));
+
+        assert_eq!(self.upper_bound, self.initial_upper_bound);
+        assert_eq!(self.lower_bound, self.initial_lower_bound);
+
         if self.lower_bound >= self.upper_bound {
             return self.fail();
         }
@@ -95,8 +139,13 @@ impl<G: BnBGraph> Frame<G> {
             return result;
         }
 
+        if self.lower_bound >= self.upper_bound {
+            return self.fail();
+        }
+
         // process small instances with matrix-solver
-        if self.graph.number_of_nodes() < 64 {
+        #[allow(clippy::absurd_extreme_comparisons)]
+        if self.graph.number_of_nodes() < MATRIX_SOLVER_SIZE {
             return self.return_to_result_and_partial_solution(
                 crate::exact::branch_and_bound_matrix::branch_and_bound_matrix(
                     &self.graph,
@@ -110,46 +159,58 @@ impl<G: BnBGraph> Frame<G> {
         }
 
         let mut cycle = None;
-        if self.lower_bound * 4 > self.upper_bound * 3 {
+
+        #[allow(clippy::absurd_extreme_comparisons)]
+        if ALWAYS_COMPUTE_LOWER_BOUNDS
+            || self.lower_bound <= MIN_REDUCED_SCC_SIZE
+            || self.lower_bound * 4 > self.upper_bound * 3
+            || (!self.directed_mode && self.max_clique.map_or(true, |c| c > 3))
+            || thread_rng().gen_ratio(1, 16)
+        {
             let mut lb = LowerBound::new(&self.graph);
             if let Some(mc) = self.max_clique {
                 lb.set_max_clique(mc);
             }
             lb.compute();
             self.max_clique = Some(lb.largest_clique().map_or(0, |c| c.len() as Node));
-            self.lower_bound = self.lower_bound.max(lb.lower_bound()).max(2);
+            self.lower_bound = self
+                .lower_bound
+                .max(lb.lower_bound())
+                .max(MIN_REDUCED_SCC_SIZE);
+            if self.upper_bound <= self.lower_bound {
+                return self.fail();
+            }
+
             cycle = lb.shortest_cycle().map(Vec::from);
 
             if let Some(clique) = lb.largest_clique() {
-                if self.upper_bound <= self.lower_bound {
-                    return self.fail();
-                }
-
                 let mut clique = Vec::from(clique);
 
-                if clique.len() >= 3 {
-                    clique.sort_unstable_by_key(|&u| self.graph.total_degree(u));
+                if DELETE_CLIQUES && clique.len() >= 3 {
+                    clique.sort_unstable_by_key(|&u| -(self.graph.total_degree(u) as i64));
                     return self.resume_clique(None, clique, 0, None);
                 }
             }
         }
 
-        if let Some(result) = self.try_branching_on_fancy_cuts() {
-            return result;
+        if SEARCH_CUTS {
+            if let Some(result) = self.try_branching_on_fancy_cuts() {
+                return result;
+            }
         }
 
         // try to branch on the shortest cycle found during lower bound computation
         if let Some(cycle) = cycle {
-            let k = cycle.len();
-            return if k == 2 {
-                let u = *cycle
-                    .iter()
-                    .max_by_key(|&&u| self.branching_score(u))
-                    .unwrap();
-                self.branch_on_node(u)
-            } else {
-                self.resume_vertex_cut(None, cycle, AllIntSubsets::new(k as u32), false, None)
-            };
+            if DELETE_CYCLES && self.directed_mode && cycle.len() > 2 {
+                let k = cycle.len();
+                return self.resume_vertex_cut(
+                    None,
+                    cycle,
+                    AllIntSubsets::new(k as u32),
+                    false,
+                    None,
+                );
+            }
         }
 
         // if no other branching method worked, branch on the fittest remaining node (according to `branching_score`)
@@ -169,7 +230,9 @@ impl<G: BnBGraph> Frame<G> {
         std::mem::swap(&mut self.resume_with, &mut state);
 
         match state {
-            ResumeDeleteBranch(node) => self.resume_delete_branch(node, from_child),
+            ResumeDeleteBranch(node, num_nodes_deleted) => {
+                self.resume_delete_branch(node, num_nodes_deleted, Some(from_child))
+            }
 
             ResumeContractBranch(from_delete) => {
                 self.resume_contract_branch(from_delete, from_child)
@@ -231,7 +294,7 @@ impl<G: BnBGraph> Frame<G> {
         let mut into_solution = nodes_deleted.clone();
 
         for &v in &nodes_deleted {
-            into_solution.extend(Self::remove_node_and_dominating(&mut subgraph, v));
+            into_solution.extend(self.remove_node_and_dominating(&mut subgraph, v));
         }
 
         into_solution.sort_unstable();
@@ -252,14 +315,14 @@ impl<G: BnBGraph> Frame<G> {
             return self.resume_clique(current_best, clique, i + 1, None);
         }
 
-        let mut branch = Frame::new(
+        let mut branch = self.branch(
             subgraph,
             self.lower_bound.saturating_sub(num_nodes_deleted),
             self.upper_bound - num_nodes_deleted,
         );
         assert_eq!(self.max_clique, Some(clique.len() as Node));
         branch.max_clique = self.max_clique;
-        branch.partial_solution = into_solution;
+        branch.partial_solution_parent = into_solution;
 
         self.resume_with = ResumeClique(current_best, clique, i + 1);
         BBResult::Branch(branch)
@@ -306,7 +369,7 @@ impl<G: BnBGraph> Frame<G> {
                 self.upper_bound,
             );
 
-            branch.partial_solution.reserve(nodes_deleted as usize);
+            branch.partial_solution_parent.reserve(nodes_deleted as usize);
             branch.max_clique = self.max_clique;
 
             for (_, &node) in cut
@@ -319,9 +382,9 @@ impl<G: BnBGraph> Frame<G> {
                 }
 
                 branch
-                    .partial_solution
-                    .extend(Self::remove_node_and_dominating(&mut branch.graph, node));
-                branch.partial_solution.push(node);
+                    .partial_solution_parent
+                    .extend(self.remove_node_and_dominating(&mut branch.graph, node));
+                branch.partial_solution_parent.push(node);
             }
 
             for (_, &node) in cut
@@ -335,37 +398,40 @@ impl<G: BnBGraph> Frame<G> {
                 }
 
                 let deleted = branch.graph.contract_node(node);
-                branch.partial_solution.extend(&deleted);
+                branch.partial_solution_parent.extend(&deleted);
                 for d in deleted {
                     branch
-                        .partial_solution
-                        .extend(Self::remove_node_and_dominating(&mut branch.graph, d));
+                        .partial_solution_parent
+                        .extend(self.remove_node_and_dominating(&mut branch.graph, d));
                 }
             }
 
-            if branch.partial_solution.len() > nodes_deleted as usize {
-                if branch.partial_solution.len() >= self.upper_bound as usize {
+            if branch.partial_solution_parent.len() > nodes_deleted as usize {
+                if branch.partial_solution_parent.len() >= self.upper_bound as usize {
                     continue;
                 }
 
-                branch.partial_solution.sort_unstable();
-                branch.partial_solution.dedup();
+                branch.partial_solution_parent.sort_unstable();
+                branch.partial_solution_parent.dedup();
             }
 
-            branch.graph_is_connected = if branch.partial_solution.is_empty() {
+            branch.graph_is_connected = if branch.partial_solution_parent.is_empty() {
                 self.graph_is_connected
             } else {
                 None
             };
 
-            if branch.upper_bound <= branch.partial_solution.len() as Node {
+            if branch.upper_bound <= branch.partial_solution_parent.len() as Node {
                 continue;
             }
 
-            branch.upper_bound -= branch.partial_solution.len() as Node;
+            branch.upper_bound -= branch.partial_solution_parent.len() as Node;
             branch.lower_bound = branch
                 .lower_bound
-                .saturating_sub(branch.partial_solution.len() as Node);
+                .saturating_sub(branch.partial_solution_parent.len() as Node);
+
+            branch.initial_upper_bound = branch.upper_bound;
+            branch.initial_lower_bound = branch.lower_bound;
 
             self.resume_with = ResumeVertexCut(current_best, cut, subset_iter, reversed);
 
@@ -403,13 +469,12 @@ impl<G: BnBGraph> Frame<G> {
                 return self.fail();
             }
 
-            let upper_bound = (self.upper_bound - remaining_lower)
-                .min(next_branch.0.number_of_nodes().saturating_sub(1));
+            let scc = std::mem::take(&mut next_branch.0);
 
-            let mut branch =
-                Self::new(std::mem::take(&mut next_branch.0), lower_bound, upper_bound);
+            let upper_bound = (self.upper_bound - remaining_lower).min(scc.number_of_nodes());
+
+            let mut branch = self.branch(scc, lower_bound, upper_bound);
             branch.graph_is_connected = Some(true);
-            branch.max_clique = self.max_clique;
 
             self.resume_with = ResumeSCCSplit(subgraphs, lower_bounds);
 
@@ -422,53 +487,71 @@ impl<G: BnBGraph> Frame<G> {
     fn branch_on_node(&mut self, node: Node) -> BBResult<G> {
         assert!(self.graph.in_degree(node) > 0 && self.graph.out_degree(node) > 0);
 
-        self.resume_with = ResumeDeleteBranch(node);
-
         let mut graph = self.graph.clone();
-        let redundant = Self::remove_node_and_dominating(&mut graph, node);
+        let mut partial_solution = self.remove_node_and_dominating(&mut graph, node);
+        assert!(!partial_solution.contains(&node));
+        partial_solution.push(node);
 
-        if redundant.len() as Node + 1 >= self.upper_bound {
-            return self.resume_delete_branch(node, None);
+        let num_nodes_deleted = partial_solution.len() as Node;
+
+        if num_nodes_deleted >= self.upper_bound {
+            return self.resume_delete_branch(node, num_nodes_deleted, None);
         }
 
-        let mut branch = Self::new(
+        self.resume_with = ResumeDeleteBranch(node, num_nodes_deleted);
+
+        let mut branch = self.branch(
             graph,
-            self.lower_bound.saturating_sub(1 + redundant.len() as Node),
-            self.upper_bound - 1 - redundant.len() as Node,
+            self.lower_bound.saturating_sub(num_nodes_deleted),
+            self.upper_bound - num_nodes_deleted,
         );
-        branch.max_clique = self.max_clique;
-        branch.partial_solution = redundant;
+        branch.partial_solution_parent = partial_solution;
 
         BBResult::Branch(branch)
     }
 
-    fn resume_delete_branch(&mut self, node: Node, mut from_child: OptSolution) -> BBResult<G> {
+    fn resume_delete_branch(
+        &mut self,
+        node: Node,
+        _num_nodes_deleted: Node,
+        mut from_child: Option<OptSolution>,
+    ) -> BBResult<G> {
         // Add the previously deleted node
-        if let Some(sol) = from_child.as_mut() {
-            sol.push(node);
-            debug_assert!(self.upper_bound > sol.len() as Node);
-            self.upper_bound = sol.len() as Node;
+        if let Some(from_child) = from_child.as_mut() {
+            if let Some(sol) = from_child.as_mut() {
+                debug_assert!(self.upper_bound > sol.len() as Node);
+                self.upper_bound = sol.len() as Node;
 
-            if self.upper_bound <= self.lower_bound {
-                return self.return_to_result_and_partial_solution(Some(sol.clone()));
+                if self.upper_bound <= self.lower_bound {
+                    return self.return_to_result_and_partial_solution(Some(sol.clone()));
+                }
             }
         }
 
-        if self.graph.has_edge(node, node) {
-            // this case will probably not occur since loops should be removed during reduction
-            return self.return_to_result_and_partial_solution(from_child);
+        if self.graph.has_edge(node, node) || self.graph.undir_degree(node) >= self.upper_bound {
+            return self.return_to_result_and_partial_solution(from_child.unwrap_or(None));
         }
 
         // Setup re-entry
-        self.resume_with = ResumeContractBranch(from_child);
+        self.resume_with = ResumeContractBranch(from_child.unwrap_or(None));
 
         // Setup child call
         let mut subgraph = std::mem::take(&mut self.graph);
-        subgraph.contract_node(node);
+        let removed = subgraph.contract_node(node);
+        subgraph.remove_edges_of_nodes(&removed);
 
-        let mut branch = Self::new(subgraph, self.lower_bound, self.upper_bound);
-        branch.graph_is_connected = self.graph_is_connected;
+        let mut branch = self.branch(
+            subgraph,
+            self.lower_bound.saturating_sub(removed.len() as Node),
+            self.upper_bound - removed.len() as Node,
+        );
+        branch.graph_is_connected = if removed.is_empty() {
+            self.graph_is_connected
+        } else {
+            None
+        };
         branch.max_clique = self.max_clique.map(|mc| mc + 1);
+        branch.partial_solution_parent = removed;
         BBResult::Branch(branch)
     }
 
@@ -493,7 +576,12 @@ impl<G: BnBGraph> Frame<G> {
     /// If we decide to put a node u into the solution, we can remove it from the graph. Also there
     /// are dominated vertices (which have a subset of in- and out-neighbors of u) as well as mirrors
     /// (see [`Frame::get_mirrors`]) that can also be removed.
-    fn remove_node_and_dominating(graph: &mut G, node: Node) -> Vec<Node> {
+    fn remove_node_and_dominating(&self, graph: &mut G, node: Node) -> Vec<Node> {
+        if !DELETE_TWINS_MIRRORS_AND_SATELLITES {
+            graph.remove_edges_at_node(node);
+            return Vec::new();
+        }
+
         if let Some(pred) = graph
             .in_neighbors(node)
             .min_by_key(|&p| graph.out_degree(p))
@@ -519,21 +607,23 @@ impl<G: BnBGraph> Frame<G> {
 
             graph.remove_edges_of_nodes(&twins);
 
-            let mirrors = Self::get_mirrors(graph, node);
+            if !self.directed_mode {
+                let mirrors = Self::get_mirrors(graph, node);
 
-            if !mirrors.is_empty() {
-                twins.extend(&mirrors);
+                if !mirrors.is_empty() {
+                    twins.extend(&mirrors);
 
-                let mut found_dominated_nodes = false;
-                for u in mirrors {
-                    let doms = Self::remove_node_and_dominating(graph, u);
-                    twins.extend(&doms);
-                    found_dominated_nodes |= !doms.is_empty();
-                }
+                    let mut found_dominated_nodes = false;
+                    for u in mirrors {
+                        let doms = self.remove_node_and_dominating(graph, u);
+                        twins.extend(&doms);
+                        found_dominated_nodes |= !doms.is_empty();
+                    }
 
-                if found_dominated_nodes {
-                    twins.sort_unstable();
-                    twins.dedup();
+                    if found_dominated_nodes {
+                        twins.sort_unstable();
+                        twins.dedup();
+                    }
                 }
             }
 
@@ -671,11 +761,11 @@ impl<G: BnBGraph> Frame<G> {
             let mut res = partition.split_into_subgraphs(&self.graph);
             let (subgraph, mapper) = res.pop().unwrap();
             assert!(res.is_empty());
+            assert_eq!(self.graph.number_of_edges(), subgraph.number_of_edges());
 
             self.resume_with = ResumeMapped(mapper);
 
-            let mut branch = Frame::new(subgraph, self.lower_bound, self.upper_bound);
-            branch.max_clique = self.max_clique;
+            let mut branch = self.branch(subgraph, self.lower_bound, self.upper_bound);
             branch.graph_is_reduced = true;
             branch.graph_is_connected = Some(true);
             return Some(BBResult::Branch(branch));
@@ -683,6 +773,7 @@ impl<G: BnBGraph> Frame<G> {
 
         if partition.number_of_classes() > 1 {
             let mut subgraphs = partition.split_into_subgraphs(&self.graph);
+            // shortest to the back since we want them process first and will pop frame the back
             subgraphs.sort_by_key(|(g, _)| self.graph.len() - g.len());
 
             let lower_bounds = subgraphs
@@ -693,7 +784,7 @@ impl<G: BnBGraph> Frame<G> {
                         lb.set_max_clique(mc);
                     }
                     lb.compute();
-                    lb.lower_bound().max(2) as Node
+                    lb.lower_bound().max(MIN_REDUCED_SCC_SIZE) as Node
                 })
                 .collect_vec();
 
@@ -808,6 +899,7 @@ impl<G: BnBGraph> Frame<G> {
     /// `return self.return_partial_solution_as_result()`
     fn return_partial_solution_as_result(&mut self) -> BBResult<G> {
         let mut res = std::mem::take(&mut self.partial_solution);
+        res.extend(&self.partial_solution_parent);
         self.postprocessor.finalize_with_global_solution(&mut res);
         BBResult::Result(Some(res))
     }
@@ -821,6 +913,7 @@ impl<G: BnBGraph> Frame<G> {
     fn return_to_result_and_partial_solution(&mut self, solution: OptSolution) -> BBResult<G> {
         BBResult::Result(solution.map(|mut sol| {
             sol.extend(&self.partial_solution);
+            sol.extend(&self.partial_solution_parent);
             self.postprocessor.finalize_with_global_solution(&mut sol);
             sol
         }))

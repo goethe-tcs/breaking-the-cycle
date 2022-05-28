@@ -7,9 +7,11 @@ use std::fmt::Debug;
 
 mod cuts;
 mod frame;
+pub mod result_cache;
 
 use crate::bitset::BitSet;
 use frame::*;
+use result_cache::ResultCache;
 
 /// This implementation is a classical branch-and-bound algorithm. In each step, we apply
 /// kernelization rules, may compute lower-bounds, and then try several branching strategies.
@@ -51,6 +53,8 @@ pub struct BranchAndBound<G> {
     from_child: Option<OptSolution>,
     solution: Option<OptSolution>,
 
+    cache: ResultCache,
+
     number_of_nodes: Node,
     iterations: usize,
 
@@ -75,6 +79,8 @@ enum BBResult<G> {
 pub type Solution = Vec<Node>;
 pub type OptSolution = Option<Solution>;
 
+const MIN_NODES_FOR_CACHE: Node = 16;
+
 impl<G: BnBGraph> BranchAndBound<G> {
     pub fn new(graph: G) -> Self {
         let mut stack: Vec<Frame<G>> = Vec::with_capacity(3 * (graph.len() + 2));
@@ -90,6 +96,7 @@ impl<G: BnBGraph> BranchAndBound<G> {
             number_of_nodes,
             iterations: 0,
             paranoid: false,
+            cache: Default::default(),
         }
     }
 
@@ -131,6 +138,15 @@ impl<G: BnBGraph> BranchAndBound<G> {
     pub fn number_of_iterations(&self) -> usize {
         self.iterations
     }
+
+    /// Uses the matrix solver to cross check all results obtained by the solver for small
+    /// graphs. Requires paranoia.
+    ///
+    /// # Warning
+    /// This might be extremely slow! Never use this feature in production.
+    pub fn set_cache_capacity(&mut self, capacity: usize) {
+        self.cache.set_capacity(capacity);
+    }
 }
 
 impl<G: BnBGraph> TerminatingIterativeAlgorithm for BranchAndBound<G> {}
@@ -143,7 +159,7 @@ impl<G: BnBGraph> IterativeAlgorithm for BranchAndBound<G> {
 
         // we execute the last frame on the stack but do not remove it yet, as it will remain there
         // in case it branches
-        let result = {
+        let mut result = {
             let current = self.stack.last_mut().unwrap();
             if let Some(from_child) = self.from_child.replace(None) {
                 current.resume(from_child)
@@ -152,9 +168,34 @@ impl<G: BnBGraph> IterativeAlgorithm for BranchAndBound<G> {
             }
         };
 
+        // cache look up
+        if let BBResult::Branch(frame) = &mut result {
+            if self.cache.capacity() > 0 && frame.graph.number_of_nodes() >= MIN_NODES_FOR_CACHE {
+                let ub = frame.initial_upper_bound;
+                self.from_child = self.cache.get(frame.graph_digest(), ub);
+                if let Some(fc) = &mut self.from_child {
+                    // we have a cache hit; if it's a result, we have to extend it by the parent's partial result
+                    if let Some(res) = fc {
+                        res.extend(&frame.partial_solution_parent);
+                    }
+                    return;
+                }
+            }
+        }
+
         match result {
             BBResult::Result(res) => {
                 assert!(res.is_none() || self.stack.last().unwrap().postprocessor.is_empty());
+                let digest = {
+                    let frame = self.stack.last_mut().unwrap();
+                    if frame.graph.number_of_nodes() >= MIN_NODES_FOR_CACHE {
+                        Some(self.stack.last_mut().unwrap().graph_digest().clone())
+                    } else {
+                        None
+                    }
+                };
+
+                let frame = self.stack.last().unwrap();
 
                 if self.paranoid {
                     assert_eq!(self.graph_stack.len(), self.stack.len());
@@ -180,6 +221,34 @@ impl<G: BnBGraph> IterativeAlgorithm for BranchAndBound<G> {
                         let induced = graph.vertex_induced(&solution_mask);
                         assert!(induced.0.is_acyclic());
                     }
+                }
+
+                // make sure that the solution satisfies the required lower/upper bounds;
+                // this check is sufficiently cheap that we do it even in the non-paranoid mode
+                if let Some(solution) = res.as_ref() {
+                    assert!(
+                        solution.len()
+                            >= frame.initial_lower_bound as usize
+                                + frame.partial_solution_parent.len()
+                    );
+                    assert!(
+                        solution.len()
+                            < frame.initial_upper_bound as usize
+                                + frame.partial_solution_parent.len()
+                    );
+                }
+
+                if let Some(digest) = digest {
+                    self.cache.add_to_cache(
+                        digest,
+                        res.as_ref().map(|s| {
+                            s.iter()
+                                .copied()
+                                .filter(|x| !frame.partial_solution_parent.contains(x))
+                                .collect_vec()
+                        }),
+                        frame.initial_upper_bound,
+                    );
                 }
 
                 // frame completed, so it's finally time to remove it from stack

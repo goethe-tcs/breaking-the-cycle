@@ -3,6 +3,7 @@ pub mod adj_array_undir;
 pub mod adj_list_matrix;
 pub mod complete_subgraphs;
 pub mod connectivity;
+pub mod digest;
 pub mod generators;
 pub(super) mod graph_macros;
 pub mod hash_graph;
@@ -24,6 +25,7 @@ pub use adj_array_undir::AdjArrayUndir;
 pub use adj_list_matrix::{AdjListMatrix, AdjListMatrixIn};
 pub use complete_subgraphs::CompleteSubgraphEnumerator;
 
+pub use self::digest::GraphDigest;
 pub use connectivity::*;
 pub use io::*;
 pub use matching::Matching;
@@ -34,12 +36,6 @@ use std::iter::FromIterator;
 pub use subgraph::*;
 pub use traversal::*;
 pub use unique_node_stack::UniqueNodeStack;
-
-#[cfg(feature = "pace-digest")]
-pub mod digest;
-
-#[cfg(feature = "pace-digest")]
-pub use self::digest::GraphDigest;
 
 use fxhash::FxHashSet;
 use std::ops::Range;
