@@ -505,8 +505,12 @@ fn repeat_while<F: FnMut() -> bool>(mut pred: F) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::bitset::BitSet;
+    use crate::exact::branch_and_bound_matrix::branch_and_bound_matrix;
+    use glob::glob;
     use std::fs::File;
     use std::io::BufReader;
+    use std::str::FromStr;
 
     fn graph_edges_count<
         G: GraphNew + GraphEdgeEditing + AdjacencyList + AdjacencyTest + AdjacencyListIn,
@@ -552,5 +556,92 @@ mod tests {
             assert_eq!(graph_edges_count(&result.1[1].0), 40);
         }
         Ok(())
+    }
+
+    pub(super) fn for_each_stress_graph<F: FnMut(&String, &AdjArrayUndir) -> ()>(mut callback: F) {
+        glob("data/stress_kernels/*_n*_m*_*.metis")
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap()
+            .iter()
+            .filter_map(|filename| {
+                let file_extension = filename.extension().unwrap().to_str().unwrap().to_owned();
+                let file_format = FileFormat::from_str(&file_extension).ok()?;
+                let graph = AdjArrayUndir::try_read_graph(file_format, filename).ok()?;
+                if graph.len() < 100 {
+                    Some((String::from(filename.to_str().unwrap()), graph))
+                } else {
+                    None
+                }
+            })
+            .for_each(|(file, graph)| callback(&file, &graph));
+    }
+
+    pub(super) fn for_each_stress_graph_with_opt_sol<
+        F: FnMut(&String, &AdjArrayUndir, Node) -> (),
+    >(
+        mut callback: F,
+    ) {
+        for_each_stress_graph(|filename, graph| {
+            let opt_sol_size = branch_and_bound_matrix(graph, None).unwrap().len() as Node;
+            callback(filename, graph, opt_sol_size)
+        })
+    }
+
+    pub(super) fn stress_test_kernel<
+        F: Fn(&mut AdjArrayUndir, &mut Vec<Node>, Node) -> Option<bool>,
+    >(
+        kernel: F,
+    ) {
+        let mut num_applied = 0;
+        for_each_stress_graph_with_opt_sol(|filename, org_graph, opt_sol| {
+            let mut graph = org_graph.clone();
+            let digest_before = graph.digest_sha256();
+
+            let mut rule_fvs = Vec::new();
+            let applied = kernel(&mut graph, &mut rule_fvs, opt_sol);
+            let digest_after = graph.digest_sha256();
+
+            if digest_before == digest_after {
+                assert!(
+                    applied.is_none() || applied == Some(false),
+                    "File: {}",
+                    filename
+                );
+                assert!(rule_fvs.is_empty(), "File: {}", filename);
+                return;
+            }
+
+            num_applied += 1;
+
+            assert!(
+                applied.is_none() || applied == Some(true),
+                "File: {}",
+                filename
+            );
+
+            let kernel_fvs = branch_and_bound_matrix(&graph, None).unwrap();
+            assert_eq!(
+                kernel_fvs.len() + rule_fvs.len(),
+                opt_sol as usize,
+                "File: {}",
+                filename
+            );
+            assert!(
+                org_graph
+                    .vertex_induced(&BitSet::new_all_set_but(
+                        graph.len(),
+                        kernel_fvs.iter().chain(rule_fvs.iter()).copied()
+                    ))
+                    .0
+                    .is_acyclic(),
+                "File: {}",
+                filename
+            );
+        });
+
+        if num_applied == 0 {
+            println!("Rule was never applied");
+        }
     }
 }

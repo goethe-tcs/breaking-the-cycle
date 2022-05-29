@@ -258,6 +258,7 @@ fn remove_edges_at_capacity_node(capacity: &mut [BitSet], node: Node, graph_size
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::kernelization::tests::stress_test_kernel;
 
     #[test]
     fn create_capacity_for_petals() {
@@ -408,5 +409,44 @@ mod tests {
             graph.add_edge(satellite as Node, 0);
         }
         graph
+    }
+
+    #[test]
+    fn stress_rule_5() {
+        stress_test_kernel(|graph, fvs, _| Some(apply_rule_5(graph, fvs)));
+    }
+
+    #[test]
+    #[should_panic]
+    fn stress_rules_5_and_6_too_low_ub() {
+        stress_test_kernel(|graph, fvs, opt| {
+            apply_rules_5_and_6(graph, opt.saturating_sub(1), fvs)
+        });
+    }
+
+    #[test]
+    fn stress_rules_5_and_6() {
+        stress_test_kernel(|graph, fvs, opt| apply_rules_5_and_6(graph, opt, fvs));
+    }
+
+    #[test]
+    fn stress_rules_5_and_6_higher_ub() {
+        stress_test_kernel(|graph, fvs, opt| apply_rules_5_and_6(graph, opt + 1, fvs));
+    }
+
+    #[test]
+    #[should_panic]
+    fn stress_rule_6_too_low_ub() {
+        stress_test_kernel(|graph, fvs, opt| apply_rule_6(graph, opt.saturating_sub(1), fvs));
+    }
+
+    #[test]
+    fn stress_rule_6() {
+        stress_test_kernel(|graph, fvs, opt| apply_rule_6(graph, opt, fvs));
+    }
+
+    #[test]
+    fn stress_rule_6_higher_ub() {
+        stress_test_kernel(|graph, fvs, opt| apply_rule_6(graph, opt + 1, fvs));
     }
 }

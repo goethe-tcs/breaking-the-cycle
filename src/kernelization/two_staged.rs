@@ -474,8 +474,11 @@ impl PostprocessorRule for PostRuleFunnel {
 
 #[cfg(test)]
 mod tests {
+    use super::super::*;
     use super::*;
+    use crate::exact::branch_and_bound_matrix::branch_and_bound_matrix;
     use crate::graph::generators::GeneratorSubstructures;
+    use crate::kernelization::tests::for_each_stress_graph_with_opt_sol;
     use rand::{Rng, SeedableRng};
     use rand_pcg::Pcg64;
 
@@ -730,5 +733,73 @@ mod tests {
         pp.finalize_with_global_solution(&mut dfvs);
         dfvs.sort_unstable();
         assert_eq!(dfvs, vec![0, 4]);
+    }
+
+    pub(super) fn stress_test_two_staged_kernel<
+        F: Fn(&mut AdjArrayUndir, &mut Vec<Node>, &mut Postprocessor) -> bool,
+    >(
+        kernel: F,
+    ) {
+        let mut num_applied = 0;
+        for_each_stress_graph_with_opt_sol(|filename, org_graph, opt_sol| {
+            let mut graph = org_graph.clone();
+            let digest_before = graph.digest_sha256();
+
+            let mut rule_fvs = Vec::new();
+            let mut pp = Postprocessor::new();
+            let applied = kernel(&mut graph, &mut rule_fvs, &mut pp);
+            num_applied += applied as usize;
+            let digest_after = graph.digest_sha256();
+
+            if digest_before == digest_after {
+                assert!(!applied, "File: {}", filename);
+                assert!(rule_fvs.is_empty(), "File: {}", filename);
+                assert_eq!(pp.will_add(), 0, "File: {}", filename);
+                return;
+            }
+
+            assert!(applied, "File: {}", filename);
+
+            let mut kernel_fvs = branch_and_bound_matrix(&graph, None).unwrap();
+            kernel_fvs.extend(&rule_fvs);
+            pp.finalize_with_global_solution(&mut kernel_fvs);
+
+            assert_eq!(kernel_fvs.len(), opt_sol as usize, "File: {}", filename);
+            assert!(
+                org_graph
+                    .vertex_induced(&BitSet::new_all_set_but(
+                        graph.len(),
+                        kernel_fvs.iter().copied()
+                    ))
+                    .0
+                    .is_acyclic(),
+                "File: {}",
+                filename
+            );
+        });
+
+        if num_applied == 0 {
+            println!("Rule was never applied");
+        }
+    }
+
+    #[test]
+    fn stress_desk() {
+        stress_test_two_staged_kernel(|g, _, pp| apply_rule_desk(g, pp));
+    }
+
+    #[test]
+    fn stress_undir_degree_two() {
+        stress_test_two_staged_kernel(|g, _, pp| apply_rule_undir_degree_two(g, pp));
+    }
+
+    #[test]
+    fn stress_funnel() {
+        stress_test_two_staged_kernel(apply_rule_funnel);
+    }
+
+    #[test]
+    fn stress_twins_degree_three() {
+        stress_test_two_staged_kernel(apply_rule_twins_degree_three);
     }
 }

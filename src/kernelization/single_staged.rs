@@ -417,6 +417,7 @@ pub fn apply_rule_domn<G: ReducibleGraph>(graph: &mut G, fvs: &mut Vec<Node>) ->
 
 #[cfg(test)]
 mod tests {
+    use super::super::tests::*;
     use super::*;
 
     #[test]
@@ -587,5 +588,56 @@ mod tests {
         let mut graph = AdjArrayUndir::from(&[(0, 1), (1, 0)]);
         let mut fvs = Vec::new();
         assert!(apply_rule_unconfined(&mut graph, &mut fvs));
+    }
+
+    #[test]
+    fn stress_rule1() {
+        // this is not terribly useful, since the kernels have no loops
+        stress_test_kernel(|graph, fvs, _| Some(apply_rule_1(graph, fvs)));
+    }
+
+    #[test]
+    fn stress_rule3() {
+        stress_test_kernel(|graph, _, _| Some(apply_rule_3(graph)));
+    }
+
+    #[test]
+    fn stress_rule4() {
+        stress_test_kernel(|graph, fvs, _| Some(apply_rule_4(graph, fvs)));
+    }
+
+    #[test]
+    fn stress_c4() {
+        stress_test_kernel(|graph, fvs, _| Some(apply_rule_c4(graph, fvs)));
+    }
+
+    #[test]
+    fn stress_complete_node() {
+        stress_test_kernel(|graph, fvs, _| Some(apply_rule_complete_node(graph, fvs)));
+    }
+
+    #[test]
+    fn stress_di_cliques() {
+        stress_test_kernel(|graph, fvs, _| Some(apply_rule_di_cliques(graph, fvs)));
+    }
+
+    #[test]
+    fn stress_dome() {
+        stress_test_kernel(|graph, _, _| Some(apply_rule_dome(graph)));
+    }
+
+    #[test]
+    fn stress_domn() {
+        stress_test_kernel(|graph, fvs, _| Some(apply_rule_domn(graph, fvs)));
+    }
+
+    #[test]
+    fn stress_pie() {
+        stress_test_kernel(|graph, _, _| Some(apply_rule_pie(graph)));
+    }
+
+    #[test]
+    fn stress_unconfined() {
+        stress_test_kernel(|graph, fvs, _| Some(apply_rule_unconfined(graph, fvs)));
     }
 }

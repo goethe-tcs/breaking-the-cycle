@@ -150,3 +150,14 @@ pub fn apply_rule_crown<G: ReducibleGraph>(graph: &mut G, fvs: &mut Vec<Node>) -
         applied = true;
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::super::tests::*;
+    use super::*;
+
+    #[test]
+    fn stress_crown() {
+        stress_test_kernel(|graph, fvs, _| Some(apply_rule_crown(graph, fvs)));
+    }
+}
