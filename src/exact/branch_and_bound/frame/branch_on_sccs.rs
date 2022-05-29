@@ -30,7 +30,7 @@ impl<G: BnBGraph> Frame<G> {
 
         if partition.number_of_classes() > 1 {
             let mut subgraphs = partition.split_into_subgraphs(&self.graph);
-            // shortest to the back since we want them process first and will pop frame the back
+            // shortest to the back since we want them process first and will pop frame from the back
             subgraphs.sort_by_key(|(g, _)| self.graph.len() - g.len());
 
             let lower_bounds = subgraphs

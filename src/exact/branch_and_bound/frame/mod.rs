@@ -14,39 +14,14 @@ mod cuts;
 mod kernelization;
 
 const MIN_REDUCED_SCC_SIZE: Node = 2;
+const TRIVIAL_KERNEL_RULES_ONLY: bool = false;
+const USE_ADAPTIVE_KERNEL_FREQUENCY: bool = true;
 const DELETE_TWINS_MIRRORS_AND_SATELLITES: bool = true;
 const MATRIX_SOLVER_SIZE: Node = 64;
 const SEARCH_CUTS: bool = true;
 const BRANCH_ON_CYCLES: bool = true;
 const BRANCH_ON_CLIQUES: bool = true;
 const ALWAYS_COMPUTE_LOWER_BOUNDS: bool = false;
-
-#[derive(Debug)]
-pub(super) enum FrameState<G> {
-    Uninitialized,
-    ResumeDeleteBranch(Node, Node),
-    ResumeContractBranch(/* from_delete: */ OptSolution),
-    ResumeSCCSplit(Vec<(G, NodeMapper)>, Vec<Node>),
-    ResumeNodeGroup(OptSolution, Vec<Vec<Node>>, Vec<Node>, Vec<Node>),
-    ResumeClique(OptSolution, Vec<Node>, Node),
-    ResumeMapped(NodeMapper),
-}
-
-impl<G> FrameState<G> {
-    pub(super) fn describe(&self) -> String {
-        match self {
-            Uninitialized => String::from("Uninitialized"),
-            ResumeDeleteBranch(_, num) => format!("DeleteBranch(deleted={})", num),
-            ResumeContractBranch(_) => String::from("ContractBranch"),
-            ResumeSCCSplit(branches, _) => format!("SCCSplit(remaining: {})", branches.len() - 1),
-            ResumeNodeGroup(_, _, _, _) => String::from("ResumeNodeGroup"),
-            ResumeClique(_, _, _) => String::from("Clique"),
-            ResumeMapped(_) => String::from("Mapped"),
-        }
-    }
-}
-
-use FrameState::*;
 
 /// The frame implements the heavy lifting of the branch and bound algorithm (see also [`BranchAndBound`]
 /// for further information). After construction, the computation starts with [`Frame::initialize`].
@@ -98,7 +73,53 @@ pub(super) struct Frame<G> {
     pub(super) initial_lower_bound: Node,
 
     graph_digest: String,
+    kernel_misses: KernelMisses,
 }
+
+#[derive(Debug)]
+pub(super) enum FrameState<G> {
+    Uninitialized,
+    ResumeDeleteBranch(Node, Node),
+    ResumeContractBranch(/* from_delete: */ OptSolution),
+    ResumeSCCSplit(Vec<(G, NodeMapper)>, Vec<Node>),
+    ResumeNodeGroup(OptSolution, Vec<Vec<Node>>, Vec<Node>, Vec<Node>),
+    ResumeClique(OptSolution, Vec<Node>, Node),
+    ResumeMapped(NodeMapper),
+}
+
+impl<G> FrameState<G> {
+    pub(super) fn describe(&self) -> String {
+        match self {
+            Uninitialized => String::from("Uninitialized"),
+            ResumeDeleteBranch(_, num) => format!("DeleteBranch(deleted={})", num),
+            ResumeContractBranch(_) => String::from("ContractBranch"),
+            ResumeSCCSplit(branches, _) => format!("SCCSplit(remaining: {})", branches.len() - 1),
+            ResumeNodeGroup(_, _, _, _) => String::from("ResumeNodeGroup"),
+            ResumeClique(_, _, _) => String::from("Clique"),
+            ResumeMapped(_) => String::from("Mapped"),
+        }
+    }
+}
+
+#[derive(Default, Clone, Debug, Eq, PartialEq)]
+struct KernelMisses {
+    di_cliques: Node,
+    pie: Node,
+    c4: Node,
+    undir_dom_node: Node,
+    domn: Node,
+    redundant_cycle: Node,
+    unconfined: Node,
+    crown: Node,
+    dom_node_edges: Node,
+    rules56: Node,
+    undir_degree_two: Node,
+    funnel: Node,
+    twins_degree_three: Node,
+    desk: Node,
+}
+
+use FrameState::*;
 
 impl<G: BnBGraph> Frame<G> {
     pub(super) fn new(graph: G, lower_bound: Node, upper_bound: Node) -> Self {
@@ -117,6 +138,7 @@ impl<G: BnBGraph> Frame<G> {
             postprocessor: Postprocessor::new(),
             directed_mode: false,
             graph_digest: String::new(),
+            kernel_misses: Default::default(),
         }
     }
 
@@ -268,6 +290,7 @@ impl<G: BnBGraph> Frame<G> {
     fn branch(&self, graph: G, lower_bound: Node, upper_bound: Node) -> Self {
         let mut branch = Self::new(graph, lower_bound, upper_bound);
         branch.max_clique = self.max_clique;
+        branch.directed_mode = self.directed_mode;
         branch
     }
 
