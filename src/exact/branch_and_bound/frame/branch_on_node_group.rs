@@ -14,18 +14,19 @@ impl<G: BnBGraph> Frame<G> {
         if group.len() == 1 {
             self.branch_on_node(*group.first().unwrap())
         } else {
-            let mut branches = group
-                .iter()
-                .copied()
-                .powerset()
-                .filter(|b| !b.is_empty())
-                .collect_vec();
+            let mut branches = group.iter().copied().powerset().collect_vec();
 
-            branches.iter_mut().for_each(|b| b.sort_unstable());
+            branches
+                .iter_mut()
+                .for_each(|b| self.sort_branch_descriptor(b));
             branches.sort_unstable_by_key(|b| b.len());
 
             self.resume_node_group(None, branches, group, None, None)
         }
+    }
+
+    fn sort_branch_descriptor(&self, branch: &mut [Node]) {
+        branch.sort_unstable_by_key(|&u| (-(self.branching_score(u) as i64), u));
     }
 
     pub(super) fn resume_node_group(
@@ -36,10 +37,12 @@ impl<G: BnBGraph> Frame<G> {
         mut deleted_for_child: Option<Vec<Node>>,
         solution_from_child: OptSolution,
     ) -> BBResult<G> {
+        let result_from_first_branch = deleted_for_child.as_ref().map_or(false, |g| g == &group);
+
         if let Some(mut sol) = solution_from_child {
             let deleted_for_child = deleted_for_child.as_mut().unwrap();
 
-            if deleted_for_child == &group {
+            if result_from_first_branch {
                 // result is from contraction-free branch, so we can derive a lower bound from it
                 // note that the reinsertable-optimization down below wont improve the lower bound
                 // so we can update it here
@@ -102,7 +105,6 @@ impl<G: BnBGraph> Frame<G> {
                             .filter(|u| !grp.contains(u))
                             .collect_vec();
 
-                        debug_assert!(smaller_group.iter().is_sorted());
                         let pos = branches_left.iter().position(|x| x == &smaller_group);
                         if let Some(pos) = pos {
                             branches_left.swap_remove(pos);
@@ -143,11 +145,14 @@ impl<G: BnBGraph> Frame<G> {
                     .filter(|b| b.len() < deleted_for_child.len())
                     .collect_vec();
             }
-        } else if deleted_for_child.as_ref().map_or(false, |g| g == &group) {
+        } else if result_from_first_branch {
             // if we did not receive a solution from the delete-only branch, we still know that
             // it's size is at least self.upper_bound; thus we can at least derive a lower bound
             // from it
-            self.lower_bound = self.lower_bound.max(self.upper_bound - group.len() as Node);
+            let child_size = deleted_for_child.as_ref().unwrap().len() as Node;
+            self.lower_bound = self
+                .lower_bound
+                .max(self.upper_bound.saturating_sub(child_size));
         }
 
         while let Some(nodes_to_delete) = branches_left.pop() {
@@ -166,9 +171,13 @@ impl<G: BnBGraph> Frame<G> {
                 partial_solution.extend(&loops);
             }
 
+            if nodes_to_spare.iter().any(|u| partial_solution.contains(u)) {
+                continue;
+            }
+
             graph.remove_edges_of_nodes(&nodes_to_delete);
 
-            partial_solution.sort_unstable();
+            self.sort_branch_descriptor(&mut partial_solution);
             partial_solution.dedup();
 
             if self.upper_bound <= partial_solution.len() as Node {
@@ -189,5 +198,57 @@ impl<G: BnBGraph> Frame<G> {
         }
 
         self.return_to_result_and_partial_solution(current_best)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::tests::*;
+    use super::*;
+    use rand::prelude::IteratorRandom;
+
+    const SAMPLES_PER_GRAPH: usize = 6;
+
+    fn stress_test<FB: Fn(AdjArrayUndir, Node) -> Frame<AdjArrayUndir>>(
+        frame_builder: FB,
+        expect_success: bool,
+    ) {
+        for_each_stress_graph_with_opt_sol(|filename, graph, opt_sol| {
+            for i in 0..SAMPLES_PER_GRAPH {
+                let group_size = ((i % 3) + 2).min(graph.len());
+                let group = graph
+                    .vertices()
+                    .choose_multiple(&mut thread_rng(), group_size);
+
+                let mut frame = frame_builder(graph.clone(), opt_sol);
+                let response = frame.branch_on_node_group(group.clone());
+                let simulated_result = simulate_execution(&mut frame, response);
+
+                if expect_success {
+                    let my_size = simulated_result.as_ref().map_or(-1, |s| s.len() as isize);
+
+                    assert_eq!(
+                        my_size, opt_sol as isize,
+                        "file: {} group: {:?} opt: {} my-size: {} my-sol: {:?}",
+                        filename, group, opt_sol, my_size, simulated_result
+                    );
+                } else {
+                    assert!(simulated_result.is_none())
+                }
+            }
+        });
+    }
+
+    branching_stress_tests!(stress_test);
+
+    #[test]
+    #[ignore]
+    fn interactive() {
+        let graph = AdjArrayUndir::try_read_graph(FileFormat::Metis, std::path::Path::new("data/stress_kernels/e_015_n26_m166_057591a108b2f71e8f6db8ae0edcf9e68746dbfc3319a93dd6791540c94afaeb_kernel.metis")).unwrap();
+        let group = vec![10, 20];
+        let mut frame = Frame::new(graph.clone(), 0, graph.number_of_nodes() - 1);
+        let response = frame.branch_on_node_group(group.clone());
+        let simulated_result = simulate_execution(&mut frame, response);
+        assert_eq!(simulated_result.unwrap().len(), 14);
     }
 }

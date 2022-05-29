@@ -47,7 +47,7 @@ impl<G: BnBGraph> Frame<G> {
                     return self.return_to_result_and_partial_solution(Some(sol.clone()));
                 }
             } else {
-                self.lower_bound = self.upper_bound.saturating_sub(num_nodes_deleted);
+                self.lower_bound = self.upper_bound.saturating_sub(num_nodes_deleted + 1);
             }
         }
 
@@ -107,5 +107,54 @@ impl<G: BnBGraph> Frame<G> {
         from_child: OptSolution,
     ) -> BBResult<G> {
         self.return_to_result_and_partial_solution(from_child.or(from_delete))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::tests::*;
+    use super::*;
+    use rand::prelude::IteratorRandom;
+
+    const SAMPLES_PER_GRAPH: usize = 5;
+
+    fn stress_test<FB: Fn(AdjArrayUndir, Node) -> Frame<AdjArrayUndir>>(
+        frame_builder: FB,
+        expect_success: bool,
+    ) {
+        for_each_stress_graph_with_opt_sol(|filename, graph, opt_sol| {
+            for node in graph
+                .vertices()
+                .choose_multiple(&mut thread_rng(), graph.len().min(SAMPLES_PER_GRAPH))
+            {
+                let mut frame = frame_builder(graph.clone(), opt_sol);
+                let response = frame.branch_on_node(node);
+                let simulated_result = simulate_execution(&mut frame, response);
+
+                if expect_success {
+                    let my_size = simulated_result.as_ref().map_or(-1, |s| s.len() as isize);
+
+                    assert_eq!(
+                        my_size, opt_sol as isize,
+                        "file: {} node: {:?} opt: {} my-size: {} my-sol: {:?}",
+                        filename, node, opt_sol, my_size, simulated_result
+                    );
+                } else {
+                    assert!(simulated_result.is_none())
+                }
+            }
+        });
+    }
+
+    branching_stress_tests!(stress_test);
+
+    #[test]
+    #[ignore]
+    fn interactive() {
+        let graph = AdjArrayUndir::try_read_graph(FileFormat::Metis, std::path::Path::new("data/stress_kernels/h_117_n10_m90_9bd8d9cbc856a116639173dfa30301b0323bd74282f920d31bdf2b915b6a6031_kernel.metis")).unwrap();
+        let mut frame = Frame::new(graph.clone(), 0, graph.number_of_nodes());
+        let response = frame.branch_on_node(0);
+        let simulated_result = simulate_execution(&mut frame, response);
+        assert_eq!(simulated_result.unwrap().len(), 9);
     }
 }

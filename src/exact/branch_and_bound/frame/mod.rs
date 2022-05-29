@@ -15,7 +15,7 @@ mod kernelization;
 
 const MIN_REDUCED_SCC_SIZE: Node = 2;
 const DELETE_TWINS_MIRRORS_AND_SATELLITES: bool = false;
-const MATRIX_SOLVER_SIZE: Node = 32;
+const MATRIX_SOLVER_SIZE: Node = 64;
 const SEARCH_CUTS: bool = true;
 const BRANCH_ON_CYCLES: bool = true;
 const BRANCH_ON_CLIQUES: bool = true;
@@ -400,4 +400,157 @@ impl<G: BnBGraph> Frame<G> {
             sol
         }))
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use glob::glob;
+    use std::str::FromStr;
+
+    pub(super) fn for_each_stress_graph<F: Fn(&String, &AdjArrayUndir) -> ()>(callback: F) {
+        glob("data/stress_kernels/*_n??_m*_0[1234567]*.metis")
+            //glob("data/stress_kernels/*.metis")
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap()
+            .iter()
+            .filter_map(|filename| {
+                let file_extension = filename.extension().unwrap().to_str().unwrap().to_owned();
+                let file_format = FileFormat::from_str(&file_extension).ok()?;
+                let graph = AdjArrayUndir::try_read_graph(file_format, filename).ok()?;
+                if graph.len() < 100 {
+                    Some((String::from(filename.to_str().unwrap()), graph))
+                } else {
+                    None
+                }
+            })
+            .for_each(|(file, graph)| callback(&file, &graph));
+    }
+
+    pub(super) fn for_each_stress_graph_with_opt_sol<F: Fn(&String, &AdjArrayUndir, Node) -> ()>(
+        callback: F,
+    ) {
+        for_each_stress_graph(|filename, graph| {
+            let opt_sol_size = branch_and_bound_matrix(graph, None).unwrap().len() as Node;
+            callback(filename, graph, opt_sol_size)
+        })
+    }
+
+    /// Simulate the execution of a branched frame. Each call to a child is processed using the
+    /// matrix solver; thus it helps in build unit tests.
+    pub(super) fn simulate_execution(
+        frame: &mut Frame<AdjArrayUndir>,
+        first_result: BBResult<AdjArrayUndir>,
+    ) -> OptSolution {
+        let mut result = first_result;
+        loop {
+            match result {
+                BBResult::Result(res) => return res,
+                BBResult::Branch(child) => {
+                    let response = if child.upper_bound == 0 {
+                        None
+                    } else {
+                        let mut sol = branch_and_bound_matrix(&child.graph, None).unwrap();
+                        assert!(child.lower_bound <= sol.len() as Node);
+                        if child.upper_bound > sol.len() as Node {
+                            sol.extend(&child.partial_solution_parent);
+                            Some(sol)
+                        } else {
+                            None
+                        }
+                    };
+
+                    if false {
+                        let parent_len = child.partial_solution_parent.len() as Node;
+                        println!("Simulated child (lb={}|{}, ub={}|{}, parent={:?}) and return: {:?} (k={})",
+                                 child.initial_lower_bound,
+                                 child.initial_lower_bound + parent_len,
+                                 child.initial_upper_bound,
+                                 child.initial_upper_bound + parent_len,
+                                 &child.partial_solution_parent,
+                                 &response, response.as_ref().map_or(-1, |s| s.len() as isize));
+                    }
+
+                    result = frame.resume(response);
+                }
+            }
+        }
+    }
+
+    fn integration_stress_test<FB: Fn(AdjArrayUndir, Node) -> Frame<AdjArrayUndir>>(
+        frame_builder: FB,
+        expect_success: bool,
+    ) {
+        for_each_stress_graph_with_opt_sol(|filename, graph, opt_sol| {
+            // we high-jack the frame_builder idiom from the actual branching tests and build an
+            // algorithm instance from it; not very clean, but it works
+            let mut frame = frame_builder(graph.clone(), opt_sol);
+            let mut algo = BranchAndBound::new(std::mem::take(&mut frame.graph));
+            algo.set_lower_bound(frame.lower_bound);
+            algo.set_upper_bound(frame.upper_bound.saturating_sub(1));
+
+            let result = algo.run_to_completion();
+
+            if expect_success {
+                let my_size = result.as_ref().map_or(-1, |s| s.len() as isize);
+
+                assert_eq!(
+                    my_size, opt_sol as isize,
+                    "file: {} opt: {} my-size: {} my-sol: {:?}",
+                    filename, opt_sol, my_size, result
+                );
+            } else {
+                assert!(result.is_none())
+            }
+        });
+    }
+
+    branching_stress_tests!(integration_stress_test);
+
+    macro_rules! branching_stress_tests {
+        ($st:ident) => {
+            #[test]
+            fn stress_relaxed_lower_upper() {
+                $st(
+                    |graph, _| Frame::new(graph.clone(), 0, graph.number_of_nodes()),
+                    true,
+                );
+            }
+
+            #[test]
+            fn stress_too_low_upper() {
+                $st(
+                    |graph, opt_sol| Frame::new(graph.clone(), 0, opt_sol),
+                    false,
+                );
+            }
+
+            #[test]
+            fn stress_tight_upper() {
+                $st(
+                    |graph, opt_sol| Frame::new(graph.clone(), 0, opt_sol + 1),
+                    true,
+                );
+            }
+
+            #[test]
+            fn stress_tight_lower() {
+                $st(
+                    |graph, opt_sol| Frame::new(graph.clone(), opt_sol, graph.number_of_nodes()),
+                    true,
+                );
+            }
+
+            #[test]
+            fn stress_lower_and_upper() {
+                $st(
+                    |graph, opt_sol| Frame::new(graph.clone(), opt_sol, opt_sol + 1),
+                    true,
+                );
+            }
+        };
+    }
+
+    pub(super) use branching_stress_tests;
 }

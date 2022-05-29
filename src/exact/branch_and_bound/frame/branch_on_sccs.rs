@@ -20,7 +20,9 @@ impl<G: BnBGraph> Frame<G> {
 
             self.resume_with = ResumeMapped(mapper);
 
-            let mut branch = self.branch(subgraph, self.lower_bound, self.upper_bound);
+            let ub = subgraph.number_of_nodes().saturating_sub(1);
+            assert!(ub >= self.lower_bound);
+            let mut branch = self.branch(subgraph, self.lower_bound, self.upper_bound.min(ub));
             branch.graph_is_reduced = true;
             branch.graph_is_connected = Some(true);
             return Some(BBResult::Branch(branch));
@@ -81,8 +83,8 @@ impl<G: BnBGraph> Frame<G> {
 
             let scc = std::mem::take(&mut next_branch.0);
 
-            let upper_bound = (self.upper_bound - remaining_lower).min(scc.number_of_nodes());
-
+            let upper_bound =
+                (self.upper_bound - remaining_lower).min(scc.number_of_nodes().saturating_sub(1));
             let mut branch = self.branch(scc, lower_bound, upper_bound);
             branch.graph_is_connected = Some(true);
 
