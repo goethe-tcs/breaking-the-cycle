@@ -62,19 +62,26 @@ impl<G: BnBGraph> Frame<G> {
         if let Some(opt_sol) = from_child {
             if let Some(sol) = opt_sol {
                 self.upper_bound -= sol.len() as Node;
+                self.lower_bound = self.lower_bound.saturating_sub(sol.len() as Node);
 
                 let mapper = subgraphs.pop().unwrap().1;
                 self.partial_solution
                     .extend(sol.into_iter().map(|u| mapper.old_id_of(u).unwrap()));
 
-                debug_assert_eq!(subgraphs.len(), lower_bounds.len());
+                assert_eq!(subgraphs.len(), lower_bounds.len());
             } else {
                 return self.fail();
             }
         }
 
+        let frame_lb = if subgraphs.len() == 1 {
+            self.lower_bound
+        } else {
+            0
+        };
+
         if let Some(next_branch) = subgraphs.last_mut() {
-            let lower_bound = lower_bounds.pop().unwrap();
+            let lower_bound = lower_bounds.pop().unwrap().max(frame_lb);
             let remaining_lower = lower_bounds.iter().sum::<Node>();
 
             if remaining_lower + lower_bound >= self.upper_bound {
