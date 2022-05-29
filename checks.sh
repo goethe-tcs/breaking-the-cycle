@@ -12,7 +12,7 @@ fi
 cargo +nightly clippy --features="$FEATURES" -- -D clippy::all
 
 if [ "$(uname -m)" == "x86_64" ]; then
-  cargo +nightly tarpaulin --features="$FEATURES" -o html
+  cargo +nightly tarpaulin -t 300 --features="$FEATURES" -o html
 else
   cargo +nightly test
 fi
