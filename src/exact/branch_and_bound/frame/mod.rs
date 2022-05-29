@@ -14,7 +14,7 @@ mod cuts;
 mod kernelization;
 
 const MIN_REDUCED_SCC_SIZE: Node = 2;
-const DELETE_TWINS_MIRRORS_AND_SATELLITES: bool = false;
+const DELETE_TWINS_MIRRORS_AND_SATELLITES: bool = true;
 const MATRIX_SOLVER_SIZE: Node = 64;
 const SEARCH_CUTS: bool = true;
 const BRANCH_ON_CYCLES: bool = true;
@@ -310,8 +310,13 @@ impl<G: BnBGraph> Frame<G> {
                 .map(|v| v as usize),
         );
 
-        let nu =
-            BitSet::new_all_unset_but(graph.len(), graph.undir_neighbors(u).map(|v| v as usize));
+        let nu = BitSet::new_all_unset_but(
+            graph.len(),
+            graph
+                .out_neighbors(u)
+                .chain(graph.in_neighbors(u))
+                .map(|v| v as usize),
+        );
         two_neighbors.and_not(&nu);
         two_neighbors.unset_bit(u as usize);
 
