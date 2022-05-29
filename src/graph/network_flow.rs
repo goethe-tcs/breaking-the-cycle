@@ -1,5 +1,5 @@
+use super::*;
 use crate::bitset::BitSet;
-use crate::graph::{AdjacencyList, GraphOrder, Node, Traversal, TraversalState, TraversalTree};
 use num::Integer;
 use rand::Rng;
 use std::collections::HashSet;
@@ -477,6 +477,162 @@ pub trait MinVertexCut: AdjacencyList {
 }
 
 impl<T: AdjacencyList> MinVertexCut for T {}
+
+enum Change {
+    Add(Node, Node),
+    Remove(Node, Node),
+}
+
+pub struct EdmondsKarpGeneric<'a, G, T, L>
+where
+    G: AdjacencyList + AdjacencyListIn + GraphEdgeEditing,
+    T: Fn(Node) -> L,
+    L: Eq + Copy,
+{
+    graph: &'a mut G,
+    labels: T,
+    predecessor: Vec<Node>,
+    source: Node,
+    target: Node,
+    changes: Option<Vec<Change>>,
+}
+
+pub trait STFlow: AdjacencyList + AdjacencyListIn + GraphEdgeEditing {
+    fn st_flow_undo_changes<T: Fn(Node) -> L, L: Eq + Copy>(
+        &mut self,
+        labels: T,
+        s: Node,
+        t: Node,
+    ) -> EdmondsKarpGeneric<Self, T, L> {
+        let mut res = self.st_flow_keep_changes(labels, s, t);
+        res.set_remember_changes(true);
+        res
+    }
+
+    fn st_flow_keep_changes<T: Fn(Node) -> L, L: Eq + Copy>(
+        &mut self,
+        labels: T,
+        s: Node,
+        t: Node,
+    ) -> EdmondsKarpGeneric<Self, T, L> {
+        EdmondsKarpGeneric::new(self, labels, s, t)
+    }
+}
+
+impl<G: AdjacencyList + AdjacencyListIn + GraphEdgeEditing> STFlow for G {}
+
+impl<'a, G: AdjacencyList + AdjacencyListIn + GraphEdgeEditing, T: Fn(Node) -> L, L: Eq + Copy>
+    EdmondsKarpGeneric<'a, G, T, L>
+{
+    pub fn new(graph: &'a mut G, labels: T, source: Node, target: Node) -> Self {
+        let n = graph.len();
+        Self {
+            graph,
+            labels,
+            predecessor: vec![0; n],
+            source,
+            target,
+            changes: None,
+        }
+    }
+
+    fn bfs(&mut self) -> bool {
+        let mut bfs = self.graph.bfs_with_predecessor(self.source);
+        bfs.stop_at(self.target);
+        bfs.parent_array_into(self.predecessor.as_mut_slice());
+        bfs.did_visit_node(self.target)
+    }
+
+    /// Finds the number of edge disjoint paths from s to t
+    pub fn num_disjoint(&mut self) -> usize {
+        self.count()
+    }
+
+    /// Finds the number of edge discoint paths from s to t, but stops counting at a given k.
+    pub fn count_num_disjoint_upto(&mut self, k: Node) -> Node {
+        self.take(k as usize).count() as Node
+    }
+
+    /// Outputs all edge disjoint paths from s to t. The paths are vertex disjoint in the original graph
+    /// when the network has been constructed for said restriction.
+    /// Each path is represented as a vector of vertices
+    pub fn disjoint_paths(&mut self) -> Vec<Vec<L>> {
+        self.collect()
+    }
+
+    /// Sets/Unsets remember_changes to true/false. If its true, the changes, that are made on
+    /// the capacity, are remembered. With that it is possible to undo these changes later.
+    pub fn set_remember_changes(&mut self, remember_changes: bool) {
+        if remember_changes {
+            assert!(self.changes.as_ref().map_or(true, |v| v.is_empty()));
+            self.changes = Some(Vec::new());
+        } else {
+            self.changes = None;
+        }
+    }
+
+    /// reverts each edge in capacity, that got changed while petals were calculated.
+    /// may only be called after [`STFlow::set_remember_changes`](true)
+    pub fn undo_changes(&mut self) {
+        let stack = self.changes.as_mut().unwrap();
+
+        while let Some(change) = stack.pop() {
+            match change {
+                Change::Add(u, v) => self.graph.add_edge(u, v),
+                Change::Remove(u, v) => self.graph.remove_edge(u, v),
+            }
+        }
+    }
+}
+
+impl<'a, G: AdjacencyList + AdjacencyListIn + GraphEdgeEditing, T: Fn(Node) -> L, L: Eq + Copy> Drop
+    for EdmondsKarpGeneric<'a, G, T, L>
+{
+    fn drop(&mut self) {
+        if self.changes.is_some() {
+            self.undo_changes();
+        }
+    }
+}
+
+impl<'a, G: AdjacencyList + AdjacencyListIn + GraphEdgeEditing, T: Fn(Node) -> L, L: Eq + Copy>
+    Iterator for EdmondsKarpGeneric<'a, G, T, L>
+{
+    type Item = Vec<L>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if !self.bfs() {
+            return None;
+        }
+
+        let s = self.source;
+        let t = self.target;
+        let mut path = vec![t];
+        let mut v = t;
+
+        while v != s {
+            let u = self.predecessor[v as usize];
+            // when trying to find vertex disjoint this skips edges inside 'gadgets'
+            if (self.labels)(u) != (self.labels)(v) {
+                path.push(u);
+            }
+
+            self.graph.remove_edge(u, v);
+            let added = self.graph.try_add_edge(v, u);
+
+            if let Some(changes) = self.changes.as_mut() {
+                if added {
+                    changes.push(Change::Remove(v, u));
+                }
+                changes.push(Change::Add(u, v));
+            }
+
+            v = u;
+        }
+
+        Some(path.iter().map(|&v| (self.labels)(v)).rev().collect())
+    }
+}
 
 #[cfg(test)]
 mod tests {
