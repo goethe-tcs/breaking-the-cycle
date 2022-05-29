@@ -7,6 +7,7 @@ use std::any::Any;
 /// applies some reductions and then recurses on each strongly connected component.
 pub fn branch_and_bound_impl_sccs<G>(
     graph: &G,
+    mut lower_bound_incl: Node,
     mut upper_limit_excl: Node,
     stats: &mut BBStats,
 ) -> Option<G::NodeMask>
@@ -20,7 +21,7 @@ where
     [(); G::CAPACITY]:,
 {
     // at this point we cannot be sure that the graph is not acyclic
-    if upper_limit_excl == 0 {
+    if upper_limit_excl <= lower_bound_incl {
         return None;
     }
 
@@ -31,6 +32,7 @@ where
         return None;
     }
     upper_limit_excl -= loops.count_ones();
+    lower_bound_incl = lower_bound_incl.saturating_sub(loops.count_ones());
     let graph = graph.remove_edges_at_nodes(loops);
 
     let transitive_closure = graph.transitive_closure();
@@ -39,34 +41,45 @@ where
     }
 
     // since the graph contains at least one cycle, we cannot produce a DFVS with less than one node
-    if upper_limit_excl == 1 {
+    if upper_limit_excl == 1 || lower_bound_incl >= upper_limit_excl {
         return None;
     }
 
     // shortcut if the transitive closure is fully connected; then we do not have to search SCCs
     // and can even avoid repeated computation of the transitive closure
     if loops.is_zero() && transitive_closure.has_all_edges() {
-        return branch_and_bound_impl(&graph, upper_limit_excl, stats);
+        return branch_and_bound_impl(&graph, lower_bound_incl, upper_limit_excl, stats);
     }
 
-    let sccs: ArrayVec<G::NodeMask, { G::CAPACITY }> = transitive_closure
+    let mut sccs: ArrayVec<G::NodeMask, { G::CAPACITY }> = transitive_closure
         .sccs()
         .filter(|x| x.count_ones() > 1)
         .collect();
+
 
     // each SCC needs at least one node in the DFVS giving a lower bound
     if sccs.len() as Node >= upper_limit_excl {
         return None;
     }
-    upper_limit_excl -= sccs.len() as Node;
+
+    sccs.sort_unstable_by_key(|s| s.count_ones());
+    let num_sccs = sccs.len();
+    upper_limit_excl -= num_sccs as Node;
 
     let mut solution = loops;
-    for scc in sccs {
+    for (i, scc) in sccs.into_iter().enumerate() {
+        let is_last = i + 1 == num_sccs;
         let scc_graph = graph.subgraph(scc);
 
-        let scc_solution = branch_and_bound_impl(&scc_graph, upper_limit_excl + 1, stats)?;
+        let scc_solution = branch_and_bound_impl(
+            &scc_graph,
+            if is_last { lower_bound_incl } else { 1 },
+            upper_limit_excl + 1,
+            stats,
+        )?;
 
         upper_limit_excl -= scc_solution.count_ones() - 1;
+        lower_bound_incl = lower_bound_incl.saturating_sub(scc_solution.count_ones());
         solution |= scc_solution.bit_deposit(scc);
     }
 
@@ -81,7 +94,12 @@ macro_rules! return_if_some {
     };
 }
 
-fn branch_and_bound_impl<G>(graph: &G, ulimit_ex: Node, stats: &mut BBStats) -> Option<G::NodeMask>
+fn branch_and_bound_impl<G>(
+    graph: &G,
+    mut lower_bound_incl: Node,
+    mut upper_bound_excl: Node,
+    stats: &mut BBStats,
+) -> Option<G::NodeMask>
 where
     G: BBGraph
         + Any
@@ -95,7 +113,7 @@ where
     stats.entered_at(graph.len());
 
     // at this point we cannot be sure that the graph is not acyclic, so we have some annoying checks
-    if ulimit_ex == 0 {
+    if lower_bound_incl >= upper_bound_excl {
         return None;
     }
 
@@ -103,7 +121,7 @@ where
         return if graph.len() == 0 {
             Some(G::NodeMask::zero())
         } else if graph.first_node_has_loop() {
-            if ulimit_ex == 1 {
+            if upper_bound_excl == 1 {
                 None
             } else {
                 Some(G::NodeMask::one())
@@ -115,9 +133,24 @@ where
 
     // We try to switch to a smaller graph representation; the compiler will remove all branches
     // to representations larger than the current one ... hopefully ;)
-    return_if_some!(graph.try_compact(|g: &Graph8| branch_and_bound_impl(g, ulimit_ex, stats)));
-    return_if_some!(graph.try_compact(|g: &Graph16| branch_and_bound_impl(g, ulimit_ex, stats)));
-    return_if_some!(graph.try_compact(|g: &Graph32| branch_and_bound_impl(g, ulimit_ex, stats)));
+    return_if_some!(graph.try_compact(|g: &Graph8| branch_and_bound_impl(
+        g,
+        lower_bound_incl,
+        upper_bound_excl,
+        stats
+    )));
+    return_if_some!(graph.try_compact(|g: &Graph16| branch_and_bound_impl(
+        g,
+        lower_bound_incl,
+        upper_bound_excl,
+        stats
+    )));
+    return_if_some!(graph.try_compact(|g: &Graph32| branch_and_bound_impl(
+        g,
+        lower_bound_incl,
+        upper_bound_excl,
+        stats
+    )));
 
     // Now to the actual branching. In general there are two options
     // - branch1: Delete node 0
@@ -134,9 +167,19 @@ where
         if graph.is_chain_node(0) {
             // chain nodes do not have to be deleted; skip them and contract them in branch 2
             None
+        } else if let Some(mut sol) = branch_and_bound_impl_sccs(
+            &graph.remove_first_node(),
+            lower_bound_incl.saturating_sub(1),
+            upper_bound_excl - 1,
+            stats,
+        ) {
+            lower_bound_incl = sol.count_ones();
+            upper_bound_excl = lower_bound_incl + 1;
+            sol = (sol << 1) | G::NodeMask::one();
+
+            Some(sol)
         } else {
-            branch_and_bound_impl_sccs(&graph.remove_first_node(), ulimit_ex - 1, stats)
-                .map(|sol| (sol << 1) | G::NodeMask::one())
+            None
         }
     };
 
@@ -145,10 +188,13 @@ where
         return solution1;
     }
 
-    let ulimit_ex = solution1.as_ref().map_or(ulimit_ex, |x| x.count_ones());
-
-    let solution2 =
-        branch_and_bound_impl_sccs(&graph.contract_first_node(), ulimit_ex, stats).map(|s| s << 1);
+    let solution2 = branch_and_bound_impl_sccs(
+        &graph.contract_first_node(),
+        lower_bound_incl,
+        upper_bound_excl,
+        stats,
+    )
+    .map(|s| s << 1);
 
     // if solution 2 found a DFVS it is smaller than `ulimit_ex` and therefore strictly
     // smaller than solution 1 (if it exists)
