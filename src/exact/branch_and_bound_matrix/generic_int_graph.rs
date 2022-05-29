@@ -1,6 +1,6 @@
 use super::*;
 
-#[derive(Copy, Clone, PartialEq, Debug)]
+#[derive(Copy, Clone, PartialEq, Debug, Eq)]
 #[repr(C)]
 #[repr(align(32))] // align the matrix in a way that we can use efficient SIMD access instructions
 pub struct GenericIntGraph<T: GraphItem, const N: usize> {

@@ -55,6 +55,22 @@ struct Opt {
     /// Verbose mode (-v, -vv, -vvv, etc.)
     #[structopt(short, long, parse(from_occurrences))]
     verbose: usize,
+
+    /// Disables the paranoia mode of the solver
+    #[structopt(short, long)]
+    trusting: bool,
+
+    /// Print call-tree of solver; requires trusting to be unset
+    #[structopt(short, long)]
+    print_call_stack: bool,
+
+    /// Disables initial kernel rules / split into SCCs
+    #[structopt(short, long)]
+    no_kernelization: bool,
+
+    /// Enables cross validation within the solver;  requires trusting to be unset. EXTREMELY SLOW
+    #[structopt(short, long)]
+    cross_validation: bool,
 }
 
 // Solver ////////////////////////////////////////////
@@ -109,6 +125,13 @@ impl TryFrom<&str> for OutputFormat {
 
 fn main() -> std::io::Result<()> {
     let opt = Opt::from_args();
+    if opt.trusting && opt.print_call_stack {
+        panic!("Parameters trusting and print_call_stack are mutually exclusive");
+    }
+    if opt.trusting && opt.cross_validation {
+        panic!("Parameters trusting and cross_validation are mutually exclusive");
+    }
+
     //let opt = Opt::from_iter(std::iter::empty::<std::ffi::OsString>());
     dfvs::log::build_pace_logger_for_verbosity(LevelFilter::Warn, opt.verbose);
 
@@ -121,7 +144,7 @@ fn main() -> std::io::Result<()> {
         Solver::try_from(opt.mode.as_str()).expect("Failed parsing 'mode' parameter: ");
     let output_format: OutputFormat = OutputFormat::try_from(opt.output_format.as_str())
         .expect("Failed parsing 'output_format' parameter: ");
-    info!("Running in mode {:?}", mode);
+    info!("Running in mode {:?}; trusting: {}", mode, opt.trusting);
 
     let graph: Graph = match &opt.input {
         Some(path) => {
@@ -141,7 +164,11 @@ fn main() -> std::io::Result<()> {
         graph.number_of_edges()
     );
 
-    let mut super_reducer = SuperReducer::with_optimal_pace_settings(graph.clone());
+    let mut super_reducer = if opt.no_kernelization {
+        SuperReducer::with_settings(graph.clone(), Vec::new(), false)
+    } else {
+        SuperReducer::with_optimal_pace_settings(graph.clone())
+    };
     let (solution, sccs) = super_reducer.reduce().unwrap();
     let mut solution = solution.clone();
     let mut sccs = sccs.clone();
@@ -152,7 +179,15 @@ fn main() -> std::io::Result<()> {
 
         let scc_solution = match mode {
             Solver::Exact => {
-                let mut algo = BranchAndBound::with_paranoia(graph.clone());
+                let mut algo = if opt.trusting {
+                    BranchAndBound::new(graph.clone())
+                } else {
+                    BranchAndBound::with_paranoia(graph.clone())
+                };
+
+                algo.set_print_call_stack(opt.print_call_stack);
+                algo.set_cross_validation(opt.cross_validation);
+                algo.set_drop_output(true);
                 algo.run_to_completion()
                     .unwrap()
                     .iter()
@@ -163,13 +198,18 @@ fn main() -> std::io::Result<()> {
         };
 
         solution.extend(scc_solution.iter().map(|&x| mapper.old_id_of(x).unwrap()));
-        info!(
+
+        let elapsed = start.elapsed().as_millis();
+
+        if graph.number_of_nodes() > 100 || elapsed > 5 {
+            info!(
             "Processed SCC with n={:>5} and m={:>7}. Solution cardinality {:>5}. Elapsed: {:>8}ms",
             graph.number_of_nodes(),
             graph.number_of_edges(),
             scc_solution.len(),
-            start.elapsed().as_millis()
+            elapsed
         );
+        }
     }
 
     solution.sort_unstable();
