@@ -85,6 +85,10 @@ impl<G: BnBGraph> Frame<G> {
                     unconfined,
                     apply_rule_unconfined(&mut self.graph, &mut self.partial_solution)
                 );
+                apply_rule!(
+                    crown,
+                    apply_rule_crown(&mut self.graph, &mut self.partial_solution, None)
+                );
             }
             apply_rule!(dom_node_edges, apply_rule_dome(&mut self.graph));
 
@@ -128,22 +132,21 @@ impl<G: BnBGraph> Frame<G> {
                 self.lower_bound = self.lower_bound.saturating_sub(pp_added);
             }
 
-            if applied {
-                continue;
-            }
+            let rule6_limit =
+                self.upper_bound + len_of_part_sol_before - self.partial_solution.len() as Node;
 
-            if self.graph.number_of_nodes() > 2000 || thread_rng().gen_ratio(15, 16) {
+            apply_rule!(rules56, {
+                let result =
+                    apply_rules_5_and_6(&mut self.graph, rule6_limit, &mut self.partial_solution);
+                if result.is_none() {
+                    return Some(self.fail());
+                }
+                result.unwrap()
+            });
+
+            if !applied {
                 break;
             }
-
-            let rule6_limit =
-                self.upper_bound + len_of_part_sol_before - self.partial_solution.len() as Node + 1;
-
-            match apply_rules_5_and_6(&mut self.graph, rule6_limit, &mut self.partial_solution) {
-                None => return Some(self.fail()),
-                Some(false) => break,   // no change
-                Some(true) => continue, // did changes; restart
-            };
         }
 
         let num_nodes_added_to_solution =
