@@ -20,8 +20,8 @@ impl<G: BnBGraph> Frame<G> {
                         applied = true;
                         while (apply_rule_1(&mut self.graph, &mut self.partial_solution)
                             | apply_rule_4(&mut self.graph, &mut self.partial_solution))
-                            || apply_rule_scc(&mut self.graph)
-                        {}
+                        {
+                        }
 
                         true
                     } else {
@@ -79,7 +79,6 @@ impl<G: BnBGraph> Frame<G> {
                 domn,
                 apply_rule_domn(&mut self.graph, &mut self.partial_solution)
             );
-            apply_rule!(redundant_cycle, apply_rule_redundant_cycle(&mut self.graph));
             if !self.directed_mode {
                 apply_rule!(
                     unconfined,
@@ -132,6 +131,10 @@ impl<G: BnBGraph> Frame<G> {
                 self.lower_bound = self.lower_bound.saturating_sub(pp_added);
             }
 
+            if self.upper_bound + len_of_part_sol_before <= self.partial_solution.len() as Node {
+                return Some(self.fail());
+            }
+
             let rule6_limit =
                 self.upper_bound + len_of_part_sol_before - self.partial_solution.len() as Node;
 
@@ -144,6 +147,8 @@ impl<G: BnBGraph> Frame<G> {
                 result.unwrap()
             });
 
+            apply_rule!(redundant_cycle, apply_rule_redundant_cycle(&mut self.graph));
+
             if !applied {
                 break;
             }
@@ -152,11 +157,11 @@ impl<G: BnBGraph> Frame<G> {
         let num_nodes_added_to_solution =
             self.partial_solution.len() as Node - len_of_part_sol_before;
 
-        if num_nodes_added_to_solution >= self.upper_bound {
+        if num_nodes_added_to_solution > self.upper_bound {
             return Some(self.fail());
         }
 
-        if self.graph.number_of_edges() == 0 || self.graph.is_acyclic() {
+        if self.graph.number_of_edges() == 0 {
             return Some(self.return_partial_solution_as_result());
         }
 
@@ -165,6 +170,10 @@ impl<G: BnBGraph> Frame<G> {
             .lower_bound
             .saturating_sub(num_nodes_added_to_solution)
             .max(2);
+
+        if self.upper_bound <= self.lower_bound {
+            return Some(self.fail());
+        }
 
         self.graph_is_connected = None;
         self.graph_is_reduced = true;
