@@ -174,6 +174,8 @@ fn main() -> std::io::Result<()> {
     let mut sccs = sccs.clone();
     sccs.sort_by_key(|(g, _)| g.len());
 
+    info!("Preprocessor completed");
+
     for (graph, mapper) in sccs {
         let start = Instant::now();
 
