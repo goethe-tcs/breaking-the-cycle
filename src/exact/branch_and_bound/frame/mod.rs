@@ -5,6 +5,7 @@ use fxhash::FxHashSet;
 use itertools::Itertools;
 use rand::{thread_rng, Rng};
 use std::iter::FromIterator;
+use std::time::Duration;
 
 mod branch_on_clique;
 mod branch_on_node;
@@ -15,7 +16,7 @@ mod kernelization;
 
 const MIN_REDUCED_SCC_SIZE: Node = 2;
 const TRIVIAL_KERNEL_RULES_ONLY: bool = false;
-const USE_ADAPTIVE_KERNEL_FREQUENCY: bool = true;
+const USE_ADAPTIVE_KERNEL_FREQUENCY: bool = false;
 const DELETE_TWINS_MIRRORS_AND_SATELLITES: bool = true;
 const MATRIX_SOLVER_SIZE: Node = 64;
 const SEARCH_CUTS: bool = true;
@@ -195,7 +196,7 @@ impl<G: BnBGraph> Frame<G> {
 
         let mut cycle = None;
 
-        let mut clique = if self.max_clique.map_or(true, |c| c > 4) {
+        let clique = if self.max_clique.map_or(true, |c| c > 4) {
             let max_size = self.max_clique.unwrap_or(30);
             let (clique, timeout) = self.graph.maximum_complete_subgraph_with_timeout(
                 Some(max_size),
@@ -251,7 +252,7 @@ impl<G: BnBGraph> Frame<G> {
 
         if let Some(clique) = clique {
             if BRANCH_ON_CLIQUES && clique.len() >= 3 {
-                return self.branch_on_clique(Vec::from(clique));
+                return self.branch_on_clique(clique);
             }
         }
 

@@ -24,7 +24,7 @@ impl<G: BnBGraph> Frame<G> {
         }
 
         // search for cuts
-        if let Some(cut) = compute_undirected_cut(&self.graph, self.upper_bound.min(5) - 1) {
+        if let Some(cut) = compute_undirected_cut(&self.graph, self.upper_bound.min(8) - 1) {
             return Some(self.branch_on_node_group(cut));
         }
 
@@ -34,15 +34,15 @@ impl<G: BnBGraph> Frame<G> {
                 &mut rand::thread_rng(),
                 30,
                 0.25,
-                Some(self.upper_bound.min(5)),
+                Some(self.upper_bound.min(8)),
                 true,
             )
             .or_else(|| {
                 self.graph.approx_min_balanced_cut(
                     &mut rand::thread_rng(),
                     50,
-                    10.0 / self.graph.number_of_nodes() as f64,
-                    Some(self.upper_bound.min(3)),
+                    15.0 / self.graph.number_of_nodes() as f64,
+                    Some(self.upper_bound.min(5)),
                     true,
                 )
             })
