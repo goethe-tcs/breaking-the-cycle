@@ -50,6 +50,7 @@ pub enum Rules {
     Rule3,
     Rule4,
     Rule5(Node),
+    Rule6(Node),
     Rule56(Node),
     DiClique,
     CompleteNode,
@@ -181,6 +182,25 @@ where
                         Rules::Rule5(max_nodes) => {
                             if self.pre_processor.graph().number_of_nodes() < max_nodes {
                                 self.pre_processor.apply_rule_5()
+                            } else {
+                                false
+                            }
+                        }
+                        Rules::Rule6(max_nodes) => {
+                            if self.pre_processor.graph().number_of_nodes() < max_nodes {
+                                self.update_fvs_and_upper_bound(&mapper);
+                                if let Some(upper_bound) = self.upper_bound {
+                                    if let Some(applied) =
+                                        self.pre_processor.apply_rule_6(upper_bound)
+                                    {
+                                        applied
+                                    } else {
+                                        self.upper_bound_below_zero = true;
+                                        break;
+                                    }
+                                } else {
+                                    false
+                                }
                             } else {
                                 false
                             }
@@ -380,6 +400,10 @@ impl<G: ReducibleGraph> PreprocessorReduction<G> {
         apply_rule_5(&mut self.graph, &mut self.in_fvs)
     }
 
+    pub fn apply_rule_6(&mut self, upper_bound: Node) -> Option<bool> {
+        apply_rule_6(&mut self.graph, upper_bound, &mut self.in_fvs)
+    }
+
     pub fn apply_rules_5_and_6(&mut self, upper_bound: Node) -> Option<bool> {
         apply_rules_5_and_6(&mut self.graph, upper_bound, &mut self.in_fvs)
     }
@@ -493,14 +517,15 @@ pub fn apply_rules_exhaustively<G: ReducibleGraph>(
     loop {
         loop {
             apply_rule!(apply_rule_3(graph) | apply_rule_4(graph, fvs));
+            apply_rule!(apply_rule_scc(graph));
             apply_rule!(apply_rule_di_cliques(graph, fvs));
             apply_rule!(apply_rule_pie(graph));
             apply_rule!(apply_rule_c4(graph, fvs));
             apply_rule!(apply_rule_dominance(graph, fvs));
             apply_rule!(apply_rule_domn(graph, fvs));
-            apply_rule!(apply_rule_redundant_cycle(graph));
-            //apply_rule!(apply_dome_reduction(graph));
+            apply_rule!(apply_rule_dome(graph));
             apply_rule!(apply_rule_unconfined(graph, fvs));
+            apply_rule!(apply_rule_redundant_cycle(graph));
             break;
         }
 
