@@ -84,10 +84,10 @@ impl<G: BnBGraph> Frame<G> {
                     unconfined,
                     apply_rule_unconfined(&mut self.graph, &mut self.partial_solution)
                 );
-                apply_rule!(
+                /*apply_rule!(
                     crown,
                     apply_rule_crown(&mut self.graph, &mut self.partial_solution, None)
-                );
+                );*/
             }
             apply_rule!(dom_node_edges, apply_rule_dome(&mut self.graph));
 
@@ -147,7 +147,7 @@ impl<G: BnBGraph> Frame<G> {
                 result.unwrap()
             });
 
-            apply_rule!(redundant_cycle, apply_rule_redundant_cycle(&mut self.graph));
+            // apply_rule!(redundant_cycle, apply_rule_redundant_cycle(&mut self.graph));
 
             if !applied {
                 break;

@@ -20,7 +20,7 @@ impl<G: BnBGraph> Frame<G> {
             .iter()
             .all(|&v| u == v || self.graph.has_undir_edge(u, v))));
 
-        clique.sort_unstable_by_key(|&u| -(self.graph.total_degree(u) as i64));
+        clique.sort_unstable_by_key(|&u| self.graph.total_degree(u) + self.graph.undir_degree(u));
         self.resume_clique(None, clique, 0, None)
     }
 
