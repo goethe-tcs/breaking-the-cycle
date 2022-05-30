@@ -61,28 +61,45 @@ fn perform_petal_reduction_rule_5<G: ReducibleGraph>(
     }
 }
 
-fn count_petals(
+fn count_petals<G: ReducibleGraph>(
     node: Node,
-    graph_size: usize,
+    graph: &G,
     mut capacity: Vec<BitSet>,
     mut labels: Vec<Node>,
     count_up_to: Node,
 ) -> (Vec<BitSet>, Vec<Node>, usize) {
+    let undir_degree = graph.undir_degree(node);
+    let n = graph.len();
+
+    if undir_degree >= count_up_to {
+        return (capacity, labels, count_up_to as usize);
+    }
+
     // prepare the capacity to run num_disjoint()
-    capacity[node as usize].unset_bit(node as usize + graph_size);
-    let petal_bit_matrix = ResidualBitMatrix::from_capacity_and_labels(
-        capacity,
-        labels,
-        node + graph_size as Node,
-        node,
-    );
+    capacity[node as usize].unset_bit(node as usize + n);
+
+    for v in graph.undir_neighbors(node) {
+        let was_set1 = capacity[node as usize + n].unset_bit(v as usize);
+        let was_set2 = capacity[v as usize].unset_bit(v as usize + n);
+        assert!(was_set1 && was_set2);
+    }
+
+    let petal_bit_matrix =
+        ResidualBitMatrix::from_capacity_and_labels(capacity, labels, node + n as Node, node);
 
     let mut ec = EdmondsKarp::new(petal_bit_matrix);
     ec.set_remember_changes(true);
-    let petal_count = ec.count_num_disjoint_upto(count_up_to) as usize;
+    let petal_count = ec.count_num_disjoint_upto(count_up_to - undir_degree) as usize;
     ec.undo_changes();
+
     (capacity, labels) = ec.take(); // needed because capacity and labels is moved when petal_bit_matrix is created
-    (capacity, labels, petal_count)
+
+    for v in graph.undir_neighbors(node) {
+        capacity[node as usize + n].set_bit(v as usize);
+        capacity[v as usize].set_bit(v as usize + n);
+    }
+
+    (capacity, labels, petal_count + undir_degree as usize)
 }
 
 /// Checks for each node u on a given graph, if u has exactly one petal.
@@ -100,7 +117,7 @@ pub fn apply_rule_5<G: ReducibleGraph>(graph: &mut G, fvs: &mut Vec<Node>) -> bo
     // check for each node of graph, if the reduction can be applied. If yes -> reduce
     for node in graph.vertices_range() {
         let petal_count;
-        (capacity, labels, petal_count) = count_petals(node, graph.len(), capacity, labels, 2);
+        (capacity, labels, petal_count) = count_petals(node, graph, capacity, labels, 2);
 
         // actual reduction of graph (if petal_count = 1)
         if petal_count == 1 {
@@ -140,7 +157,7 @@ pub fn apply_rule_6<G: ReducibleGraph>(
         };
         let petal_count;
         (capacity, labels, petal_count) =
-            count_petals(node, graph.len(), capacity, labels, applied_counter + 1);
+            count_petals(node, graph, capacity, labels, applied_counter + 1);
 
         // actual reduction of graph (if petal_count > upper_bound)
         if petal_count > applied_counter as usize {
@@ -214,14 +231,17 @@ pub fn apply_rules_5_and_6<G: ReducibleGraph>(
             }
 
             let petal_count;
-            (capacity, labels, petal_count) =
-                count_petals(node, graph.len(), capacity, labels, count_to);
+            (capacity, labels, petal_count) = count_petals(node, graph, capacity, labels, count_to);
             petal_count
         };
 
         if petal_count == 1 {
             let fvs_len_before = fvs.len();
             perform_petal_reduction_rule_5(graph, node as Node, &mut capacity, fvs);
+            if upper_bound_excl < (fvs.len() - fvs_len_before) as Node {
+                return None;
+            }
+
             upper_bound_excl -= (fvs.len() - fvs_len_before) as Node;
             applied = true;
             continue;
@@ -352,46 +372,6 @@ mod tests {
         assert_eq!(test_pre_process.in_fvs.len(), 1);
     }
 
-    #[test]
-    fn di_cliques_reduction() {
-        let graph = AdjArrayUndir::from(&[
-            (0, 1),
-            (0, 3),
-            (0, 6),
-            (1, 3),
-            (1, 4),
-            (1, 6),
-            (2, 4),
-            (2, 5),
-            (3, 1),
-            (3, 4),
-            (4, 0),
-            (4, 1),
-            (4, 2),
-            (4, 3),
-            (4, 5),
-            (4, 6),
-            (5, 2),
-            (5, 4),
-            (5, 6),
-            (6, 0),
-            (6, 3),
-            (6, 4),
-            (6, 7),
-            (6, 8),
-            (7, 6),
-            (7, 8),
-            (8, 6),
-            (8, 7),
-        ]);
-
-        let mut test_pre_process = PreprocessorReduction::from(graph);
-        test_pre_process.apply_rule_di_cliques();
-        let mut fvs = Vec::from(test_pre_process.fvs());
-        fvs.sort();
-        assert_eq!(fvs, vec![1, 4, 5, 6, 8]);
-    }
-
     fn create_circle(graph_size: usize) -> AdjArrayUndir {
         let mut graph = AdjArrayUndir::new(graph_size);
         for i in 0..graph_size - 1 {
@@ -409,6 +389,45 @@ mod tests {
             graph.add_edge(satellite as Node, 0);
         }
         graph
+    }
+
+    #[test]
+    fn rules_5_and_6() {
+        // nodes 0 and 1 have undirected edges to fives nodes 2, .., 6
+        let mut graph = AdjArrayUndir::new(7);
+        for u in 2..=6 {
+            graph.add_edges(&[(0, u), (u, 0), (1, u), (u, 1)]);
+        }
+        let digest = graph.digest_sha256();
+
+        // ub is too high to change something
+        {
+            let mut graph = graph.clone();
+            let mut fvs = Vec::new();
+            let applied = apply_rules_5_and_6(&mut graph, 5, &mut fvs);
+            assert_eq!(applied, Some(false));
+            assert!(fvs.is_empty());
+            assert_eq!(graph.digest_sha256(), digest);
+        }
+
+        // ub is sufficiently low that nodes 2,..6 cannot fit into the DFVS; so 0,1 have to be deleted
+        for ub in 2..4 {
+            let mut graph = graph.clone();
+            let mut fvs = Vec::new();
+            let applied = apply_rules_5_and_6(&mut graph, ub, &mut fvs);
+            assert_eq!(applied, Some(true));
+            fvs.sort_unstable();
+            assert_eq!(fvs, vec![0, 1]);
+            assert_eq!(graph.number_of_edges(), 0);
+        }
+
+        // ub is too low to fit nodes 0, 1 into fvs
+        {
+            let mut fvs = Vec::new();
+            let mut graph = graph.clone();
+            let applied = apply_rules_5_and_6(&mut graph, 1, &mut fvs);
+            assert_eq!(applied, None);
+        }
     }
 
     #[test]

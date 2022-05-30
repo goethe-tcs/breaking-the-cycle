@@ -559,7 +559,7 @@ mod tests {
     }
 
     pub(super) fn for_each_stress_graph<F: FnMut(&String, &AdjArrayUndir) -> ()>(mut callback: F) {
-        glob("data/stress_kernels/*_n*_m*_*.metis")
+        glob("data/stress_kernels/*_n*_m*_0*.metis")
             .unwrap()
             .collect::<Result<Vec<_>, _>>()
             .unwrap()
