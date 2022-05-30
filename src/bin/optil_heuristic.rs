@@ -23,7 +23,7 @@ use dfvs::heuristics::local_search::topo::candidate_topo_strategy::CandidateTopo
 use dfvs::heuristics::local_search::topo::topo_config::TopoConfig;
 use dfvs::heuristics::local_search::topo::topo_local_search::TopoLocalSearch;
 use dfvs::heuristics::local_search::topo::vec_topo_config::VecTopoConfig;
-use dfvs::heuristics::weakest_link::weakest_link;
+use dfvs::heuristics::weakest_link::weakest_link_with_stop_condition;
 use dfvs::log::build_pace_logger_for_level;
 use dfvs::signal_handling;
 #[cfg(feature = "jemallocator")]
@@ -190,7 +190,7 @@ fn process_sccs(
         trace!("Running Weakest Link...");
         let weakest_start = Instant::now();
         let max_weakest_runtime = time;
-        let weakest_link_fvs = weakest_link(scc.clone(), || {
+        let weakest_link_fvs = weakest_link_with_stop_condition(scc.clone(), || {
             weakest_start.elapsed() > max_weakest_runtime || signal_handling::received_ctrl_c()
         });
 
