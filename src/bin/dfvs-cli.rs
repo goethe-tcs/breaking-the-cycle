@@ -74,7 +74,7 @@ struct Opt {
 }
 
 // Solver ////////////////////////////////////////////
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Eq)]
 enum Solver {
     Heuristic,
     Exact,
@@ -99,7 +99,7 @@ impl TryFrom<&str> for Solver {
 }
 
 // Output Format ////////////////////////////////////////////
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Eq)]
 enum OutputFormat {
     Pace,
     Dot,
