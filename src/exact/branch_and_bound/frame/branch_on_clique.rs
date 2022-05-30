@@ -16,7 +16,7 @@ impl<G: BnBGraph> Frame<G> {
             return self.fail();
         }
 
-        debug_assert!(clique.iter().all(|&u| clique
+        assert!(clique.iter().all(|&u| clique
             .iter()
             .all(|&v| u == v || self.graph.has_undir_edge(u, v))));
 
@@ -42,23 +42,26 @@ impl<G: BnBGraph> Frame<G> {
             if let Some(from_child) = from_child {
                 // If we find a single vertex of the clique, that we can reinsert without introducing a
                 // new cycle, we do not have to branch on any more cases
-                let mut solution =
+                let mut remaining_nodes =
                     BitSet::new_all_set_but(self.graph.len(), from_child.iter().copied());
 
                 for &u in &clique {
-                    if self.graph.undir_degree(u) >= clique.len() as Node || // skip if all undir neighbors are inside clique
-                        self.graph.undir_neighbors(u).any(|v| !solution[v as usize])
+                    if self
+                        .graph
+                        .undir_neighbors(u)
+                        .any(|v| remaining_nodes[v as usize])
                     {
                         continue;
                     }
 
-                    solution.set_bit(u as usize);
-                    if self.graph.vertex_induced(&solution).0.is_acyclic() {
+                    remaining_nodes.set_bit(u as usize);
+                    if self.graph.vertex_induced(&remaining_nodes).0.is_acyclic() {
+                        remaining_nodes.not(); // now contains all node of solution!
                         return self.return_to_result_and_partial_solution(Some(
-                            solution.iter().map(|u| u as Node).collect_vec(),
+                            remaining_nodes.iter().map(|u| u as Node).collect_vec(),
                         ));
                     }
-                    solution.unset_bit(u as usize);
+                    remaining_nodes.unset_bit(u as usize);
                 }
 
                 // So we did not find such a vertex: prepare further branching

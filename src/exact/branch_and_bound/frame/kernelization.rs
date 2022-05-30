@@ -10,6 +10,7 @@ impl<G: BnBGraph> Frame<G> {
         }
 
         let len_of_part_sol_before = self.partial_solution.len() as Node;
+        let mut first = true;
         loop {
             let mut applied = false;
 
@@ -79,16 +80,6 @@ impl<G: BnBGraph> Frame<G> {
                 domn,
                 apply_rule_domn(&mut self.graph, &mut self.partial_solution)
             );
-            if !self.directed_mode {
-                apply_rule!(
-                    unconfined,
-                    apply_rule_unconfined(&mut self.graph, &mut self.partial_solution)
-                );
-                /*apply_rule!(
-                    crown,
-                    apply_rule_crown(&mut self.graph, &mut self.partial_solution, None)
-                );*/
-            }
             apply_rule!(dom_node_edges, apply_rule_dome(&mut self.graph));
 
             if self.upper_bound + len_of_part_sol_before <= self.partial_solution.len() as Node {
@@ -135,17 +126,32 @@ impl<G: BnBGraph> Frame<G> {
                 return Some(self.fail());
             }
 
-            let rule6_limit =
-                self.upper_bound + len_of_part_sol_before - self.partial_solution.len() as Node;
-
-            apply_rule!(rules56, {
-                let result =
-                    apply_rules_5_and_6(&mut self.graph, rule6_limit, &mut self.partial_solution);
-                if result.is_none() {
-                    return Some(self.fail());
+            if first {
+                if !self.directed_mode {
+                    apply_rule!(
+                        unconfined,
+                        apply_rule_unconfined(&mut self.graph, &mut self.partial_solution)
+                    );
                 }
-                result.unwrap()
-            });
+
+                if self.graph.number_of_nodes() < 2000 {
+                    let rule6_limit = self.upper_bound + len_of_part_sol_before
+                        - self.partial_solution.len() as Node;
+
+                    apply_rule!(rules56, {
+                        let result = apply_rules_5_and_6(
+                            &mut self.graph,
+                            rule6_limit,
+                            &mut self.partial_solution,
+                        );
+                        if result.is_none() {
+                            return Some(self.fail());
+                        }
+                        result.unwrap()
+                    });
+                }
+            }
+            first = false;
 
             // apply_rule!(redundant_cycle, apply_rule_redundant_cycle(&mut self.graph));
 

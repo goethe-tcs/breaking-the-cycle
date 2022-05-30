@@ -1,5 +1,4 @@
 use crate::graph::*;
-use log::info;
 use std::time::Duration;
 mod crown;
 pub mod flow_based;
@@ -162,19 +161,6 @@ where
                 let mut applied_rule = false;
                 for index in (to_be_reduced.2 as usize)..self.rules.len() {
                     let rule = &self.rules[index];
-
-                    let n = self
-                        .pre_processor
-                        .graph()
-                        .vertices()
-                        .filter(|&u| self.pre_processor.graph().total_degree(u) > 0)
-                        .count();
-                    let m = self.pre_processor.graph.number_of_edges();
-
-                    if n > 1000 {
-                        info!("Start rule {:?} with n={}, m={}", &rule, n, m);
-                    }
-
                     applied_rule |= match *rule {
                         Rules::Rule1 => self.pre_processor.apply_rule_1(),
                         Rules::Rule3 => self.pre_processor.apply_rule_3(),
