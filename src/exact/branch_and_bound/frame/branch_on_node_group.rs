@@ -171,7 +171,7 @@ impl<G: BnBGraph> Frame<G> {
                     continue 'branch;
                 }
 
-                let sats = if DELETE_TWINS_MIRRORS_AND_SATELLITES
+                let satellites = if DELETE_TWINS_MIRRORS_AND_SATELLITES
                     && self.get_mirrors(&graph, u).is_empty()
                 {
                     Some(self.get_satellite(&graph, u))
@@ -183,7 +183,7 @@ impl<G: BnBGraph> Frame<G> {
                 graph.remove_edges_of_nodes(&loops);
                 partial_solution.extend(&loops);
 
-                if let Some(sats) = sats {
+                if let Some(sats) = satellites {
                     additional_contracted.extend(&sats);
                     for s in sats {
                         let loops = graph.contract_node(s);
@@ -200,19 +200,7 @@ impl<G: BnBGraph> Frame<G> {
                 continue 'branch;
             }
 
-            for &u in &nodes_to_delete {
-                let mirrors = if DELETE_TWINS_MIRRORS_AND_SATELLITES && !nodes_to_spare.is_empty() {
-                    // we do not search for mirrors in the delete-only branch since this allows us to establish
-                    // a better lower bound
-                    self.get_mirrors(&graph, u)
-                } else {
-                    Vec::new()
-                };
-                graph.remove_edges_at_node(u);
-                graph.remove_edges_of_nodes(&mirrors);
-                partial_solution.extend(mirrors);
-            }
-
+            graph.remove_edges_of_nodes(&nodes_to_delete);
             self.sort_branch_descriptor(&mut partial_solution);
             partial_solution.dedup();
 
