@@ -94,15 +94,36 @@ impl<G: BnBGraph> Frame<G> {
         // delete and contract nodes as required by the branch
         let need_contraction = i > 0;
 
+        let mut satellites = Vec::new();
+
         let nodes_deleted = if need_contraction {
-            let spare = clique[i as usize - 1];
-            subgraph.contract_node(spare) // will return at least all other nodes of clique
+            let mut nodes_deleted = clique.clone();
+            let spare = nodes_deleted.swap_remove(i as usize - 1);
+            subgraph.remove_edges_of_nodes(&nodes_deleted);
+
+            if DELETE_TWINS_MIRRORS_AND_SATELLITES && self.get_mirrors(&subgraph, spare).is_empty()
+            {
+                satellites = self.get_satellite(&subgraph, spare);
+            }
+
+            let loops = subgraph.contract_node(spare); // will return at least all other nodes of clique
+            subgraph.remove_edges_of_nodes(&loops);
+            nodes_deleted.extend(&loops);
+
+            for s in satellites {
+                let loops = subgraph.contract_node(s);
+                nodes_deleted.extend(&loops);
+                subgraph.remove_edges_of_nodes(&loops);
+            }
+
+            nodes_deleted.sort_unstable();
+            nodes_deleted.dedup();
+            nodes_deleted
         } else {
+            subgraph.remove_edges_of_nodes(&clique);
             clique.clone()
         };
         assert!(nodes_deleted.len() + 1 >= clique.len());
-
-        subgraph.remove_edges_of_nodes(&nodes_deleted);
 
         // see above: give delete-only-branch more slack to fail early
         let slack = !need_contraction as Node;

@@ -180,10 +180,6 @@ impl<G: BnBGraph> Frame<G> {
         // kernelization
         try_branch!(self.apply_kernelization());
 
-        if self.lower_bound >= self.upper_bound {
-            return self.fail();
-        }
-
         // process small instances with matrix-solver
         #[allow(clippy::absurd_extreme_comparisons)]
         if self.graph.number_of_nodes() < MATRIX_SOLVER_SIZE {
@@ -361,7 +357,7 @@ impl<G: BnBGraph> Frame<G> {
     /// Computes satellites nodes as described proposed by Fomin et al. in "A measure & conquer approach
     /// for the analysis of exact algorithms". If we decide to put a node u into the solution, the
     /// set of mirrors needs to follow.
-    fn get_satellite<'a>(&self, graph: &'a G, node: Node) -> impl Iterator<Item = Node> + 'a {
+    fn get_satellite(&self, graph: &G, node: Node) -> Vec<Node> {
         if !DELETE_TWINS_MIRRORS_AND_SATELLITES {
             unreachable!();
         }
@@ -371,23 +367,30 @@ impl<G: BnBGraph> Frame<G> {
             .chain(std::iter::once(node))
             .collect_vec();
 
-        graph.undir_neighbors(node).filter_map(move |u| {
-            if graph.has_dir_edges(u) || graph.undir_degree(u) > undir_neighbors.len() as Node {
-                return None;
-            }
+        let mut sats = graph
+            .undir_neighbors(node)
+            .filter_map(|u| {
+                if graph.has_dir_edges(u) || graph.undir_degree(u) > undir_neighbors.len() as Node {
+                    return None;
+                }
 
-            let s = graph
-                .undir_neighbors(u)
-                .filter(|v| !undir_neighbors.contains(v))
-                .take(2)
-                .collect_vec();
+                let s = graph
+                    .undir_neighbors(u)
+                    .filter(|v| !undir_neighbors.contains(v))
+                    .take(2)
+                    .collect_vec();
 
-            if s.len() == 1 {
-                Some(s[0])
-            } else {
-                None
-            }
-        })
+                if s.len() == 1 {
+                    Some(s[0])
+                } else {
+                    None
+                }
+            })
+            .collect_vec();
+
+        sats.sort_unstable();
+        sats.dedup();
+        sats
     }
 
     /// Computes some fitness heuristic to select a good candidate to branch on. The higher the

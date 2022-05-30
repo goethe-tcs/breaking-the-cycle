@@ -60,7 +60,7 @@ impl<G: BnBGraph> Frame<G> {
         let mut subgraph = std::mem::take(&mut self.graph);
 
         let satellites = if DELETE_TWINS_MIRRORS_AND_SATELLITES && num_nodes_deleted == 1 {
-            Some(self.get_satellite(&subgraph, node).collect_vec())
+            Some(self.get_satellite(&subgraph, node))
         } else {
             None
         };

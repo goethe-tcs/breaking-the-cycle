@@ -56,7 +56,6 @@ where
         .filter(|x| x.count_ones() > 1)
         .collect();
 
-
     // each SCC needs at least one node in the DFVS giving a lower bound
     if sccs.len() as Node >= upper_limit_excl {
         return None;
