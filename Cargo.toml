@@ -1,7 +1,7 @@
 [package]
 name = "dfvs"
 version = "0.1.0"
-authors = ["Johannes Meintrup <johannes.meintrup@mni.thm.de>"]
+authors = ["Holger Dell <dell@uni-frankfurt.de>", "Henri Froese <henri.froese@yahoo.com>", "Lukas Geis <lukasgeis@gmx.de>", "Jonathan Guthermuth <j2gutermuth@gmail.com>", "Anselm Haak <anhaak@em.uni-frankfurt.de>", "Lars Huth <huth@mailbox.org>", "Frank Kammer <frank.kammer@mni.thm.de>", "Marius Lotz <mariuslotz@mail.de>", "Johannes Meintrup <johannes.meintrup@mni.thm.de>", "Timo Mertin <timopace2022@gmail.com>", "Manuel Penschuck <pace22@algorithm.engineering>", "Lukas Schwarz <s5454966@stud.uni-frankfurt.de>"]
 license = "GPL-3.0"
 edition = "2018"
 
