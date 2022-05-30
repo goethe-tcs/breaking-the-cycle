@@ -6,7 +6,6 @@ use itertools::Itertools;
 use log::info;
 use std::fmt::Debug;
 
-mod cuts;
 mod frame;
 pub mod result_cache;
 
@@ -142,6 +141,7 @@ impl<G: BnBGraph> BranchAndBound<G> {
     pub fn set_lower_bound(&mut self, lower_bound: Node) {
         assert_eq!(self.iterations, 0);
         self.stack.last_mut().unwrap().lower_bound = lower_bound;
+        self.stack.last_mut().unwrap().initial_lower_bound = lower_bound;
     }
 
     /// Sets an inclusive upper bound on the minimum DFVS size. This is a hint which may or may
@@ -155,6 +155,7 @@ impl<G: BnBGraph> BranchAndBound<G> {
         assert!(upper_bound < self.number_of_nodes);
 
         self.stack.last_mut().unwrap().upper_bound = upper_bound + 1;
+        self.stack.last_mut().unwrap().initial_upper_bound = upper_bound + 1;
     }
 
     /// Returns the number of recursive calls (i.e. calls direct or indirect calls to

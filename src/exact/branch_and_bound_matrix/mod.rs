@@ -78,19 +78,19 @@ pub fn branch_and_bound_matrix_stats<G: AdjacencyList>(
     let upper_bound = upper_bound.unwrap_or_else(|| graph.number_of_nodes()) + 1;
     if graph.len() > 64 {
         let graph = Graph128::from(graph);
-        solution_to_vec(branch_and_bound_impl_sccs(&graph, upper_bound, stats))
+        solution_to_vec(branch_and_bound_impl_sccs(&graph, 0, upper_bound, stats))
     } else if graph.len() > 32 {
         let graph = Graph64::from(graph);
-        solution_to_vec(branch_and_bound_impl_sccs(&graph, upper_bound, stats))
+        solution_to_vec(branch_and_bound_impl_sccs(&graph, 0, upper_bound, stats))
     } else if graph.len() > 16 {
         let graph = Graph32::from(graph);
-        solution_to_vec(branch_and_bound_impl_sccs(&graph, upper_bound, stats))
+        solution_to_vec(branch_and_bound_impl_sccs(&graph, 0, upper_bound, stats))
     } else if graph.len() > 8 {
         let graph = Graph16::from(graph);
-        solution_to_vec(branch_and_bound_impl_sccs(&graph, upper_bound, stats))
+        solution_to_vec(branch_and_bound_impl_sccs(&graph, 0, upper_bound, stats))
     } else {
         let graph = Graph8::from(graph);
-        solution_to_vec(branch_and_bound_impl_sccs(&graph, upper_bound, stats))
+        solution_to_vec(branch_and_bound_impl_sccs(&graph, 0, upper_bound, stats))
     }
 }
 

@@ -2,6 +2,58 @@ use super::*;
 use itertools::Itertools;
 use rand::prelude::SliceRandom;
 
+impl<G: BnBGraph> Frame<G> {
+    pub(super) fn try_branch_on_simple_cuts(&mut self) -> Option<BBResult<G>> {
+        if let Some((ap, _)) = compute_undirected_articulation_point(&self.graph) {
+            return Some(self.branch_on_node(ap));
+        }
+
+        if let Some((u, v)) = compute_undirected_articulation_pair(&self.graph, true) {
+            return Some(self.branch_on_node_group(vec![u, v]));
+        }
+
+        None
+    }
+
+    pub(super) fn try_branch_on_fancy_cuts(&mut self) -> Option<BBResult<G>> {
+        if self.graph.len() < 64 {
+            // We should never enter this branch for small graphs as we should have branched to the
+            // matrix-solver. Nevertheless, fancy cut algorithms have weird corner cases and performance
+            // issues for small graphs. Hence, we better skip them.
+            return None;
+        }
+
+        // search for cuts
+        if let Some(cut) = compute_undirected_cut(&self.graph, self.upper_bound.min(5) - 1) {
+            return Some(self.branch_on_node_group(cut));
+        }
+
+        if let Some(cut) = self
+            .graph
+            .approx_min_balanced_cut(
+                &mut rand::thread_rng(),
+                30,
+                0.25,
+                Some(self.upper_bound.min(5)),
+                true,
+            )
+            .or_else(|| {
+                self.graph.approx_min_balanced_cut(
+                    &mut rand::thread_rng(),
+                    50,
+                    10.0 / self.graph.number_of_nodes() as f64,
+                    Some(self.upper_bound.min(3)),
+                    true,
+                )
+            })
+        {
+            return Some(self.branch_on_node_group(cut));
+        }
+
+        None
+    }
+}
+
 fn clone_undirected<G: BnBGraph>(graph: &G) -> G {
     let mut undir_graph = graph.clone();
     for u in graph.vertices() {
@@ -56,7 +108,7 @@ pub(super) fn compute_undirected_articulation_point<G: BnBGraph>(
     ))
 }
 
-pub(super) fn compute_undirected_articulation_pair<G: BnBGraph>(
+fn compute_undirected_articulation_pair<G: BnBGraph>(
     graph: &G,
     undir_nodes_only: bool,
 ) -> Option<(Node, Node)> {
@@ -125,18 +177,18 @@ pub(super) fn compute_undirected_articulation_pair<G: BnBGraph>(
     None
 }
 
-pub(super) fn compute_undirected_cut<G: BnBGraph>(graph: &G, max_size: Node) -> Option<Vec<Node>> {
-    debug_assert_eq!(
-        graph
-            .partition_into_strongly_connected_components()
-            .number_of_classes(),
-        1
-    );
-
+fn compute_undirected_cut<G: BnBGraph>(graph: &G, max_size: Node) -> Option<Vec<Node>> {
     let mut candidates: Vec<Node> = graph
         .vertices()
         .filter(|&u| graph.undir_degree(u) > 0 && !graph.has_dir_edges(u))
         .collect_vec();
+
+    if candidates.len() < 10 {
+        // we select at most a third of the candidates; for cuts of size at most 2, we have
+        // our undirect ariticulation point routines.
+        return None;
+    }
+
     candidates.sort_unstable_by_key(|&u| graph.total_degree(u));
 
     let mut rng = rand::thread_rng();
@@ -177,10 +229,13 @@ pub(super) fn compute_undirected_cut<G: BnBGraph>(graph: &G, max_size: Node) -> 
             .copied()
             .collect_vec();
 
+        if cut.is_empty() {
+            return None;
+        }
+
         if max_size as usize >= cut.len()
             && 2 * cut.len() * cut.len() <= partition.number_in_class(largest_class) as usize
         {
-            assert!(!cut.is_empty());
             return Some(cut);
         }
     }

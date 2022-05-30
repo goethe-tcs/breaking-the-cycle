@@ -517,14 +517,15 @@ pub fn apply_rules_exhaustively<G: ReducibleGraph>(
     loop {
         loop {
             apply_rule!(apply_rule_3(graph) | apply_rule_4(graph, fvs));
+            apply_rule!(apply_rule_scc(graph));
             apply_rule!(apply_rule_di_cliques(graph, fvs));
             apply_rule!(apply_rule_pie(graph));
             apply_rule!(apply_rule_c4(graph, fvs));
             apply_rule!(apply_rule_dominance(graph, fvs));
             apply_rule!(apply_rule_domn(graph, fvs));
-            apply_rule!(apply_rule_redundant_cycle(graph));
-            //apply_rule!(apply_dome_reduction(graph));
+            apply_rule!(apply_rule_dome(graph));
             apply_rule!(apply_rule_unconfined(graph, fvs));
+            apply_rule!(apply_rule_redundant_cycle(graph));
             break;
         }
 
@@ -606,7 +607,7 @@ mod tests {
     }
 
     pub(super) fn for_each_stress_graph<F: FnMut(&String, &AdjArrayUndir) -> ()>(mut callback: F) {
-        glob("data/stress_kernels/*_n*_m*_0*.metis")
+        glob("data/stress_kernels/*_n*_m*_0[01]*.metis")
             .unwrap()
             .collect::<Result<Vec<_>, _>>()
             .unwrap()
