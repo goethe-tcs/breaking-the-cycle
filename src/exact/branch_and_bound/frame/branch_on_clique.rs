@@ -195,7 +195,7 @@ mod tests {
     branching_stress_tests!(stress_test);
 
     #[test]
-    //#[ignore]
+    #[ignore]
     fn interactive() {
         // data/stress_kernels/h_199_n19_m72_5a92308633d07ab45d5a0bbe8d54c7a3b7beee5dd581d4b5936fe15e7570f0d9_kernel.metis clique: [5, 15]
         let mut graph = AdjArrayUndir::try_read_graph(FileFormat::Metis, std::path::Path::new("data/stress_kernels/h_199_n10_m27_2f4c75936994bf6310e843c04f0c08f479a5f7339ec1e807b72f16ac65817f65_kernel.metis")).unwrap();

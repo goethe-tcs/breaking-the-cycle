@@ -440,8 +440,7 @@ mod tests {
     use std::str::FromStr;
 
     pub(super) fn for_each_stress_graph<F: Fn(&String, &AdjArrayUndir) -> ()>(callback: F) {
-        glob("data/stress_kernels/*_n??_m*_0[1234567]*.metis")
-            //glob("data/stress_kernels/*.metis")
+        glob("data/stress_kernels/*_n*_m*_0[01]*.metis")
             .unwrap()
             .collect::<Result<Vec<_>, _>>()
             .unwrap()
@@ -450,7 +449,7 @@ mod tests {
                 let file_extension = filename.extension().unwrap().to_str().unwrap().to_owned();
                 let file_format = FileFormat::from_str(&file_extension).ok()?;
                 let graph = AdjArrayUndir::try_read_graph(file_format, filename).ok()?;
-                if graph.len() < 100 {
+                if graph.len() < 90 {
                     Some((String::from(filename.to_str().unwrap()), graph))
                 } else {
                     None
