@@ -11,12 +11,20 @@ use std::cmp::min;
 /// Afterwards min_node is a sink or source
 /// and we are applying reduction 3 exhaustively.
 /// This algorithm needs reduction rule 1 (no self-loops).
-pub fn weakest_link<G: GraphEdgeEditing + AdjacencyListIn + Clone>(
+pub fn weakest_link_with_stop_condition<
+    G: GraphEdgeEditing + AdjacencyListIn + Clone,
+    F: Fn() -> bool,
+>(
     mut working_graph: G,
-) -> Vec<Node> {
+    stop_condition: F,
+) -> Option<Vec<Node>> {
     let mut dfvs = Vec::new();
     let mut bucket_queue = BucketQueue::new_from_graph(&working_graph);
     while working_graph.number_of_edges() > 0 {
+        if stop_condition() {
+            return None;
+        }
+
         // apply rule 3 exhaustively:
         while !bucket_queue.buckets[0].is_empty() {
             let node_zero = bucket_queue.buckets[0][0];
@@ -44,7 +52,11 @@ pub fn weakest_link<G: GraphEdgeEditing + AdjacencyListIn + Clone>(
             dfvs.push(node)
         }
     }
-    dfvs
+    Some(dfvs)
+}
+
+pub fn weakest_link<G: GraphEdgeEditing + AdjacencyListIn + Clone>(working_graph: G) -> Vec<Node> {
+    weakest_link_with_stop_condition(working_graph, || false).unwrap()
 }
 
 fn delete_node<G: GraphEdgeEditing + AdjacencyListIn + Clone>(
