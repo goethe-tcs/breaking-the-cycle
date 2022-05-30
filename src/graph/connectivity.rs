@@ -255,11 +255,15 @@ impl<'a, T: AdjacencyList> UndirectedCutVertices<'a, T> {
     }
 
     pub fn compute(mut self) -> BitSet {
-        self.compute_recursive(0);
+        let _ = self.compute_recursive(0, 0);
         self.articulation_points
     }
 
-    fn compute_recursive(&mut self, u: Node) {
+    fn compute_recursive(&mut self, u: Node, depth: Node) -> Result<(), ()> {
+        if depth > 10000 {
+            return Err(());
+        }
+
         self.visited.set_bit(u as usize);
         self.current_dfs_num += 1;
         self.dfs_num[u as usize] = self.current_dfs_num;
@@ -272,7 +276,7 @@ impl<'a, T: AdjacencyList> UndirectedCutVertices<'a, T> {
             if !self.visited[v as usize] {
                 tree_neighbors += 1;
                 self.parent[v as usize] = Some(u);
-                self.compute_recursive(v);
+                self.compute_recursive(v, depth + 1)?;
                 self.low_point[u as usize] =
                     min(self.low_point[u as usize], self.low_point[v as usize]);
 
@@ -293,6 +297,8 @@ impl<'a, T: AdjacencyList> UndirectedCutVertices<'a, T> {
         if self.parent[u as usize].is_none() && tree_neighbors > 1 {
             self.articulation_points.set_bit(u as usize);
         }
+
+        Ok(())
     }
 }
 
