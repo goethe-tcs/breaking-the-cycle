@@ -49,7 +49,7 @@ coverage:
   stage: extras
   coverage: '/^\d+.\d+% coverage/'
   script:
-    - cargo tarpaulin --all-features -o xml
+    - cargo tarpaulin -t 300 --all-features -o xml
   artifacts:
     reports:
       cobertura: cobertura.xml
@@ -59,7 +59,7 @@ pages:
   stage: deploy
   script:
     - mkdir -p public/coverage
-    - cargo tarpaulin --all-features -o html
+    - cargo tarpaulin -t 300 --all-features -o html
     - mv tarpaulin-report.html public/coverage/index.html
     - cargo doc --no-deps
     - mv target/doc public/doc

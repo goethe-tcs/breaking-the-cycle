@@ -1,16 +1,20 @@
 use crate::graph::*;
 use log::info;
+use std::time::Duration;
 mod crown;
 pub mod flow_based;
+mod redundant_cycles;
 mod single_staged;
 mod two_staged;
 
 pub use crown::*;
 pub use flow_based::*;
+pub use redundant_cycles::apply_rule_redundant_cycle;
 pub use single_staged::*;
 pub use two_staged::*;
 
-pub trait ReducibleGraph = GraphNew
+pub trait ReducibleGraph:
+    GraphNew
     + GraphEdgeEditing
     + AdjacencyList
     + AdjacencyTest
@@ -19,7 +23,24 @@ pub trait ReducibleGraph = GraphNew
     + AdjacencyListUndir
     + Sized
     + std::fmt::Debug
-    + Clone;
+    + Clone
+{
+}
+
+impl<
+        T: GraphNew
+            + GraphEdgeEditing
+            + AdjacencyList
+            + AdjacencyTest
+            + AdjacencyTestUndir
+            + AdjacencyListIn
+            + AdjacencyListUndir
+            + Sized
+            + std::fmt::Debug
+            + Clone,
+    > ReducibleGraph for T
+{
+}
 
 /// Rule5 and Rule6 need max_nodes: Node.
 /// That is used to not perform the reduction rule if the reduced graph has more than max_nodes nodes.
@@ -38,7 +59,10 @@ pub enum Rules {
     DOMN,
     C4,
     Crown(Node),
+    CrownWithTimeout(Node, Duration),
     Unconfined,
+    RedundantCycles,
+    Dominance,
     STOP,
     RestartRules,
 }
@@ -86,12 +110,14 @@ where
                 Rules::PIE,
                 Rules::DiClique,
                 Rules::C4,
+                Rules::Dominance,
                 Rules::DOMN,
+                Rules::RedundantCycles,
                 Rules::RestartRules,
                 Rules::Unconfined,
                 Rules::STOP,
                 Rules::CompleteNode,
-                Rules::Crown(5000),
+                Rules::CrownWithTimeout(100000, std::time::Duration::from_secs(60)),
                 Rules::Rule5(4000),
             ],
             true,
@@ -145,7 +171,9 @@ where
                         .count();
                     let m = self.pre_processor.graph.number_of_edges();
 
-                    info!("Start rule {:?} with n={}, m={}", &rule, n, m);
+                    if n > 1000 {
+                        info!("Start rule {:?} with n={}, m={}", &rule, n, m);
+                    }
 
                     applied_rule |= match *rule {
                         Rules::Rule1 => self.pre_processor.apply_rule_1(),
@@ -203,9 +231,18 @@ where
                         Rules::DOMN => self.pre_processor.apply_rule_domn(),
                         Rules::C4 => self.pre_processor.apply_rule_c4(),
                         Rules::Unconfined => self.pre_processor.apply_rule_unconfined(),
+                        Rules::Dominance => self.pre_processor.apply_rule_dominance(),
+                        Rules::RedundantCycles => self.pre_processor.apply_rule_redundant_cycle(),
                         Rules::Crown(max_nodes) => {
                             if self.pre_processor.graph().number_of_nodes() < max_nodes {
-                                self.pre_processor.apply_rule_crown()
+                                self.pre_processor.apply_rule_crown(None)
+                            } else {
+                                false
+                            }
+                        }
+                        Rules::CrownWithTimeout(max_nodes, timeout) => {
+                            if self.pre_processor.graph().number_of_nodes() < max_nodes {
+                                self.pre_processor.apply_rule_crown(Some(timeout))
                             } else {
                                 false
                             }
@@ -398,8 +435,16 @@ impl<G: ReducibleGraph> PreprocessorReduction<G> {
     pub fn apply_rule_c4(&mut self) -> bool {
         apply_rule_c4(&mut self.graph, &mut self.in_fvs)
     }
-    pub fn apply_rule_crown(&mut self) -> bool {
-        apply_rule_crown(&mut self.graph, &mut self.in_fvs)
+    pub fn apply_rule_crown(&mut self, timeout: Option<Duration>) -> bool {
+        apply_rule_crown(&mut self.graph, &mut self.in_fvs, timeout)
+    }
+
+    pub fn apply_rule_redundant_cycle(&mut self) -> bool {
+        apply_rule_redundant_cycle(&mut self.graph)
+    }
+
+    pub fn apply_rule_dominance(&mut self) -> bool {
+        apply_rule_dominance(&mut self.graph, &mut self.in_fvs)
     }
 }
 
@@ -475,7 +520,9 @@ pub fn apply_rules_exhaustively<G: ReducibleGraph>(
             apply_rule!(apply_rule_di_cliques(graph, fvs));
             apply_rule!(apply_rule_pie(graph));
             apply_rule!(apply_rule_c4(graph, fvs));
+            apply_rule!(apply_rule_dominance(graph, fvs));
             apply_rule!(apply_rule_domn(graph, fvs));
+            apply_rule!(apply_rule_redundant_cycle(graph));
             //apply_rule!(apply_dome_reduction(graph));
             apply_rule!(apply_rule_unconfined(graph, fvs));
             break;
@@ -505,8 +552,12 @@ fn repeat_while<F: FnMut() -> bool>(mut pred: F) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::bitset::BitSet;
+    use crate::exact::branch_and_bound_matrix::branch_and_bound_matrix;
+    use glob::glob;
     use std::fs::File;
     use std::io::BufReader;
+    use std::str::FromStr;
 
     fn graph_edges_count<
         G: GraphNew + GraphEdgeEditing + AdjacencyList + AdjacencyTest + AdjacencyListIn,
@@ -552,5 +603,92 @@ mod tests {
             assert_eq!(graph_edges_count(&result.1[1].0), 40);
         }
         Ok(())
+    }
+
+    pub(super) fn for_each_stress_graph<F: FnMut(&String, &AdjArrayUndir) -> ()>(mut callback: F) {
+        glob("data/stress_kernels/*_n*_m*_0*.metis")
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap()
+            .iter()
+            .filter_map(|filename| {
+                let file_extension = filename.extension().unwrap().to_str().unwrap().to_owned();
+                let file_format = FileFormat::from_str(&file_extension).ok()?;
+                let graph = AdjArrayUndir::try_read_graph(file_format, filename).ok()?;
+                if graph.len() < 100 {
+                    Some((String::from(filename.to_str().unwrap()), graph))
+                } else {
+                    None
+                }
+            })
+            .for_each(|(file, graph)| callback(&file, &graph));
+    }
+
+    pub(super) fn for_each_stress_graph_with_opt_sol<
+        F: FnMut(&String, &AdjArrayUndir, Node) -> (),
+    >(
+        mut callback: F,
+    ) {
+        for_each_stress_graph(|filename, graph| {
+            let opt_sol_size = branch_and_bound_matrix(graph, None).unwrap().len() as Node;
+            callback(filename, graph, opt_sol_size)
+        })
+    }
+
+    pub(super) fn stress_test_kernel<
+        F: Fn(&mut AdjArrayUndir, &mut Vec<Node>, Node) -> Option<bool>,
+    >(
+        kernel: F,
+    ) {
+        let mut num_applied = 0;
+        for_each_stress_graph_with_opt_sol(|filename, org_graph, opt_sol| {
+            let mut graph = org_graph.clone();
+            let digest_before = graph.digest_sha256();
+
+            let mut rule_fvs = Vec::new();
+            let applied = kernel(&mut graph, &mut rule_fvs, opt_sol);
+            let digest_after = graph.digest_sha256();
+
+            if digest_before == digest_after {
+                assert!(
+                    applied.is_none() || applied == Some(false),
+                    "File: {}",
+                    filename
+                );
+                assert!(rule_fvs.is_empty(), "File: {}", filename);
+                return;
+            }
+
+            num_applied += 1;
+
+            assert!(
+                applied.is_none() || applied == Some(true),
+                "File: {}",
+                filename
+            );
+
+            let kernel_fvs = branch_and_bound_matrix(&graph, None).unwrap();
+            assert_eq!(
+                kernel_fvs.len() + rule_fvs.len(),
+                opt_sol as usize,
+                "File: {}",
+                filename
+            );
+            assert!(
+                org_graph
+                    .vertex_induced(&BitSet::new_all_set_but(
+                        graph.len(),
+                        kernel_fvs.iter().chain(rule_fvs.iter()).copied()
+                    ))
+                    .0
+                    .is_acyclic(),
+                "File: {}",
+                filename
+            );
+        });
+
+        if num_applied == 0 {
+            println!("Rule was never applied");
+        }
     }
 }

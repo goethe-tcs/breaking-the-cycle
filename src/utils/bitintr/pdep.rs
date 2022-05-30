@@ -52,7 +52,7 @@ macro_rules! pdep_impl {
                     res |= mask & mask.wrapping_neg();
                 }
                 mask &= mask - 1;
-                bb += bb;
+                bb <<= 1;
             }
             res
         }

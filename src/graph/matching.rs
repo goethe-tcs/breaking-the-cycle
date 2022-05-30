@@ -1,6 +1,5 @@
 use super::*;
 use crate::bitset::BitSet;
-use crate::graph::network_flow::{EdmondsKarp, ResidualBitMatrix, ResidualNetwork};
 use itertools::Itertools;
 use std::iter;
 
@@ -107,13 +106,14 @@ where
             .chain(class_a.iter().chain(class_b.iter()).map(|u| u as Node))
             .collect_vec();
 
-        let capacity = {
-            let mut capacity = Vec::with_capacity(n);
+        let mut network = AdjArrayUndir::new(n);
+        // edges s -> all nodes in class_a
+        for i in 0..class_a.cardinality() {
+            network.add_edge(0, 2 + i as Node);
+        }
 
-            // s is connected to all nodes in class_a; t has only incoming edges
-            capacity.push(BitSet::new_all_unset_but(n, 2..2 + class_a.cardinality()));
-            capacity.push(BitSet::new(n));
-
+        // edges class_a -> class_b
+        {
             let mapping_b = {
                 let mut mapping_b = vec![n; self.len()];
                 for (mapped, org) in class_b.iter().enumerate() {
@@ -122,41 +122,38 @@ where
                 mapping_b
             };
 
-            for u in class_a.iter() {
-                capacity.push(BitSet::new_all_unset_but(
-                    n,
-                    self.out_neighbors(u as Node)
-                        .map(|v| mapping_b[v as usize])
-                        .filter(|&v| v < n),
-                ))
+            for (ui, u) in class_a.iter().enumerate() {
+                for v in self
+                    .out_neighbors(u as Node)
+                    .map(|v| mapping_b[v as usize])
+                    .filter(|&v| v < n)
+                {
+                    network.add_edge(2 + ui as Node, v as Node)
+                }
             }
+        }
 
-            for _ in 0..class_b.cardinality() {
-                capacity.push(BitSet::new_all_unset_but(n, iter::once(1usize)))
-            }
+        // edges class_b -> t
+        for v in 0..class_b.cardinality() {
+            network.add_edge((2 + class_a.cardinality() + v) as Node, 1);
+        }
 
-            capacity
-        };
-
-        let network = ResidualBitMatrix::from_capacity_and_labels(capacity, labels, 0, 1);
-
-        let mut ek = EdmondsKarp::new(network);
-        for _ in ek.by_ref() {} // execute EK to completion
-        let (capacity, labels) = ek.take();
+        for _ in network.st_flow_keep_changes(|u| labels[u as usize], 0, 1) {} // execute EK to completion
 
         // iterate over all nodes of class b -- each should have exactly one out neighbor; if its
         // the target t (id = 1), then the node is unmatched; otherwise it's the matching partner
-        capacity
+        class_b
             .iter()
-            .skip(2 + class_a.cardinality())
-            .zip(class_b.iter())
-            .filter_map(|(out, node_b)| {
-                debug_assert_eq!(out.cardinality(), 1);
-                let node_a = out.get_first_set().unwrap();
-                if node_a == 1 {
+            .enumerate()
+            .filter_map(|(bi, b)| {
+                let bi = (2 + class_a.cardinality() + bi) as Node;
+                let b = b as Node;
+                debug_assert_eq!(network.out_degree(bi), 1);
+                let a = network.out_neighbors(bi).next().unwrap();
+                if a == 1 {
                     None
                 } else {
-                    Some((labels[node_a], node_b as Node))
+                    Some((labels[a as usize], b as Node))
                 }
             })
             .collect_vec()

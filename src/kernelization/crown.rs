@@ -1,15 +1,20 @@
 use super::*;
 use crate::bitset::BitSet;
 use itertools::Itertools;
+use std::time::{Duration, Instant};
 
 /// Implementation inspired by Abu-khzam et al. "Kernelization Algorithms for the Vertex Cover
 /// Problem: Theory and Experiments."
-pub fn apply_rule_crown<G: ReducibleGraph>(graph: &mut G, fvs: &mut Vec<Node>) -> bool {
-    let mut applied = false;
+pub fn apply_rule_crown<G: ReducibleGraph>(
+    graph: &mut G,
+    fvs: &mut Vec<Node>,
+    timeout: Option<Duration>,
+) -> bool {
     use rand::prelude::SliceRandom;
     let mut rng = rand::thread_rng();
+    let start_time = Instant::now();
 
-    loop {
+    repeat_while(|| {
         let nodes_matched_in = |matching: &[(Node, Node)]| {
             let mut matched = BitSet::new(graph.len());
             for &(u, v) in matching {
@@ -32,50 +37,55 @@ pub fn apply_rule_crown<G: ReducibleGraph>(graph: &mut G, fvs: &mut Vec<Node>) -
 
         let ignored_vertices = BitSet::new_all_unset_but(
             graph.len(),
-            graph.vertices().filter(|&u| {
-                //graph.total_degree(u) == 0 || graph.total_degree(u) != 2 * graph.undir_degree(u)
-                graph.undir_degree(u) == 0
-                    || (graph.in_degree(u) > graph.undir_degree(u)
-                        && graph.out_degree(u) > graph.undir_degree(u))
-            }),
+            graph
+                .vertices()
+                .filter(|&u| graph.undir_degree(u) == 0 || graph.has_dir_edges(u)),
         );
 
         if ignored_vertices.cardinality() == graph.len() {
-            return applied;
+            return false;
         }
 
+        // get all undirected edges between not-ignored edges only from u -> v for u < v
         let mut edges = graph
-            .edges_iter()
-            .filter(|&(u, v)| !ignored_vertices[u as usize] && !ignored_vertices[v as usize])
+            .vertices()
+            .filter(|&u| !ignored_vertices[u as usize])
+            .flat_map(|u| {
+                graph
+                    .undir_neighbors(u)
+                    .map(move |v| (u, v))
+                    .filter(|&(u, v)| u < v && !ignored_vertices[v as usize])
+            })
             .collect_vec();
 
-        if edges.is_empty() {
-            return applied;
-        }
+        'outer: for _attempt in 0..5 {
+            if timeout
+                .as_ref()
+                .map_or(false, |t| start_time.elapsed() > *t)
+            {
+                return false;
+            }
 
-        let mut applied_local = false;
-        for _ in 0..5 {
-            edges.shuffle(&mut rng);
+            // compute maximal matching and return all unmatched and un-ignored nodes
+            let candidates = {
+                edges.shuffle(&mut rng);
 
-            let mut matched = ignored_vertices.clone();
+                let mut matched = ignored_vertices.clone();
 
-            for &(u, v) in &edges {
-                if !matched[u as usize] && !matched[v as usize] {
-                    matched.set_bit(u as usize);
-                    matched.set_bit(v as usize);
+                for &(u, v) in &edges {
+                    if !matched[u as usize] && !matched[v as usize] {
+                        matched.set_bit(u as usize);
+                        matched.set_bit(v as usize);
+                    }
                 }
-            }
 
-            if matched.cardinality() == graph.len() {
-                continue;
-            }
+                if matched.cardinality() + 1 >= graph.len() {
+                    continue 'outer;
+                }
 
-            let mut candidates = matched;
-            candidates.not();
-
-            if candidates.cardinality() <= 1 {
-                continue;
-            }
+                matched.not();
+                matched
+            };
 
             // assert candidates is an independent set
             debug_assert!(!candidates.iter().any(|u| candidates
@@ -139,14 +149,20 @@ pub fn apply_rule_crown<G: ReducibleGraph>(graph: &mut G, fvs: &mut Vec<Node>) -
             graph.remove_edges_of_nodes(&to_delete);
             fvs.append(&mut to_delete);
 
-            applied_local = true;
-            break;
+            return true;
         }
 
-        if !applied_local {
-            return applied;
-        }
+        false
+    })
+}
 
-        applied = true;
+#[cfg(test)]
+mod tests {
+    use super::super::tests::*;
+    use super::*;
+
+    #[test]
+    fn stress_crown() {
+        stress_test_kernel(|graph, fvs, _| Some(apply_rule_crown(graph, fvs, None)));
     }
 }
