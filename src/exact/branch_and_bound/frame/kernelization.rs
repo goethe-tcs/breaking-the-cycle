@@ -1,4 +1,5 @@
 use super::*;
+use crate::heuristics::weakest_link::weakest_link;
 
 impl<G: BnBGraph> Frame<G> {
     /// Applies a series of kernelization rules and updates the `self.graph`, `self.partial_solution`
@@ -52,6 +53,18 @@ impl<G: BnBGraph> Frame<G> {
                 | apply_rule_4(&mut self.graph, &mut self.partial_solution))
                 || apply_rule_scc(&mut self.graph)
             {}
+
+            apply_sure_rule!(high_degree, {
+                let result = apply_rule_high_degree(
+                    &mut self.graph,
+                    self.upper_bound + len_of_part_sol_before - self.partial_solution.len() as Node,
+                    &mut self.partial_solution,
+                );
+                if result.is_none() {
+                    return Some(self.fail());
+                }
+                result.unwrap()
+            });
 
             if TRIVIAL_KERNEL_RULES_ONLY {
                 break;
@@ -135,6 +148,18 @@ impl<G: BnBGraph> Frame<G> {
                 }
 
                 if self.graph.number_of_nodes() < 2000 {
+                    let threshold = self.graph.number_of_nodes() / 3;
+                    if self.graph.vertices().any(|u| {
+                        self.graph.out_degree(u) > threshold && self.graph.in_degree(u) > threshold
+                    }) {
+                        self.upper_bound = self.upper_bound.min(
+                            (weakest_link(self.graph.clone()).len()
+                                + 1
+                                + self.partial_solution.len()) as Node
+                                - len_of_part_sol_before,
+                        );
+                    }
+
                     let rule6_limit = self.upper_bound + len_of_part_sol_before
                         - self.partial_solution.len() as Node;
 
@@ -149,6 +174,10 @@ impl<G: BnBGraph> Frame<G> {
                         }
                         result.unwrap()
                     });
+                }
+
+                if self.graph.number_of_nodes() < 500 {
+                    apply_rule!(redundant_cycle, apply_rule_redundant_cycle(&mut self.graph));
                 }
             }
             first = false;
