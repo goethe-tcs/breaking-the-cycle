@@ -91,9 +91,17 @@ impl<G: BnBGraph> Frame<G> {
 
             let scc = std::mem::take(&mut next_branch.0);
 
-            let upper_bound = (self.upper_bound - remaining_lower)
-                .min(scc.number_of_nodes())
-                .min(weakest_link(scc.clone()).len() as Node);
+            let upper_bound = (self.upper_bound - remaining_lower).min(scc.number_of_nodes());
+
+            if scc.number_of_nodes() < MIN_NODES_FOR_CACHE {
+                if let Some(sol) =
+                    branch_and_bound_matrix_lower(&scc, lower_bound, Some(upper_bound - 1))
+                {
+                    return self.resume_scc_split(subgraphs, lower_bounds, Some(Some(sol)));
+                } else {
+                    return self.fail();
+                }
+            }
 
             let mut branch = self.branch(scc, lower_bound, upper_bound);
             branch.graph_is_connected = Some(true);
