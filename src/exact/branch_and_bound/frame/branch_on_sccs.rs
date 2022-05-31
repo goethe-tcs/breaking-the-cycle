@@ -1,4 +1,5 @@
 use super::*;
+use crate::heuristics::weakest_link::weakest_link;
 
 impl<G: BnBGraph> Frame<G> {
     /// Tries to split the instance into several SCCs (or remove acyclic subgraphs). In case of
@@ -90,8 +91,10 @@ impl<G: BnBGraph> Frame<G> {
 
             let scc = std::mem::take(&mut next_branch.0);
 
-            let upper_bound =
-                (self.upper_bound - remaining_lower).min(scc.number_of_nodes().saturating_sub(1));
+            let upper_bound = (self.upper_bound - remaining_lower)
+                .min(scc.number_of_nodes())
+                .min(weakest_link(scc.clone()).len() as Node);
+
             let mut branch = self.branch(scc, lower_bound, upper_bound);
             branch.graph_is_connected = Some(true);
 
