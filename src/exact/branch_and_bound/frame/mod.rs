@@ -1,4 +1,5 @@
 use super::*;
+use crate::exact::branch_and_bound_matrix::branch_and_bound_matrix_lower;
 use crate::heuristics::lowerbound_circuits::LowerBound;
 use crate::kernelization::*;
 use fxhash::FxHashSet;
@@ -184,7 +185,11 @@ impl<G: BnBGraph> Frame<G> {
         // process small instances with matrix-solver
         #[allow(clippy::absurd_extreme_comparisons)]
         if self.graph.number_of_nodes() < MATRIX_SOLVER_SIZE {
-            let sol = branch_and_bound_matrix(&self.graph, Some(self.upper_bound - 1));
+            let sol = branch_and_bound_matrix_lower(
+                &self.graph,
+                self.lower_bound,
+                Some(self.upper_bound - 1),
+            );
             return self.return_to_result_and_partial_solution(sol);
         }
 
@@ -609,5 +614,6 @@ mod tests {
         };
     }
 
+    use crate::exact::branch_and_bound_matrix::branch_and_bound_matrix;
     pub(super) use branching_stress_tests;
 }

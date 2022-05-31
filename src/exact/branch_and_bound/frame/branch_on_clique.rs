@@ -16,7 +16,7 @@ impl<G: BnBGraph> Frame<G> {
             return self.fail();
         }
 
-        assert!(clique.iter().all(|&u| clique
+        debug_assert!(clique.iter().all(|&u| clique
             .iter()
             .all(|&v| u == v || self.graph.has_undir_edge(u, v))));
 
