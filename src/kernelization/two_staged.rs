@@ -187,7 +187,7 @@ where
                 two_neighbors_in.unset_bit(u as usize);
                 two_neighbors_in.unset_bit(v as usize);
 
-                graph.remove_edges_of_nodes(&[u, v, w1, w2, w3]);
+                graph.remove_edges_at_node(u);
                 for v in two_neighbors_out.iter().map(|v| v as Node) {
                     graph.add_edge(u, v);
                 }
@@ -195,6 +195,7 @@ where
                 for v in two_neighbors_in.iter().map(|v| v as Node) {
                     graph.add_edge(v, u);
                 }
+                graph.remove_edges_of_nodes(&[v, w1, w2, w3]);
 
                 postprocessor.push(Box::new(PostRuleTwinsDegreeThree {
                     search: u,
