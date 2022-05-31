@@ -1,5 +1,4 @@
 use super::*;
-use crate::heuristics::weakest_link::weakest_link;
 
 impl<G: BnBGraph> Frame<G> {
     /// Tries to split the instance into several SCCs (or remove acyclic subgraphs). In case of
@@ -93,7 +92,7 @@ impl<G: BnBGraph> Frame<G> {
 
             let upper_bound = (self.upper_bound - remaining_lower).min(scc.number_of_nodes());
 
-            if scc.number_of_nodes() < MIN_NODES_FOR_CACHE {
+            if scc.number_of_nodes() < MIN_NODES_FOR_CACHE && MIN_NODES_FOR_CACHE < 128 {
                 if let Some(sol) =
                     branch_and_bound_matrix_lower(&scc, lower_bound, Some(upper_bound - 1))
                 {
