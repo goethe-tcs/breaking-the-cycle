@@ -171,8 +171,7 @@ impl<G: BnBGraph> Frame<G> {
                     continue 'branch;
                 }
 
-                let satellites = if DELETE_TWINS_MIRRORS_AND_SATELLITES
-                    && SATELLITES_IN_NODE_GROUP
+                let satellites = if DELETE_TWINS_MIRRORS_AND_SATELLITES && SATELLITES_IN_NODE_GROUP
                 {
                     Some(self.get_satellite(&graph, u))
                 } else {
