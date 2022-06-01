@@ -172,7 +172,7 @@ impl<G: BnBGraph> Frame<G> {
                 }
 
                 let satellites = if DELETE_TWINS_MIRRORS_AND_SATELLITES
-                    && self.get_mirrors(&graph, u).is_empty()
+                    && SATELLITES_IN_NODE_GROUP
                 {
                     Some(self.get_satellite(&graph, u))
                 } else {
@@ -205,7 +205,7 @@ impl<G: BnBGraph> Frame<G> {
             partial_solution.dedup();
 
             if self.upper_bound <= partial_solution.len() as Node {
-                continue;
+                continue 'branch;
             }
 
             let mut branch = self.branch(

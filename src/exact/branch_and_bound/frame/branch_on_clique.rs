@@ -104,8 +104,7 @@ impl<G: BnBGraph> Frame<G> {
             let spare = nodes_deleted.swap_remove(i as usize - 1);
             subgraph.remove_edges_of_nodes(&nodes_deleted);
 
-            if DELETE_TWINS_MIRRORS_AND_SATELLITES && self.get_mirrors(&subgraph, spare).is_empty()
-            {
+            if DELETE_TWINS_MIRRORS_AND_SATELLITES && SATELLITES_IN_CLIQUES {
                 satellites = self.get_satellite(&subgraph, spare);
             }
 

@@ -19,6 +19,8 @@ const MIN_REDUCED_SCC_SIZE: Node = 2;
 const TRIVIAL_KERNEL_RULES_ONLY: bool = false;
 const USE_ADAPTIVE_KERNEL_FREQUENCY: bool = false;
 const DELETE_TWINS_MIRRORS_AND_SATELLITES: bool = true;
+const SATELLITES_IN_CLIQUES: bool = false;
+const SATELLITES_IN_NODE_GROUP: bool = false;
 const MATRIX_SOLVER_SIZE: Node = 64;
 const SEARCH_CUTS: bool = true;
 const BRANCH_ON_CYCLES: bool = true;
@@ -387,8 +389,8 @@ impl<G: BnBGraph> Frame<G> {
     }
 
     /// Computes satellites nodes as described proposed by Fomin et al. in "A measure & conquer approach
-    /// for the analysis of exact algorithms". If we decide to put a node u into the solution, the
-    /// set of mirrors needs to follow.
+    /// for the analysis of exact algorithms". If node u has no mirrors and is contracted, we can also
+    /// contract its satellites
     fn get_satellite(&self, graph: &G, node: Node) -> Vec<Node> {
         if !DELETE_TWINS_MIRRORS_AND_SATELLITES {
             unreachable!();
@@ -401,18 +403,18 @@ impl<G: BnBGraph> Frame<G> {
 
         let mut sats = graph
             .undir_neighbors(node)
-            .filter_map(|u| {
-                if graph.has_dir_edges(u) || graph.undir_degree(u) > undir_neighbors.len() as Node {
+            .filter_map(|w| {
+                if graph.has_dir_edges(w) || graph.undir_degree(w) > undir_neighbors.len() as Node {
                     return None;
                 }
 
                 let s = graph
-                    .undir_neighbors(u)
-                    .filter(|v| !undir_neighbors.contains(v))
+                    .undir_neighbors(w)
+                    .filter(|u| !undir_neighbors.contains(u))
                     .take(2)
                     .collect_vec();
 
-                if s.len() == 1 {
+                if s.len() == 1 && !graph.has_dir_edges(s[0]) {
                     Some(s[0])
                 } else {
                     None
