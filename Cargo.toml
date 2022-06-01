@@ -36,9 +36,6 @@ cli = ["structopt"]
 signal-handling = ["ctrlc"]
 bb-stats = []
 
-[profile.release]
-debug = true
-
 [[bin]]
 name = "dfvs-cli"
 path = "src/bin/dfvs-cli.rs"
