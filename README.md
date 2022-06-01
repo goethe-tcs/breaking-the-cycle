@@ -1,26 +1,45 @@
-# Directed Feedback Vertex Set
+# BreakingTheCycle
+This repository contains exact and heuristic solvers for the **Directed Feedback Vertex Set (DFVS)** problem. 
+They were developed as a submission for the [PACE 2022 Challenge](https://pacechallenge.org/2022).
 
-To contribute to this project, please [create your own fork](https://docs.gitlab.com/ee/user/project/repository/forking_workflow.html).
+# Installing the Rust ecosystem
+The solvers are implemented in Rust.
+For information on the installation of the compiler and the default package manager `cargo` we refer to the [official documentation](https://www.rust-lang.org/tools/install).
+(At time of writing) we require language features that are only available in the `nightly channel` of the Rust universe; see [nightly channel](https://rust-lang.github.io/rustup/concepts/channels.html) for details.
+On most Unix-like systems the whole installation boils down to:
 
-## Prepare your system
+```bash
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+rustup toolchain install nightly
+```
+(use the *piping to s(hell)* idiom at your own discretion)
 
-After cloning your fork to your computer, make sure to also pull the `data` repository.
-To do so, run `git submodule update --init`.
+All further dependencies are handled by `cargo` package manager.
 
-Our code basis uses recent Rust features that are only available in the so-called [nightly channel](https://rust-lang.github.io/rustup/concepts/channels.html).
-To install it, use `rustup toolchain install nightly`; then you can activate it using `rustup default nightly`.
-Finally, we need the package tarpaulin to carry out coverage tests; to install it run `cargo install cargo-tarpaulin`.
-Please be aware that these commands affect your whole Rust installation (they are not limited to this project)!
+# Building for PACE
+For PACE-related benchmarking we provide the script `build_optil.io.sh` which configures the compiler to emit code optimized for the OPTIL enviroment.
+Amongst others, it enables AVX2 and BMI2 for our base case solver.
+Observe that `BMI2` is also available on AMD machines but too slow; for these machines we provide a faster software implementation and ask to build without the BMI2 support (by modifying the script accordingly).
+The script compiles the two binaries `target/x86_64-unknown-linux-gnu/release/{optil_exact,optil_heuristic}` which adhere to the I/O-model prescribed by [OPTIL.io](https://www.optil.io).
 
-## Contributing
+```bash
+./build_optil.io.sh
+cat {YOUR-METIS-FILE} | target/x86_64-unknown-linux-gnu/release/optil_exact > exact_solution
+cat {YOUR-METIS-FILE} | target/x86_64-unknown-linux-gnu/release/optil_heuristic > a_solution
+```
 
-In your fork, you are free to modify as you wish, but please develop features in their own branches and use meaningful commit messages.
-A typical contribution should only consist of a handful of commits; though, if there's good reason, more are okay.
-But, please rebase/squash chains of "Test 1", "Test 2", "Try again" commits ...
+# A more convient way
+If you want to use the exact solver outside of PACE it might be more convenient to interact with it using the more versatile `dfvs-cli` interface.
+To build it, run:
+**Important**:
+```bash
+cargo build --release --all-features
+```
 
-Each time you push changes to the GitLab server, your code is compiled and executed in several configurations.
-We highly recommend running `./checks.sh` before pushing to detect the most common issues even before pushing.
-This will create a file `tarpaulin-report.html` that includes a coverage analysis.
-Make sure to include enough unit-tests to cover all your code (exceptions may be permissible but need to be justified in the merge request).
+This places the binary into the folder `target/release`.
+The solver accepts files in the `Metis` format as described [here](https://pacechallenge.org/2022/tracks/):
+```
+target/release/dfvs-cli -i {YOUR-METIS-FILE} -o {YOUR-SOLUTION-FILE}
+```
 
-Once a feature is complete (and all CI tests pass!), you can create a [merge request](https://docs.gitlab.com/ee/user/project/merge_requests/getting_started.html) to incorporate the feature into the main repository after review.
+See also `dfvs-cli --help` for further options.

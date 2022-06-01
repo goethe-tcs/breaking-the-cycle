@@ -296,7 +296,14 @@ impl<G: BnBGraph> IterativeAlgorithm for BranchAndBound<G> {
                         });
 
                         let rsol = branch_and_bound_matrix(&graph, None).unwrap();
-                        assert!(frame.initial_lower_bound <= rsol.len() as Node);
+                        assert!(
+                            frame.initial_lower_bound <= rsol.len() as Node,
+                            "frame initial lower: {} ref: {:?}, sol: {:?}, graph={:?}",
+                            frame.initial_lower_bound,
+                            rsol,
+                            res_child,
+                            &graph
+                        );
                         if let Some(res_child) = res_child {
                             assert_eq!(
                                 rsol.len(),

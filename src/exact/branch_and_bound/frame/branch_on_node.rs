@@ -70,9 +70,10 @@ impl<G: BnBGraph> Frame<G> {
 
         if let Some(satellites) = satellites {
             for s in satellites {
-                let loops = subgraph.contract_node(s);
-                removed.extend(&loops);
-                subgraph.remove_edges_of_nodes(&loops);
+                assert!(!subgraph.has_dir_edges(s));
+                let neighbors = subgraph.undir_neighbors(s).collect_vec();
+                removed.extend(&neighbors);
+                subgraph.remove_edges_of_nodes(&neighbors);
             }
             removed.sort_unstable();
             removed.dedup();

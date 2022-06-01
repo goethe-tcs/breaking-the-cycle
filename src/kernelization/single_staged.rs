@@ -54,6 +54,50 @@ pub fn apply_rule_4<G: ReducibleGraph>(graph: &mut G, fvs: &mut Vec<Node>) -> bo
     })
 }
 
+/// rule 4 chaining nodes with deleting self loop
+///
+/// returns true if rule got applied at least once, false if not at all
+pub fn apply_rule_high_degree<G: ReducibleGraph>(
+    graph: &mut G,
+    mut upper_bound_incl: Node,
+    fvs: &mut Vec<Node>,
+) -> Option<bool> {
+    if upper_bound_incl == 0 {
+        if graph.is_acyclic() {
+            return Some(false);
+        } else {
+            return None;
+        }
+    }
+
+    let mut global_applied = false;
+    loop {
+        let mut applied = false;
+        for u in graph.vertices_range() {
+            if graph.undir_degree(u) > upper_bound_incl {
+                fvs.push(u);
+                graph.remove_edges_at_node(u);
+                upper_bound_incl -= 1;
+
+                if upper_bound_incl == 0 {
+                    if graph.is_acyclic() {
+                        return Some(true);
+                    } else {
+                        return None;
+                    }
+                }
+
+                applied = true;
+            }
+        }
+        if !applied {
+            return Some(global_applied);
+        }
+
+        global_applied = true;
+    }
+}
+
 /// This rule identifies all SCCs and deletes edge between them. It should not be included
 /// into the [`SuperReducer`] since its SCC-Split is more efficient.
 pub fn apply_rule_scc<G: ReducibleGraph>(graph: &mut G) -> bool {
@@ -731,5 +775,23 @@ mod tests {
     #[test]
     fn stress_unconfined() {
         stress_test_kernel(|graph, fvs, _| Some(apply_rule_unconfined(graph, fvs)));
+    }
+
+    #[test]
+    #[should_panic]
+    fn stress_rule_high_degree_too_low_ub() {
+        stress_test_kernel(|graph, fvs, opt| {
+            apply_rule_high_degree(graph, opt.saturating_sub(1), fvs)
+        });
+    }
+
+    #[test]
+    fn stress_rule_high_degree() {
+        stress_test_kernel(|graph, fvs, opt| apply_rule_high_degree(graph, opt, fvs));
+    }
+
+    #[test]
+    fn stress_rule_high_degree_higher_ub() {
+        stress_test_kernel(|graph, fvs, opt| apply_rule_high_degree(graph, opt + 1, fvs));
     }
 }

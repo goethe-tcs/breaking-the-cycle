@@ -11,4 +11,4 @@ rm -R $OUTPUT || true
 
 # reduce graphs
 mkdir -p $OUTPUT
-cargo +nightly run --features=cli,pace-digest --release --package dfvs --bin dfvs-preprocessing -- $ARGS
+cargo +nightly run --features=cli --release --package dfvs --bin dfvs-preprocessing -- $ARGS

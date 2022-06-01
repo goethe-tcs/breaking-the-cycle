@@ -16,7 +16,7 @@ impl<G: BnBGraph> Frame<G> {
             return self.fail();
         }
 
-        assert!(clique.iter().all(|&u| clique
+        debug_assert!(clique.iter().all(|&u| clique
             .iter()
             .all(|&v| u == v || self.graph.has_undir_edge(u, v))));
 
@@ -104,8 +104,7 @@ impl<G: BnBGraph> Frame<G> {
             let spare = nodes_deleted.swap_remove(i as usize - 1);
             subgraph.remove_edges_of_nodes(&nodes_deleted);
 
-            if DELETE_TWINS_MIRRORS_AND_SATELLITES && self.get_mirrors(&subgraph, spare).is_empty()
-            {
+            if DELETE_TWINS_MIRRORS_AND_SATELLITES && SATELLITES_IN_CLIQUES {
                 satellites = self.get_satellite(&subgraph, spare);
             }
 

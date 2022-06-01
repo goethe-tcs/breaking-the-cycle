@@ -21,7 +21,7 @@ use structopt::StructOpt;
 #[structopt(
     name = "bench-branch-and-bound",
     about = "Benchmarks the branch-and-bound implementation. Example: \
-     cargo run --features=cli,pace-digest --release --package dfvs --bin bench-branch-and-bound -- \
+     cargo run --features=cli --release --package dfvs --bin bench-branch-and-bound -- \
      -v --output-suffix vectorize_matrix_mul --input data/kernels/*"
 )]
 struct Opt {
