@@ -43,3 +43,6 @@ target/release/dfvs-cli -i {YOUR-METIS-FILE} -o {YOUR-SOLUTION-FILE}
 ```
 
 See also `dfvs-cli --help` for further options.
+
+# Solver Descriptions
+There are also two solver descriptions available, which offer a short summary of our solutions for the [exact track](https://github.com/goethe-tcs/breaking-the-cycle/exact.pdf) and [heuristic track](https://github.com/goethe-tcs/breaking-the-cycle/heuristic.pdf).
